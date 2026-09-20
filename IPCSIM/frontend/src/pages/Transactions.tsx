@@ -23,12 +23,14 @@ import {
   MenuItem,
   Divider,
   Skeleton
+  , Alert
 } from '@mui/material'
 import { Search, ReceiptLong, TrendingDown, TrendingUp, Tune } from '@mui/icons-material'
 import { useQuery } from '@tanstack/react-query'
 import { transactionsAPI } from '@api/transactions'
 import { InventoryTransaction } from '../types'
 import { formatDateTime } from '@utils/date'
+import { Link as RouterLink } from 'react-router-dom'
 
 export const Transactions = () => {
   const [filterItem, setFilterItem] = useState('')
@@ -56,6 +58,7 @@ export const Transactions = () => {
 
   return (
     <Box>
+      <Alert severity="info" sx={{ mb: 2 }}>Lịch sử lưu trữ từ hệ thống trước. Xem các thao tác mới và xác nhận tồn kho tại <Button component={RouterLink} to="/operation">Operation</Button>.</Alert>
       <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ md: 'center' }} spacing={1} sx={{ mb: 3 }}>
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 'bold', letterSpacing: '-0.02em' }}>Transaction Log</Typography>

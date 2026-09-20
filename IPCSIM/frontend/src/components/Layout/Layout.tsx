@@ -1,4 +1,4 @@
-import { Box } from '@mui/material'
+import { Box, Alert, Link } from '@mui/material'
 import { Header } from './Header'
 import { Sidebar, DRAWER_WIDTH } from './Sidebar'
 
@@ -23,6 +23,10 @@ export const Layout = ({ children }: LayoutProps) => {
             height: `calc(100vh - 64px)`
           }}
         >
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Dữ liệu cục bộ đồng bộ từ Server. Chọn Inventory hoặc Operation để đăng nhập tài khoản vận hành; quản trị danh mục tại Server.
+            {(import.meta as any).env.VITE_SERVER_UI_URL && <Link sx={{ ml: 1 }} href={(import.meta as any).env.VITE_SERVER_UI_URL}>Mở Control Center</Link>}
+          </Alert>
           {children}
         </Box>
       </Box>

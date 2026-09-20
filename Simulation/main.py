@@ -1,12 +1,17 @@
-from PyQt6 import QtCore, QtGui
+from PyQt6 import QtCore
 from PyQt6.QtWidgets import QApplication, QMainWindow
 from PyQt6.QtCore import pyqtSignal
-import time
-from simulation_scroll import Ui_MainWindow
-from virtual_serial.virtual_master_controller import *
+try:
+    from .simulation_scroll import Ui_MainWindow
+    from .virtual_serial.virtual_master_controller import MasterCom, MAX_RACK_NUMBER
+except ImportError:
+    from simulation_scroll import Ui_MainWindow
+    from virtual_serial.virtual_master_controller import MasterCom, MAX_RACK_NUMBER
+from queue import Empty
+from serial.tools import list_ports
 from functools import partial
-from pathlib import Path
 import sys
+import math
 
 # =======================================================
 # LỚP CHÍNH
@@ -19,9 +24,30 @@ class MainWindow(QMainWindow):
         self.rack_group = {}
         self.environment_data = {}
         self.operation_data = {}
+        self.breakdown_data = {}
+        self.light_data = {}
+        available_ports = list(list_ports.comports())
 
         # Kết nối các nút bấm với hàm xử lý
         for i in range(21):  # Duyệt qua 21 GROUP
+            self.breakdown_data[i] = {}
+            group = self.uic.rackGroupList[i]
+            self.light_data[i] = {}
+            group.stopButton.setEnabled(False)
+            group.simulatorErrorButton.setEnabled(False)
+            group.serialPort.addItem('Standalone (no IPC connection)', '')
+            for port in available_ports:
+                group.serialPort.addItem(port.device, port.device)
+            configured = MasterCom(i).port
+            if configured:
+                group.serialPort.setEditText(configured)
+            group.serialPort.setToolTip('Simulation end of a virtual COM pair; IPCSIM uses the other end.')
+            for button, action in zip(group.localButtons, (1, 2, 3, 0)):
+                button.setEnabled(False)
+                button.setToolTip('Standalone commands; connected mode receives commands from IPCSIM.')
+                button.clicked.connect(partial(self.send_local_command, i, action))
+            group.rackGroupImage.rackClicked.connect(partial(self.select_visual_rack, i))
+            group.speedGraph.select_rack(group.selected_rack_id)
             self.environment_data[i] = {}
             self.operation_data[i] = {}
             self.uic.rackGroupList[i].runButton.clicked.connect(partial(self.start_master_controller, i))
@@ -33,53 +59,149 @@ class MainWindow(QMainWindow):
     # Khởi động một luồng điều khiển mới cho mỗi GROUP
     # [index] tương ứng [rack_group_id] trong file 'virtual_master_controller.py'
     def start_master_controller(self, index):
-        self.rack_group[index] = ThreadClass(index=index)  # Tạo đối tượng ThreadClass
-        self.rack_group[index].start()  # Bắt đầu luồng xử lý
-        self.uic.rackGroupList[index].rackGroupStateLineEdit.setText("Ready!!!")  # Cập nhật trạng thái
-        
-        # Kết nối tín hiệu từ luồng với UI
-        self.rack_group[index].env_signal.connect(self.display_environment_status)
-        self.rack_group[index].opr_signal.connect(self.display_operation_status)
-        
-        # Cập nhật trạng thái các nút bấm
-        self.uic.rackGroupList[index].runButton.setEnabled(False)
-        self.uic.rackGroupList[index].stopButton.setEnabled(True)
+        previous = self.rack_group.get(index)
+        if previous is not None and previous.isRunning():
+            return
+        group = self.uic.rackGroupList[index]
+        port = group.serialPort.currentText().strip()
+        if port == 'Standalone (no IPC connection)':
+            port = ''
+        if port and any(t.isRunning() and t.master_controller.port.casefold() == port.casefold()
+                        for key, t in self.rack_group.items() if key != index):
+            group.connectionStatus.setText(f'Port {port} is already used by another group')
+            return
+        worker = ThreadClass(index=index, port=port)
+        self.rack_group[index] = worker
+        self.environment_data[index].clear()
+        self.operation_data[index].clear()
+        self.breakdown_data[index].clear()
+        self.light_data[index].clear()
+        group.speedGraph.reset_session()
+        group.rackGroupImage.operations.clear()
+        group.rackGroupImage.faults.clear()
+        # Initialize every rack before starting, including a previously selected rack.
+        for message in worker.master_controller.env_messages:
+            rack_id, *values = self.handle_environment_status(message)
+            self.environment_data[index][rack_id] = values
+        for message in worker.master_controller.opr_messages:
+            rack_id, *values = self.handle_operation_status(message)
+            self.operation_data[index][rack_id] = values
+            group.rackGroupImage.set_rack(rack_id, operation=values)
+        for rack_id in worker.master_controller.rack_ids:
+            self.breakdown_data[index][rack_id] = (0, 0, 0)
+            self.light_data[index][rack_id] = False
+        self.display_selected_rack(index, reset_operation_graph=True)
+        for checkbox in (group.ObstructCheckBox, group.SkewCheckBox, group.OverloadMotorCheckBox):
+            checkbox.setChecked(False)
+        worker.env_signal.connect(self.display_environment_status)
+        worker.operation_sample.connect(self.display_operation_status)
+        worker.brk_signal.connect(self.display_breakdown_status)
+        worker.ready.connect(self.controller_ready)
+        worker.failed.connect(self.controller_failed)
+        worker.finished.connect(self.controller_finished)
+        group.connectionStatus.setText('Starting...')
+        self.uic.set_group_status(index, 'active', 'STARTING')
+        group.runButton.setEnabled(False)
+        group.stopButton.setEnabled(True)
+        group.serialPort.setEnabled(False)
+        worker.start()
+
+    def controller_ready(self, status):
+        worker = self.sender()
+        if self.rack_group.get(worker.index) is not worker or worker.master_controller.stop_event.is_set():
+            return
+        group = self.uic.rackGroupList[worker.index]
+        group.connectionStatus.setText(status)
+        group.connectionStatus.setToolTip(status)
+        group.speedGraph.start_session(worker.master_controller.session_started)
+        self.uic.set_group_status(worker.index, 'normal', 'RUNNING')
+        group.simulatorErrorButton.setEnabled(True)
+        for button in group.localButtons:
+            button.setEnabled(not worker.master_controller.port)
+
+    def controller_failed(self, message):
+        worker = self.sender()
+        if self.rack_group.get(worker.index) is worker:
+            group = self.uic.rackGroupList[worker.index]
+            group.connectionStatus.setText('Serial error - see details')
+            group.connectionStatus.setToolTip(message)
+            group.speedGraph.stop_session()
+            self.uic.set_group_status(worker.index, 'error', 'SERIAL ERROR')
+
+    def controller_finished(self):
+        worker = self.sender()
+        if self.rack_group.get(worker.index) is not worker:
+            return
+        group = self.uic.rackGroupList[worker.index]
+        group.runButton.setEnabled(True)
+        group.stopButton.setEnabled(False)
+        group.serialPort.setEnabled(True)
+        group.simulatorErrorButton.setEnabled(False)
+        for button in group.localButtons:
+            button.setEnabled(False)
+        if not worker.failure:
+            group.connectionStatus.setText('Stopped')
+        group.rackGroupStateLineEdit.setText('Stopped')
+        group.speedGraph.stop_session()
+        if not worker.failure:
+            self.uic.set_group_status(worker.index, 'muted', 'STOPPED')
+
+    def send_local_command(self, index, action):
+        worker = self.rack_group.get(index)
+        if worker and worker.isRunning() and worker.master_controller.is_run and not worker.master_controller.port:
+            rack_id = self.uic.rackGroupList[index].selected_rack_id
+            worker.master_controller.requests.put(('command', (f'0|{rack_id}|{action}',)))
+
+    def select_visual_rack(self, group_index, rack_id):
+        group = self.uic.rackGroupList[group_index]
+        self.select_rack(group_index, group.rackButtons[rack_id - group_index * MAX_RACK_NUMBER - 1])
 
     def select_rack(self, group_index, selected_button):
         rack_group = self.uic.rackGroupList[group_index]
         rack_group.selected_rack_id = int(selected_button.text())
+        rack_group.rackGroupImage.select(rack_group.selected_rack_id)
+        rack_group.speedGraph.select_rack(rack_group.selected_rack_id)
         for rack_button in rack_group.rackButtons:
             rack_button.setChecked(rack_button is selected_button)
         self.display_selected_rack(group_index, reset_operation_graph=True)
+        errors = self.breakdown_data[group_index].get(rack_group.selected_rack_id, (0, 0, 0))
+        for checkbox, flag in zip((rack_group.ObstructCheckBox, rack_group.SkewCheckBox,
+                                   rack_group.OverloadMotorCheckBox), errors):
+            checkbox.setChecked(bool(flag))
 
     # Dừng hoạt động
     def stop_master_controller(self, index):
-        self.rack_group[index].stop()
-        self.uic.rackGroupList[index].stopButton.setEnabled(False)
-        self.uic.rackGroupList[index].runButton.setEnabled(True)
+        worker = self.rack_group.get(index)
+        if worker is not None and worker.isRunning():
+            worker.stop()
+            group = self.uic.rackGroupList[index]
+            group.connectionStatus.setText('Stopping...')
+            group.speedGraph.stop_session()
+            self.uic.set_group_status(index, 'muted', 'STOPPING')
+            group.stopButton.setEnabled(False)
+            group.simulatorErrorButton.setEnabled(False)
+            for button in group.localButtons:
+                button.setEnabled(False)
 
-    # Mô phỏng lỗi cho nhóm giá đỡ
     def start_simulate_error(self, index):
-        err_numbers = []
-        # Kiểm tra các lỗi được chọn trong UI
-        if self.uic.rackGroupList[index].ObstructCheckBox.isChecked():
-            err_numbers.append(1)
-        if self.uic.rackGroupList[index].SkewCheckBox.isChecked():
-            err_numbers.append(2)
-        if self.uic.rackGroupList[index].OverloadMotorCheckBox.isChecked():
-            err_numbers.append(3)
-        # Gửi tín hiệu nếu có lỗi được chọn
-        if err_numbers:
-            self.rack_group[index].err_numbers = err_numbers
-            self.rack_group[index].rack_id = self.uic.rackGroupList[index].selected_rack_id
-            self.rack_group[index].run_error()
-            self.rack_group[index].brk_signal.connect(self.display_breakdown_status)
-        else:
-            self.uic.rackGroupList[index].rackGroupErrorLineEdit.setText("")
-            self.rack_group[index].brk_signal.disconnect(self.display_breakdown_status)
-            self.rack_group[index].stop_error()
+        worker = self.rack_group.get(index)
+        if worker is None or not worker.isRunning() or not worker.master_controller.is_run:
+            return
+        group = self.uic.rackGroupList[index]
+        errors = [n for n, box in enumerate((group.ObstructCheckBox, group.SkewCheckBox,
+                                            group.OverloadMotorCheckBox), 1) if box.isChecked()]
+        worker.master_controller.requests.put(('fault', (group.selected_rack_id, errors)))
 
-    # Hàm hiển thị trạng thái
+    def closeEvent(self, event):
+        for worker in self.rack_group.values():
+            worker.stop()
+        # Never destroy a live QThread; retry closing after cooperative shutdown.
+        if any(worker.isRunning() for worker in self.rack_group.values()):
+            event.ignore()
+            QtCore.QTimer.singleShot(50, self.close)
+        else:
+            event.accept()
+
     def handle_environment_status(self, message):
         env_list = message.split('|')
         rack_id = int(env_list[1])
@@ -91,28 +213,6 @@ class MainWindow(QMainWindow):
         rack_id, movement_speed, displacement, is_hard_locked, is_endpoint, rack_group_state = int(opr_list[1]), float(opr_list[2]), float(opr_list[3]), int(opr_list[4]), int(opr_list[5]), int(opr_list[6])
         return rack_id, movement_speed, displacement, is_hard_locked, is_endpoint, rack_group_state
 
-    def update_rack_group_image(self, group_index, rack_id, displacement, rack_group_state):
-        rack_group = self.uic.rackGroupList[group_index]
-        if rack_id != rack_group.selected_rack_id:
-            return
-
-        image_directory = Path(__file__).resolve().parent / "Image" / "RackGroup"
-        if displacement <= 0 and rack_group_state == -1:
-            image_path = image_directory / "Default.png"
-        else:
-            local_rack_id = ((rack_id - 1) % MAX_RACK_NUMBER) + 1
-            opened_images = {
-                1: "Group1_2_opened.png",
-                2: "Group1_2_opened.png",
-                3: "Group3_opened.png",
-                4: "Group4_opened.png",
-                5: "Group5_opened.png",
-                6: "Group6_opened.png"
-            }
-            image_path = image_directory / opened_images[local_rack_id]
-
-        rack_group.rackGroupImage.setPixmap(QtGui.QPixmap(str(image_path)))
-
     def handle_breakdown_status(self, message):
         brk_list = message.split('|')
         rack_id, is_obstructed, is_skewed, is_overload_motor = int(brk_list[1]), int(brk_list[2]), int(brk_list[3]), int(brk_list[4])
@@ -120,25 +220,21 @@ class MainWindow(QMainWindow):
 
     # Hiển thị trạng thái vận hành mỗi GROUP
     def display_rack_group_state(self, rack_id, rack_group_id, rack_group_state):
-        if rack_group_state == 0:
-            self.uic.rackGroupList[rack_group_id].rackGroupStateLineEdit.setText(f'Rack {rack_id}: Guiding Light...')
-        elif rack_group_state == 1:
-            self.uic.rackGroupList[rack_group_id].rackGroupStateLineEdit.setText(f'Rack {rack_id}: Opening...')
-        elif rack_group_state == 2:
-            self.uic.rackGroupList[rack_group_id].rackGroupStateLineEdit.setText(f'Rack {rack_id}: Closing...')
-        elif rack_group_state == 3:
-            self.uic.rackGroupList[rack_group_id].rackGroupStateLineEdit.setText(f'Rack {rack_id}: Ventilating...')
-        elif rack_group_state == -1:
-            self.uic.rackGroupList[rack_group_id].rackGroupStateLineEdit.setText('Ready!!!')
+        group = self.uic.rackGroupList[rack_group_id]
+        worker = self.rack_group.get(rack_group_id)
+        running = worker and worker.isRunning() and not worker.master_controller.stop_event.is_set()
+        state = {-1: 'Ready', 0: 'Guiding light', 1: 'Opening', 2: 'Closing', 3: 'Ventilating'}.get(rack_group_state, 'Unknown')
+        if any(self.breakdown_data[rack_group_id].get(rack_id, ())):
+            state = 'Fault - movement paused'
+        group.rackGroupStateLineEdit.setText(f'Rack {rack_id:02d}  /  {state}' + ('' if running else '  /  Session stopped'))
 
     def display_environment_status(self, message: str):
         index = self.sender().index 
-        print("\n[SIMULATION] GROUP", index+1)
-        print("Display ENV")
-        if index != -1:
+        if self.rack_group.get(index) is self.sender():
             rack_id, temperature, humidity, weight, smoke = self.handle_environment_status(message)
             self.environment_data[index][rack_id] = (temperature, humidity, weight, smoke)
-            self.display_selected_rack(index)
+            if rack_id == self.uic.rackGroupList[index].selected_rack_id:
+                self.display_selected_rack(index)
 
     def display_selected_rack(self, group_index, selected_rack_text=None, reset_operation_graph=False):
         rack_group = self.uic.rackGroupList[group_index]
@@ -160,119 +256,123 @@ class MainWindow(QMainWindow):
             movement_speed, displacement, is_hard_locked, is_endpoint, rack_group_state = operation_values
             rack_group.movementSpeed.display('{:.02f}'.format(movement_speed))
             rack_group.displacement.display('{:.02f}'.format(displacement))
-            if reset_operation_graph:
-                rack_group.speedGraph.clear_data()
-                rack_group.speedGraph.set_speed(movement_speed)
             rack_group.isHardLock.display(is_hard_locked)
-            self.update_rack_group_image(group_index, rack_id, displacement, rack_group_state)
 
-    def display_operation_status(self, message: str):
-        index = self.sender().index
-        print("Display OPR")
-        if index != -1:
-            rack_id, movement_speed, displacement, is_hard_locked, is_endpoint, rack_group_state = self.handle_operation_status(message)
-            self.operation_data[index][rack_id] = (movement_speed, displacement, is_hard_locked, is_endpoint, rack_group_state)
-            selected_rack_id = self.uic.rackGroupList[index].selected_rack_id
-            if rack_id == selected_rack_id:
-                self.uic.rackGroupList[index].movementSpeed.display('{:.02f}'.format(movement_speed))
-                self.uic.rackGroupList[index].displacement.display('{:.02f}'.format(displacement))
-                self.uic.rackGroupList[index].speedGraph.set_speed(movement_speed)
-                self.uic.rackGroupList[index].isHardLock.display(is_hard_locked)
-                self.update_rack_group_image(index, rack_id, displacement, rack_group_state)
-            # self.uic.rackGroupList[index].isEndpoint.display(is_endpoint)
-            self.display_rack_group_state(rack_id, index, rack_group_state)
+            self.display_rack_group_state(rack_id, group_index, rack_group_state)
+        if rack_id in self.light_data[group_index]:
+            rack_group.light.display(self.light_data[group_index][rack_id])
+        self.show_selected_breakdown(group_index)
 
-    def display_breakdown_status(self, message: str):
-        index = self.sender().index
-        print("Display ERROR")
-        if index != -1:
-            rack_id, is_obstructed, is_skewed, is_overload_motor = self.handle_breakdown_status(message)
-            message = "Rack " + str(rack_id) + ": "
-            if is_obstructed == 1:
-                message += "Obstructed | "
-            if is_skewed == 1:
-                message += "Skewed | "
-            if is_overload_motor == 1:
-                message += "Overload Motor"
-            self.uic.rackGroupList[index].rackGroupErrorLineEdit.setText(message)
+    def display_operation_status(self, message, timestamp, light):
+        worker = self.sender()
+        index = worker.index
+        if self.rack_group.get(index) is not worker or worker.master_controller.stop_event.is_set():
+            return
+        try:
+            rack_id, speed, displacement, locked, endpoint, state = self.handle_operation_status(message)
+            if rack_id not in worker.master_controller.rack_ids:
+                return
+            if not all(math.isfinite(v) and v >= 0 for v in (timestamp, speed, displacement)):
+                return
+        except (ValueError, IndexError):
+            return
+        group = self.uic.rackGroupList[index]
+        values = (speed, displacement, locked, endpoint, state)
+        self.operation_data[index][rack_id] = values
+        self.light_data[index][rack_id] = light
+        group.speedGraph.add_sample(rack_id, timestamp, speed, displacement)
+        group.rackGroupImage.set_rack(rack_id, operation=values)
+        if rack_id == group.selected_rack_id:
+            group.movementSpeed.display(speed)
+            group.displacement.display(displacement)
+            group.isHardLock.display(locked)
+            group.light.display(light)
+            self.display_rack_group_state(rack_id, index, state)
 
-# =======================================================
-# LỚP THREAD (LUỒNG) XỬ LÝ CHO MỖI GROUP
-# =======================================================
+    def show_selected_breakdown(self, index):
+        group = self.uic.rackGroupList[index]
+        rack_id = group.selected_rack_id
+        flags = self.breakdown_data[index].get(rack_id, (0, 0, 0))
+        labels = [label for label, flag in zip(('Obstructed', 'Skewed', 'Overload Motor'), flags) if flag]
+        group.rackGroupErrorLineEdit.setText(f'Rack {rack_id}: ' + ' | '.join(labels) if labels else '')
+
+    def display_breakdown_status(self, message):
+        worker = self.sender()
+        if self.rack_group.get(worker.index) is worker:
+            rack_id, *flags = self.handle_breakdown_status(message)
+            self.breakdown_data[worker.index][rack_id] = flags
+            group = self.uic.rackGroupList[worker.index]
+            group.rackGroupImage.set_rack(rack_id, faults=flags)
+            self.show_selected_breakdown(worker.index)
+            if rack_id == group.selected_rack_id and rack_id in self.operation_data[worker.index]:
+                self.display_rack_group_state(rack_id, worker.index, self.operation_data[worker.index][rack_id][-1])
+            if worker.isRunning() and not worker.master_controller.stop_event.is_set():
+                faults = any(any(v) for v in self.breakdown_data[worker.index].values())
+                self.uic.set_group_status(worker.index, 'error' if faults else 'normal', 'FAULT' if faults else 'RUNNING')
+
 
 class ThreadClass(QtCore.QThread):
-    # Tạo tín hiệu
     env_signal = pyqtSignal(str)
     opr_signal = pyqtSignal(str)
+    operation_sample = pyqtSignal(str, float, bool)
     brk_signal = pyqtSignal(str)
+    ready = pyqtSignal(str)
+    failed = pyqtSignal(str)
 
-    def __init__(self, index=-1, rack_id=1, opr_number = -1, err_numbers = [1]):
+    def __init__(self, index=0, rack_id=None, opr_number=-1, err_numbers=None, port=None):
         super().__init__()
         self.index = index
-        self.master_controller = MasterCom(rack_group_id=self.index, port='COM' + str(3 + self.index * 2))
-        self.rack_id = rack_id
+        self.master_controller = MasterCom(rack_group_id=index, port=port)
+        self.rack_id = rack_id if rack_id is not None else index * MAX_RACK_NUMBER + 1
         self.opr_number = opr_number
-        self.err_numbers = err_numbers
+        self.err_numbers = list(err_numbers or [])
+        self.failure = ''
 
     def run(self):
-        print('Starting master controller...', self.index)
-        print('Starting simulate normal...', self.index)
-        self.master_controller.start()
-
-        # Tạo các luồng con để xử lý trạng thái môi trường và dữ liệu từ IPC
-        env_thread = threading.Thread(target=self.master_controller.run_masterControllerEnvState, daemon=True,args=(5,)) # Khoảng delay
-        env_thread.start()
-        read_computerIPC_thread = threading.Thread(target=self.master_controller.read_line_from_computerIPC, daemon=True)
-        read_computerIPC_thread.start()
-
-        # Gửi tín hiệu tới UI
-        while True:
-            time.sleep(1)
-            if self.master_controller.env_messages:
-                for environment_message in list(self.master_controller.env_messages):
-                    self.env_signal.emit(environment_message)
-            if self.master_controller.opr_messages:
-                self.opr_signal.emit(self.master_controller.opr_messages[0])
-            if self.master_controller.brk_messages:
-                self.brk_signal.emit(self.master_controller.brk_messages[0])
+        controller = self.master_controller
+        try:
+            controller.start()
+            if not controller.is_run:
+                return
+            self.ready.emit(f'Serial connected: {controller.port}' if controller.port else
+                            'Standalone simulation - no IPC connection')
+            signals = {'ENVSTT': self.env_signal, 'OPRSTT': self.opr_signal, 'BRKSTT': self.brk_signal}
+            while not controller.stop_event.is_set():
+                controller.poll()
+                while True:
+                    try:
+                        message = controller.messages.get_nowait()
+                    except Empty:
+                        break
+                    signals[message.split('|', 1)[0]].emit(message)
+                while True:
+                    try:
+                        sample = controller.operation_samples.get_nowait()
+                    except Empty:
+                        break
+                    self.operation_sample.emit(*sample)
+                controller.stop_event.wait(0.02)
+        except Exception as exc:
+            self.failure = str(exc)
+            self.failed.emit(self.failure)
+        finally:
+            try:
+                controller.execute_stopRunning()
+            except Exception as exc:
+                self.failure = str(exc)
+                self.failed.emit(self.failure)
 
     def stop(self):
-        print('Stopping master controller...', self.index+1)
-        self.master_controller.execute_stopRunning()
-        self.terminate()
+        # The worker closes its own Serial handle, never QThread.terminate().
+        self.master_controller.stop_event.set()
 
-    # Operation 
-    def run_normal(self):
-        self.master_controller.is_run = True
-        
-        if self.master_controller.ventilating_racks or self.master_controller.closing_racks or self.master_controller.opening_racks:
-            self.master_controller.is_rack_operation = True
-            opr_thread = threading.Thread(target=self.master_controller.run_masterControllerOperationState, args=(1,))
-            opr_thread.start()
-            print("Operation hihi")
-
-        env_thread = threading.Thread(target=self.master_controller.run_masterControllerEnvState, daemon=True, args=(5,))
-        env_thread.start()
-    
-    def stop_normal(self):
-        self.master_controller.is_run = False
-        self.master_controller.is_rack_operation = False
-
-    # Mô phỏng Error
     def run_error(self):
-        print('Starting simulate error...', self.index+1)
-        self.stop_normal() # Ngưng vận hành khi có lỗi
-        self.master_controller.is_error = True
-        brkdown_thread = threading.Thread(target=self.master_controller.run_masterControllerBreakdownState, daemon=True, args=(6, self.rack_id, self.err_numbers))
-        brkdown_thread.start()
+        self.master_controller.requests.put(('fault', (self.rack_id, self.err_numbers)))
 
     def stop_error(self):
-        self.master_controller.is_error = False
-        self.run_normal()
+        self.master_controller.requests.put(('fault', (self.rack_id, [])))
 
-# =======================================================
-# CHẠY CHƯƠNG TRÌNH
-# =======================================================
+
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     main_win = MainWindow()

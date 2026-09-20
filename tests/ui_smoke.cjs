@@ -1,0 +1,45 @@
+// Test-only credentials belong to tools/ui_test_server.py's ephemeral database.
+const { chromium } = require('../.tools/ui/node_modules/playwright');
+const fs = require('fs');
+(async()=>{
+  const browser = await chromium.launch({channel:'chrome',headless:true});
+  const page = await browser.newPage({viewport:{width:1440,height:1000}});
+  page.setDefaultTimeout(15000);
+  const errors=[];
+  const suffix = Date.now().toString();
+  page.on('response',async response=>{if(response.status()>=400) console.error('HTTP',response.status(),response.url(),(await response.text()).slice(0,1600))});
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('http://127.0.0.1:3100');
+  await page.getByLabel('Tên đăng nhập').fill('ui-test');
+  await page.getByLabel('Mật khẩu').fill('test-only-password');
+  await page.getByRole('button',{name:'Đăng nhập',exact:true}).click();
+  await page.getByRole('heading',{name:'Tổng quan',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Thiết bị',exact:true}).click();
+  const registration=page.locator('section').filter({has:page.getByRole('heading',{name:'Đăng ký thiết bị'})});
+  await registration.getByLabel('device_id',{exact:true}).fill('ui-simulator-'+suffix);
+  await registration.getByLabel('device_type',{exact:true}).selectOption('IPCSIM');
+  await registration.getByLabel('name',{exact:true}).fill('UI simulator');
+  await registration.getByRole('button',{name:'Lưu',exact:true}).click();
+  await page.getByRole('cell',{name:'ui-simulator-'+suffix,exact:true}).waitFor();
+  await page.getByRole('button',{name:'Danh mục',exact:true}).click();
+  const add=page.locator('form').first();
+  await add.getByLabel('code',{exact:true}).fill('UI-PART-'+suffix);
+  await add.getByLabel('name',{exact:true}).fill('UI part');
+  await add.getByLabel('unit',{exact:true}).fill('piece');
+  await add.getByLabel('min_qty').fill('0');
+  await add.getByLabel('max_qty').fill('100');
+  await add.getByRole('button',{name:'Lưu'}).click();
+  await page.getByRole('cell',{name:'UI-PART-'+suffix,exact:true}).waitFor();
+  await page.getByRole('button',{name:'Tổng quan',exact:true}).click();
+  // Clear one-time credential notice before recording an artifact.
+  await page.reload();
+  await page.getByRole('heading',{name:'Tổng quan',exact:true}).waitFor();
+  await page.locator('.metrics').waitFor();
+  fs.mkdirSync('test-results',{recursive:true});
+  await page.screenshot({path:'test-results/server-desktop.png',fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path:'test-results/server-mobile.png',fullPage:true});
+  if(errors.length)throw new Error(errors.join('\n'));
+  await browser.close();
+  console.log('UI smoke passed: login, device registration, master item, desktop/mobile, no page errors');
+})().catch(e=>{console.error(e);process.exit(1)});

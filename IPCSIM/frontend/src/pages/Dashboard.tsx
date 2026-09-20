@@ -77,7 +77,7 @@ export const Dashboard = () => {
       <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ md: 'center' }} sx={{ mb: 3 }} spacing={1}>
         <Box>
           <Typography variant="h4" sx={{ fontWeight: 'bold', letterSpacing: '-0.02em' }}>Operations dashboard</Typography>
-          <Typography color="text.secondary" sx={{ mt: 0.5 }}>Live overview of inventory, cabinets and simulation health.</Typography>
+          <Typography color="text.secondary" sx={{ mt: 0.5 }}>Live overview of inventory, cabinets and device health.</Typography>
         </Box>
         <Chip icon={<Circle sx={{ fontSize: '10px !important' }} />} label="Auto-refresh: 5s" color="info" variant="outlined" />
       </Stack>
@@ -97,12 +97,12 @@ export const Dashboard = () => {
               <Card sx={{ height: '100%' }}>
                 <CardContent>
                   <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Simulation health</Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Device health</Typography>
                     <Wifi color={systemStatus.simulation_online ? 'success' : 'error'} />
                   </Stack>
                   <Stack spacing={1.75}>
                     <HealthRow label="Serial connection" value={systemStatus.serial_connected ? 'Connected' : 'Offline'} good={systemStatus.serial_connected} />
-                    <HealthRow label="Simulation service" value={systemStatus.simulation_online ? 'Online' : 'Offline'} good={systemStatus.simulation_online} />
+                    <HealthRow label="Serial telemetry source" value={systemStatus.serial_connected ? 'Connected' : 'Offline / not configured'} good={systemStatus.serial_connected} />
                     <HealthRow label="Database" value={systemStatus.database_healthy ? 'Healthy' : 'Error'} good={systemStatus.database_healthy} />
                     <HealthRow label="Server sync" value={systemStatus.server_synced ? 'Synced' : 'Offline'} good={systemStatus.server_synced} />
                   </Stack>

@@ -193,11 +193,11 @@ export const Cabinets = () => {
                       color="info"
                       fullWidth
                       startIcon={<Air />}
-                      onClick={() => handleVentilate(cabinet)}
-                      disabled={actionLoading !== null || !isActive}
+                      component={RouterLink}
+                      to={`/operation?cabinet=${cabinet.id}`}
                       sx={{ mt: 1, minHeight: 42 }}
                     >
-                      {!isActive ? 'Cabinet inactive' : actionLoading === cabinet.id ? 'Ventilating...' : 'Ventilate group'}
+                      Operator workspace
                     </Button>
                   </CardContent>
                 </Card>

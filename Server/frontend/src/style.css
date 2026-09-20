@@ -1,0 +1,232 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+:root {
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  color: #17323c;
+  background: #f4f7f8;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button,
+input,
+select {
+  font: inherit;
+}
+button {
+  border: 0;
+  border-radius: 7px;
+  padding: 11px 18px;
+  background: #006f78;
+  color: white;
+  cursor: pointer;
+}
+button:hover {
+  background: #00535a;
+}
+input,
+select {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #c9d7dc;
+  border-radius: 6px;
+  background: white;
+  color: #17323c;
+}
+label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+}
+form {
+  display: flex;
+  gap: 16px;
+  align-items: end;
+  flex-wrap: wrap;
+  margin: 20px 0;
+}
+form label {
+  flex: 1;
+  min-width: 140px;
+}
+form button {
+  min-height: 42px;
+}
+h1 {
+  font-size: 32px;
+  letter-spacing: -1px;
+  margin: 4px 0;
+}
+h2 {
+  font-size: 19px;
+  margin-top: 0;
+}
+p {
+  line-height: 1.6;
+}
+.shell {
+  display: grid;
+  grid-template-columns: 230px 1fr;
+  min-height: 100vh;
+}
+aside {
+  background: #0d303a;
+  color: #d9edef;
+  padding: 32px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+aside nav {
+  display: grid;
+  gap: 9px;
+  flex: 1;
+  align-content: start;
+}
+aside nav button {
+  text-align: left;
+  background: transparent;
+  color: #a6c4cc;
+}
+aside nav .active {
+  background: #1b515c;
+  color: white;
+}
+.brand {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+.muted {
+  color: #8299a1;
+}
+.good {
+  color: #087a61;
+}
+.eyebrow {
+  color: #6c858f;
+  font-size: 11px;
+  letter-spacing: 2px;
+}
+main {
+  padding: 32px 42px;
+  min-width: 0;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 28px;
+}
+section {
+  background: white;
+  border: 1px solid #e0e8eb;
+  padding: 24px;
+  border-radius: 12px;
+  margin-bottom: 22px;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 30px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+.metrics article {
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  border: 1px solid #e0e8eb;
+}
+.metrics span {
+  font-size: 13px;
+  color: #67818a;
+}
+.metrics strong {
+  display: block;
+  font-size: 34px;
+  margin-top: 14px;
+}
+.table-scroll {
+  overflow: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+th {
+  color: #667e87;
+  background: #f5f8f9;
+  font-weight: 500;
+}
+td,
+th {
+  padding: 14px 12px;
+  border-bottom: 1px solid #e9eff1;
+}
+td {
+  max-width: 460px;
+  overflow-wrap: anywhere;
+}
+.empty {
+  color: #8299a1;
+  padding: 25px 0;
+}
+.error {
+  background: #fff0ed;
+  color: #9e3227;
+  padding: 16px;
+  border-radius: 8px;
+}
+.notice {
+  background: #e4f4ed;
+  padding: 16px;
+  overflow-wrap: anywhere;
+}
+.login {
+  max-width: 580px;
+  margin: 12vh auto;
+  background: white;
+  border: 1px solid #dce6ea;
+  border-radius: 16px;
+  padding: 45px;
+}
+.login form {
+  display: grid;
+}
+.login h1 {
+  margin-top: 40px;
+}
+details {
+  margin-top: 30px;
+}
+@media (max-width: 900px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+  aside {
+    padding: 18px;
+  }
+  aside nav {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  main {
+    padding: 20px;
+  }
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+  header {
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+}
+form fieldset { display: contents; }

@@ -1,0 +1,9 @@
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt /app/
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
+COPY Server /app/Server
+COPY ipc_core /app/ipc_core
+COPY Simulation/topology.py /app/Simulation/topology.py
+RUN DJANGO_SECRET_KEY=build-only python Server/manage.py collectstatic --noinput
+CMD ["gunicorn", "Server.wsgi:application", "--bind", "0.0.0.0:8001", "--workers", "2", "--access-logfile", "-"]

@@ -1,0 +1,8 @@
+# Each edge MQTT username MUST equal its registered device_id.
+# Reserve inventory-server: never register it as an edge device.
+user inventory-server
+topic read inventory/v1/+/up/+
+topic write inventory/v1/+/down/+
+
+pattern write inventory/v1/%u/up/+
+pattern read inventory/v1/%u/down/+

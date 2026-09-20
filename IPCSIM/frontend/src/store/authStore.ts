@@ -9,18 +9,20 @@ interface AuthState {
   canAccess: (requiredRole: string) => boolean
 }
 
-const mockUser: User = {
-  id: 1,
-  username: 'operator',
+// Display identity only. Authorization is enforced by the edge API token;
+// central user permissions are enforced by Django, never this UI role.
+const viewer: User = {
+  id: 0,
+  username: 'edge-viewer',
   role: 'OPERATOR',
-  email: 'operator@ipcsim.local'
+  email: ''
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
-  user: mockUser,
-  isAuthenticated: true,
+  user: viewer,
+  isAuthenticated: !!localStorage.getItem('token'),
   setUser: (user) => set({ user, isAuthenticated: !!user }),
-  logout: () => set({ user: null, isAuthenticated: false }),
+  logout: () => {localStorage.removeItem('token'); set({ user: null, isAuthenticated: false }); window.location.reload()},
   canAccess: (requiredRole: string) => {
     const user = get().user
     if (!user) return false

@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: inventory
+      POSTGRES_USER: inventory
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventory"]
+      interval: 5s
+      retries: 10
+  mqtt:
+    image: eclipse-mosquitto:2
+    ports: ["${BIND_ADDRESS:-127.0.0.1}:${MQTT_PUBLIC_PORT:-8883}:8883"]
+    volumes:
+      - ./${MQTT_CONFIG:-mosquitto.conf}:/mosquitto/config/mosquitto.conf:ro
+      - ./acl:/mosquitto/config/acl:ro
+      - ./secrets:/mosquitto/secrets:ro
+      - mqtt_data:/mosquitto/data
+    restart: unless-stopped
+  migrate:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.server
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+    command: ["python", "Server/manage.py", "migrate", "--noinput"]
+    depends_on:
+      postgres: {condition: service_healthy}
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.server
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+    volumes: ["static_data:/app/Server/staticfiles"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.server
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      MQTT_HOST: mqtt
+      MQTT_PORT: 8883
+      MQTT_CA: /certs/ca.crt
+    volumes: ["./secrets:/certs:ro"]
+    command: ["python", "Server/manage.py", "mqtt_worker"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      mqtt: {condition: service_started}
+    restart: unless-stopped
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+    ports: ["${BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-8080}:80"]
+    volumes: ["static_data:/static:ro"]
+    depends_on: [server]
+    restart: unless-stopped
+volumes:
+  postgres_data:
+  mqtt_data:
+  static_data:

@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+.tools/
+node_modules/
+dist/
+.env
+*.sqlite3
+*.sqlite3-*
+backups/
+runtime/
+.pytest_cache/
+test-results/
+deploy/secrets/
+.pytest-temp/
+Server/staticfiles/

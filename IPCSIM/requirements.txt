@@ -1,13 +1,1 @@
-fastapi
-uvicorn
-
-sqlalchemy
-
-python-dotenv
-
-pydantic
-pydantic-settings
-
-pyserial
-
-websockets
+-r ../requirements.txt

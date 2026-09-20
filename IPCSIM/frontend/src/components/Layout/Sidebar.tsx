@@ -23,9 +23,8 @@ const menuItems = [
   { label: 'Breakdown', icon: HistoryOutlined, path: '/breakdown', minRole: 'OPERATOR' },
   { label: 'Environment', icon: Cloud, path: '/environment', minRole: 'OPERATOR' },
   { label: 'Operation', icon: TrendingUp, path: '/operation', minRole: 'OPERATOR' },
-  { label: 'Logs', icon: HistoryOutlined, path: '/logs', minRole: 'SUPERVISOR' },
-  { label: 'System', icon: Settings, path: '/system', minRole: 'MAINTENANCE' },
-  { label: 'Maintenance', icon: Build, path: '/maintenance', minRole: 'MAINTENANCE' }
+  { label: 'Logs', icon: HistoryOutlined, path: '/logs', minRole: 'OPERATOR' },
+  { label: 'System', icon: Settings, path: '/system', minRole: 'OPERATOR' }
 ]
 
 export const Sidebar = () => {

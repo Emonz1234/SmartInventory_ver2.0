@@ -1,4 +1,4 @@
-from app.serial.protocol.parser import normalize_smoke_value
+from ipc_core.app.serial.protocol.parser import normalize_smoke_value
 
 
 def test_normalize_vietnamese_yes_no_values():
