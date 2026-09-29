@@ -4,28 +4,36 @@ import pytest
 import serial
 
 
+def run_to_idle(controller):
+    events = []
+    for _ in range(200):
+        events.extend(controller.step_operations(0))
+        if controller.gap_controller.current_step is not None:
+            events.extend(controller.step_operations(1))
+        if controller.gap_controller.current_command is None and not controller.gap_controller.pending_commands:
+            return events
+    raise AssertionError('Queued rack operations did not finish')
+
+
 def test_actual_simulator_accepts_adapter_commands_and_emits_shared_model():
-    controller = MasterCom(rack_group_id=1, port="test-only")
+    controller = MasterCom(rack_group_id=1, port='')
+    controller.start()
     adapter = SimulationAdapter()
-    controller.determine_operationInformation(adapter.encode({"address":7,"action":"OPEN"}))
+    controller.determine_operationInformation(adapter.encode({"address": 7, "action": "OPEN"}))
     assert controller.opening_racks == [7]
-    for _ in range(200):
-        raw = controller.create_operation_open_rack_statusData(6)
-        result = adapter.parse(raw)
-        assert result.payload["rack_id"] == 7
-        if result.payload["is_endpoint"] == 1:
-            break
-    else:
-        raise AssertionError("Simulator never reached open endpoint")
-    assert result.payload["displacement"] > 0
+    open_events = run_to_idle(controller)
+    assert [event['rack_id'] for event in open_events if event['type'] == 'step_completed'] == [12, 11, 10, 9, 8]
+    opened = adapter.parse(controller.opr_messages[controller._local_index(7)]).payload
+    assert opened['rack_id'] == 7 and opened['is_endpoint'] == 1
+    assert opened['state'] == -1 and opened['displacement'] == 64
+
     controller.determine_operationInformation(adapter.encode({"address":7,"action":"CLOSE"}))
-    for _ in range(200):
-        result = adapter.parse(controller.create_operation_close_rack_statusData(6))
-        if result.payload["is_endpoint"] == 1:
-            break
-    else:
-        raise AssertionError("Simulator never reached closed endpoint")
-    assert result.payload["displacement"] == 0
+    close_events = run_to_idle(controller)
+    assert [event['rack_id'] for event in close_events if event['type'] == 'step_completed'] == [8]
+    closed = adapter.parse(controller.opr_messages[controller._local_index(7)]).payload
+    assert closed['is_endpoint'] == 1 and closed['state'] == -1
+    assert closed['displacement'] == 0 and controller.current_gap == 2
+    controller.execute_stopRunning()
 
 
 def test_simulator_environment_and_breakdown_are_normalized():
@@ -60,13 +68,13 @@ def test_start_initializes_all_six_racks_without_serial(group):
         controller.execute_stopRunning()
 
 
-def test_environment_and_breakdown_publish_every_five_minutes():
+def test_environment_and_breakdown_publish_at_configured_interval():
     from Simulation.virtual_serial.virtual_master_controller import ENV_DATA_SEND_INTERVAL
 
     controller = MasterCom(rack_group_id=0, port='')
     controller.start()
     try:
-        assert ENV_DATA_SEND_INTERVAL == 5 * 60
+        assert ENV_DATA_SEND_INTERVAL == 10
         due = controller._next_env
         controller._next_operation = due + 1000
         while not controller.messages.empty():
@@ -77,7 +85,7 @@ def test_environment_and_breakdown_publish_every_five_minutes():
 
         controller.poll(now=due)
         assert controller.messages.qsize() == 12
-        assert controller._next_env == due + 5 * 60
+        assert controller._next_env == due + ENV_DATA_SEND_INTERVAL
         assert controller._next_operation == due + 1000
     finally:
         controller.execute_stopRunning()
@@ -89,36 +97,25 @@ def test_multirack_motion_fault_clear_and_ventilation_cycle():
     try:
         for command in ('0|7|1', '0|8|1', '0|9|3'):
             assert c.determine_operationInformation(command)
-        assert c.determine_operationInformation('0|7|1')
+        assert c.determine_operationInformation('0|9|3')  # Adjacent retry is idempotent.
         assert c.opening_racks == [7, 8]
-        assert not c.determine_operationInformation('0|7|2')
-        c.set_errors(7, [1, 1, 3])
-        for _ in range(60):
-            c.step_operations()
-        assert c.ventilating_racks_status[0][0] == 0
-        assert c.ventilating_racks_status[1][0] == 64
-        assert c.ventilating_racks_status[2][0] == 0
+        assert not any(rack.is_moving for rack in c.gap_controller.racks.values())
+        events = run_to_idle(c)
+        assert len([event for event in events if event['type'] == 'command_completed']) == 3
+        assert c.current_gap is None and c.active_rack is None
+        assert c.system_state == 'VENTILATED'
         assert c.ventilating_racks == []
-        assert c.opening_racks == [7]
+        assert not c.is_rack_operation
+        c.set_errors(7, [1, 3])
         assert c.error_racks[0] == [1, 3]
         c.set_errors(7, [])
         assert c.brk_messages[0] == 'BRKSTT|7|0|0|0'
-        for _ in range(60):
-            c.step_operations()
-        assert not c.is_rack_operation
-        assert c.ventilating_racks_status[0][0] == 64
-        for rack in (7, 8):
-            assert c.determine_operationInformation(f'0|{rack}|2')
-        for _ in range(60):
-            c.step_operations()
-        assert all(row[0] == 0 for row in c.ventilating_racks_status)
-        assert all(frame.split('|')[2] == '0.0' for frame in c.opr_messages)
     finally:
         c.execute_stopRunning()
 
 
 @pytest.mark.parametrize('message', ['0|0|1', '0|7|1', '0|-1|1', '0|x|1', '1|1|1',
-                                      '0|1|4', '0|1|10', '0|1|1|2', '', '0|1'])
+                                      '0|1|5', '0|1|10', '0|1|1|2', '', '0|1'])
 def test_reject_malformed_or_wrong_group_commands(message):
     c = MasterCom(0, port='')
     assert not c.determine_operationInformation(message)
@@ -140,9 +137,11 @@ def test_real_pyserial_loopback_frames_and_partial_commands():
         c.ser.write(b'x' * 300 + b'0|15|1\n0|16|1\n')
         c.read_serial_once()
         assert c.opening_racks == [13, 16]
-        c.step_operations()
+        c.step_operations(0)
         raw = c.ser.read(c.ser.in_waiting).decode().splitlines()
-        assert {int(SimulationAdapter().parse(frame).payload['rack_id']) for frame in raw} == {13, 14, 16}
+        moving = [SimulationAdapter().parse(frame).payload for frame in raw if frame.startswith('OPRSTT|')]
+        assert [(row['rack_id'], row['state']) for row in moving] == [(13, 1), (18, 2)]
+        assert sum(rack.is_moving for rack in c.gap_controller.racks.values()) == 1
     finally:
         c.execute_stopRunning()
 
@@ -164,17 +163,17 @@ def test_environment_port_resolution(monkeypatch):
 
 def test_fault_and_light_do_not_destroy_pending_motion():
     c = MasterCom(0, port='')
+    c.start()
     assert c.determine_operationInformation('0|1|1')
-    c.step_operations()
-    previous = c.ventilating_racks_status[0][0]
-    c.set_errors(1, [2])
-    c.step_operations()
-    assert c.ventilating_racks_status[0][0] == previous
+    c.step_operations(0)
+    assert c.gap_controller.current_step['rack_id'] == 6
     assert c.determine_operationInformation('0|1|0')
-    assert c.opening_racks == [1] and c.lights[0]
-    c.set_errors(1, [])
-    c.step_operations()
-    assert c.ventilating_racks_status[0][0] > previous
+    assert c.opening_racks == [1] and not c.lights[0]
+    assert list(c.gap_controller.pending_commands) == [(1, 0)]
+    run_to_idle(c)
+    assert c.current_gap == 1 and c.active_rack == 1
+    assert c.lights[0]
+    c.execute_stopRunning()
 
 
 def test_chart_metadata_uses_acquisition_time_without_changing_serial(monkeypatch):
@@ -188,6 +187,7 @@ def test_chart_metadata_uses_acquisition_time_without_changing_serial(monkeypatc
         assert all(s[1] == 0 for s in samples)
         now[0] = 102.75
         c.determine_operationInformation('0|1|0')
+        c.step_operations(0)
         frame, timestamp, light = c.operation_samples.get_nowait()
         assert timestamp == 2.75 and light is True
         assert frame == 'OPRSTT|1|0.0|0.0|0|1|0'

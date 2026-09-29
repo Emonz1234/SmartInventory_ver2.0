@@ -4,9 +4,11 @@ from PyQt6.QtCore import pyqtSignal
 try:
     from .simulation_scroll import Ui_MainWindow
     from .virtual_serial.virtual_master_controller import MasterCom, MAX_RACK_NUMBER
+    from .topology import GROUP_COUNT
 except ImportError:
     from simulation_scroll import Ui_MainWindow
     from virtual_serial.virtual_master_controller import MasterCom, MAX_RACK_NUMBER
+    from topology import GROUP_COUNT
 from queue import Empty
 from serial.tools import list_ports
 from functools import partial
@@ -29,7 +31,7 @@ class MainWindow(QMainWindow):
         available_ports = list(list_ports.comports())
 
         # Kết nối các nút bấm với hàm xử lý
-        for i in range(21):  # Duyệt qua 21 GROUP
+        for i in range(GROUP_COUNT):
             self.breakdown_data[i] = {}
             group = self.uic.rackGroupList[i]
             self.light_data[i] = {}
@@ -53,6 +55,7 @@ class MainWindow(QMainWindow):
             self.uic.rackGroupList[i].runButton.clicked.connect(partial(self.start_master_controller, i))
             self.uic.rackGroupList[i].stopButton.clicked.connect(partial(self.stop_master_controller, i))
             self.uic.rackGroupList[i].simulatorErrorButton.clicked.connect(partial(self.start_simulate_error, i))
+            self.uic.rackGroupList[i].homeButton.clicked.connect(partial(self.send_local_command, i, 4))
             for rack_button in self.uic.rackGroupList[i].rackButtons:
                 rack_button.clicked.connect(partial(self.select_rack, i, rack_button))
 
@@ -90,12 +93,16 @@ class MainWindow(QMainWindow):
         for rack_id in worker.master_controller.rack_ids:
             self.breakdown_data[index][rack_id] = (0, 0, 0)
             self.light_data[index][rack_id] = False
-        self.display_selected_rack(index, reset_operation_graph=True)
+        group.rackGroupImage.set_gap_state(worker.master_controller.gap_snapshot())
+        group.gapStateLineEdit.setText('CURRENT GAP 6  /  IDLE')
+        group.rackGroupStateLineEdit.setText('HOME  /  READY')
+        self.display_selected_rack(index)
         for checkbox in (group.ObstructCheckBox, group.SkewCheckBox, group.OverloadMotorCheckBox):
             checkbox.setChecked(False)
         worker.env_signal.connect(self.display_environment_status)
         worker.operation_sample.connect(self.display_operation_status)
         worker.brk_signal.connect(self.display_breakdown_status)
+        worker.gap_signal.connect(self.display_gap_state)
         worker.ready.connect(self.controller_ready)
         worker.failed.connect(self.controller_failed)
         worker.finished.connect(self.controller_finished)
@@ -116,8 +123,10 @@ class MainWindow(QMainWindow):
         group.speedGraph.start_session(worker.master_controller.session_started)
         self.uic.set_group_status(worker.index, 'normal', 'RUNNING')
         group.simulatorErrorButton.setEnabled(True)
+        group.homeButton.setEnabled(not worker.master_controller.port)
         for button in group.localButtons:
             button.setEnabled(not worker.master_controller.port)
+        self.update_operation_controls(worker.index)
 
     def controller_failed(self, message):
         worker = self.sender()
@@ -126,6 +135,7 @@ class MainWindow(QMainWindow):
             group.connectionStatus.setText('Serial error - see details')
             group.connectionStatus.setToolTip(message)
             group.speedGraph.stop_session()
+            group.homeButton.setEnabled(False)
             self.uic.set_group_status(worker.index, 'error', 'SERIAL ERROR')
 
     def controller_finished(self):
@@ -137,6 +147,7 @@ class MainWindow(QMainWindow):
         group.stopButton.setEnabled(False)
         group.serialPort.setEnabled(True)
         group.simulatorErrorButton.setEnabled(False)
+        group.homeButton.setEnabled(False)
         for button in group.localButtons:
             button.setEnabled(False)
         if not worker.failure:
@@ -150,6 +161,8 @@ class MainWindow(QMainWindow):
         worker = self.rack_group.get(index)
         if worker and worker.isRunning() and worker.master_controller.is_run and not worker.master_controller.port:
             rack_id = self.uic.rackGroupList[index].selected_rack_id
+            if action == 0 and self.light_data[index].get(rack_id, False):
+                action = 5
             worker.master_controller.requests.put(('command', (f'0|{rack_id}|{action}',)))
 
     def select_visual_rack(self, group_index, rack_id):
@@ -163,7 +176,7 @@ class MainWindow(QMainWindow):
         rack_group.speedGraph.select_rack(rack_group.selected_rack_id)
         for rack_button in rack_group.rackButtons:
             rack_button.setChecked(rack_button is selected_button)
-        self.display_selected_rack(group_index, reset_operation_graph=True)
+        self.display_selected_rack(group_index)
         errors = self.breakdown_data[group_index].get(rack_group.selected_rack_id, (0, 0, 0))
         for checkbox, flag in zip((rack_group.ObstructCheckBox, rack_group.SkewCheckBox,
                                    rack_group.OverloadMotorCheckBox), errors):
@@ -180,6 +193,7 @@ class MainWindow(QMainWindow):
             self.uic.set_group_status(index, 'muted', 'STOPPING')
             group.stopButton.setEnabled(False)
             group.simulatorErrorButton.setEnabled(False)
+            group.homeButton.setEnabled(False)
             for button in group.localButtons:
                 button.setEnabled(False)
 
@@ -223,10 +237,116 @@ class MainWindow(QMainWindow):
         group = self.uic.rackGroupList[rack_group_id]
         worker = self.rack_group.get(rack_group_id)
         running = worker and worker.isRunning() and not worker.master_controller.stop_event.is_set()
-        state = {-1: 'Ready', 0: 'Guiding light', 1: 'Opening', 2: 'Closing', 3: 'Ventilating'}.get(rack_group_state, 'Unknown')
+        snapshot = group.rackGroupImage.gap_state or {}
+        physical = snapshot.get('racks', {}).get(rack_id, {})
+        state = physical.get('access_state', 'CLOSED')
+        if snapshot.get('system_state') == 'VENTILATING':
+            state = 'VENTILATING GROUP'
+        elif physical.get('is_moving'):
+            state = physical['movement_state'].replace('_', ' ')
         if any(self.breakdown_data[rack_group_id].get(rack_id, ())):
             state = 'Fault - movement paused'
-        group.rackGroupStateLineEdit.setText(f'Rack {rack_id:02d}  /  {state}' + ('' if running else '  /  Session stopped'))
+        light = 'LIGHT ON' if self.light_data[rack_group_id].get(rack_id, False) else 'LIGHT OFF'
+        group.rackGroupStateLineEdit.setText(f'Rack {rack_id:02d} / {state} / {light}' + ('' if running else ' / Stopped'))
+
+    def update_operation_controls(self, index):
+        group = self.uic.rackGroupList[index]
+        worker = self.rack_group.get(index)
+        state = group.rackGroupImage.gap_state or {}
+        ready = bool(worker and worker.isRunning() and worker.master_controller.is_run
+                     and not worker.master_controller.port and not worker.master_controller.stop_event.is_set())
+        busy = bool(state.get('current_command') or state.get('pending_commands'))
+        healthy = state.get('system_state') != 'ERROR' and not any(any(v) for v in self.breakdown_data[index].values())
+        available = ready and not busy and healthy
+        ventilated = state.get('system_state') == 'VENTILATED'
+        active = state.get('active_rack') == group.selected_rack_id
+        rack_id = group.selected_rack_id
+        physical = state.get('racks', {}).get(rack_id, {})
+        rack_status = physical.get('access_state', 'CLOSED').replace('_', ' ').title()
+        if any(self.breakdown_data[index].get(rack_id, ())):
+            rack_status = 'Fault'
+        group.selectedRackLabel.setText(f'Rack {rack_id} · {rack_status}')
+        group.localButtons[0].setText(f'Open {rack_id}')
+        group.localButtons[0].setEnabled(available and not active)
+        group.localButtons[1].setEnabled(available and (active or ventilated))
+        group.localButtons[1].setText('Close group' if ventilated else f'Close {rack_id}')
+        group.localButtons[2].setEnabled(available and not ventilated)
+        group.localButtons[2].setText('Ventilating…' if state.get('system_state') == 'VENTILATING' else 'Ventilate group')
+        light_on = self.light_data[index].get(group.selected_rack_id, False)
+        group.localButtons[3].setText('Turn light off' if light_on else 'Turn light on')
+        group.localButtons[3].setEnabled(ready and not busy and state.get('system_state') != 'ERROR')
+        if group.localButtons[3].property('illuminated') != light_on:
+            group.localButtons[3].setProperty('illuminated', light_on)
+            group.localButtons[3].style().unpolish(group.localButtons[3])
+            group.localButtons[3].style().polish(group.localButtons[3])
+        reason = ('Start this group to operate its racks.' if not worker or not worker.isRunning() else
+                  'Connected mode: send commands from IPCSIM.' if worker.master_controller.port else
+                  'Wait for the current movement to complete.' if busy else
+                  'Clear the fault before moving racks.' if not healthy else '')
+        for button, tip in zip(group.localButtons, (
+            'This rack is already open.' if active else f'Open the access aisle for rack {rack_id}.',
+            'Close the ventilated group.' if ventilated else f'Close the access aisle for rack {rack_id}.' if active else 'Select the open rack to close it.',
+            'This group is already ventilated.' if ventilated else 'Space all six racks evenly for ventilation.',
+            f'Turn the light {"off" if light_on else "on"} in rack {rack_id}.',
+        )):
+            button.setToolTip(reason or tip)
+        for button in group.rackButtons:
+            number = int(button.text())
+            info = state.get('racks', {}).get(number, {})
+            status = info.get('access_state', 'CLOSED').title()
+            button.setToolTip(f'Rack {number} · {status} · Light {"on" if self.light_data[index].get(number) else "off"}')
+        group.homeButton.setEnabled(available and (state.get('current_gap') != 6 or state.get('active_rack') is not None))
+
+    def display_gap_state(self, state):
+        worker = self.sender()
+        if self.rack_group.get(worker.index) is not worker:
+            return
+        group = self.uic.rackGroupList[worker.index]
+        previous = (group.rackGroupImage.gap_state or {}).get('racks', {})
+        for rack_id, rack in state['racks'].items():
+            if rack != previous.get(rack_id) or rack_id not in group.speedGraph.history:
+                group.speedGraph.add_sample(rack_id, state['captured_at'],
+                                            rack['speed_mm_s'], rack['displacement_mm'])
+        group.rackGroupImage.set_gap_state(state)
+        gap = state['current_gap']
+        if gap is None:
+            group.gapStateLineEdit.setText('5 gaps × 20 mm' if state['system_state'] == 'VENTILATED' else 'Distributing gaps')
+        else:
+            location = 'HOME / Right of R6' if gap == 6 else f'R{gap} ↔ R{gap + 1}'
+            group.gapStateLineEdit.setText(f"Gap {gap} = {location}")
+        moving = state.get('moving')
+        command = state.get('current_command')
+        if moving:
+            text = f"MOVING RACK {moving['rack_id']} {moving['direction']}"
+            if command:
+                text += f"  /  {command['action']} RACK {command['rack_id']}"
+        elif state.get('system_state') == 'ERROR':
+            text = f"ERROR  /  {state.get('last_error') or 'Movement stopped'}"
+        elif command:
+            text = f"{command['action']} RACK {command['rack_id']}"
+        elif state.get('active_rack') is not None:
+            text = f"RACK {state['active_rack']} OPEN"
+        elif state.get('system_state') == 'VENTILATED':
+            text = 'GROUP VENTILATED'
+        else:
+            text = 'HOME  /  READY' if state['current_gap'] == 6 else 'IDLE'
+        group.rackGroupStateLineEdit.setText(text)
+        self.display_physical_motion(worker.index)
+        self.update_operation_controls(worker.index)
+
+    def display_physical_motion(self, index):
+        group = self.uic.rackGroupList[index]
+        state = group.rackGroupImage.gap_state or {}
+        rack = state.get('racks', {}).get(group.selected_rack_id)
+        if rack is None:
+            return
+        group.movementSpeed.display(rack['speed_mm_s'])
+        group.displacement.display(rack['displacement_mm'])
+        group.motionDetails.setText(
+            f"Rack {rack['rack_id']} · State: {rack['movement_state'].replace('_', ' ')} · {rack.get('access_state', 'CLOSED')}\n"
+            f"Position: {rack['start_position_mm']:.0f} → {rack['target_position_mm']:.0f} mm"
+            f" · Now: {rack['position_mm']:.1f} mm · Slot: {rack['slot']}\n"
+            f"Duration: {rack['duration_s']:.1f} s · Progress: {rack['progress_percent']:.0f}%")
 
     def display_environment_status(self, message: str):
         index = self.sender().index 
@@ -236,7 +356,7 @@ class MainWindow(QMainWindow):
             if rack_id == self.uic.rackGroupList[index].selected_rack_id:
                 self.display_selected_rack(index)
 
-    def display_selected_rack(self, group_index, selected_rack_text=None, reset_operation_graph=False):
+    def display_selected_rack(self, group_index, selected_rack_text=None):
         rack_group = self.uic.rackGroupList[group_index]
         selected_rack_id = rack_group.selected_rack_id if selected_rack_text is None else int(selected_rack_text)
         if not selected_rack_id:
@@ -253,7 +373,7 @@ class MainWindow(QMainWindow):
 
         operation_values = self.operation_data[group_index].get(rack_id)
         if operation_values:
-            movement_speed, displacement, is_hard_locked, is_endpoint, rack_group_state = operation_values
+            movement_speed, displacement, is_hard_locked, _, rack_group_state = operation_values
             rack_group.movementSpeed.display('{:.02f}'.format(movement_speed))
             rack_group.displacement.display('{:.02f}'.format(displacement))
             rack_group.isHardLock.display(is_hard_locked)
@@ -262,6 +382,8 @@ class MainWindow(QMainWindow):
         if rack_id in self.light_data[group_index]:
             rack_group.light.display(self.light_data[group_index][rack_id])
         self.show_selected_breakdown(group_index)
+        self.display_physical_motion(group_index)
+        self.update_operation_controls(group_index)
 
     def display_operation_status(self, message, timestamp, light):
         worker = self.sender()
@@ -280,14 +402,17 @@ class MainWindow(QMainWindow):
         values = (speed, displacement, locked, endpoint, state)
         self.operation_data[index][rack_id] = values
         self.light_data[index][rack_id] = light
-        group.speedGraph.add_sample(rack_id, timestamp, speed, displacement)
         group.rackGroupImage.set_rack(rack_id, operation=values)
+        if group.rackGroupImage.gap_state is not None:
+            group.rackGroupImage.gap_state.setdefault('lights', {})[rack_id] = light
         if rack_id == group.selected_rack_id:
             group.movementSpeed.display(speed)
             group.displacement.display(displacement)
             group.isHardLock.display(locked)
             group.light.display(light)
             self.display_rack_group_state(rack_id, index, state)
+            self.display_physical_motion(index)
+        self.update_operation_controls(index)
 
     def show_selected_breakdown(self, index):
         group = self.uic.rackGroupList[index]
@@ -304,6 +429,7 @@ class MainWindow(QMainWindow):
             group = self.uic.rackGroupList[worker.index]
             group.rackGroupImage.set_rack(rack_id, faults=flags)
             self.show_selected_breakdown(worker.index)
+            self.update_operation_controls(worker.index)
             if rack_id == group.selected_rack_id and rack_id in self.operation_data[worker.index]:
                 self.display_rack_group_state(rack_id, worker.index, self.operation_data[worker.index][rack_id][-1])
             if worker.isRunning() and not worker.master_controller.stop_event.is_set():
@@ -316,15 +442,15 @@ class ThreadClass(QtCore.QThread):
     opr_signal = pyqtSignal(str)
     operation_sample = pyqtSignal(str, float, bool)
     brk_signal = pyqtSignal(str)
+    gap_signal = pyqtSignal(object)
     ready = pyqtSignal(str)
     failed = pyqtSignal(str)
 
-    def __init__(self, index=0, rack_id=None, opr_number=-1, err_numbers=None, port=None):
+    def __init__(self, index=0, rack_id=None, err_numbers=None, port=None):
         super().__init__()
         self.index = index
         self.master_controller = MasterCom(rack_group_id=index, port=port)
         self.rack_id = rack_id if rack_id is not None else index * MAX_RACK_NUMBER + 1
-        self.opr_number = opr_number
         self.err_numbers = list(err_numbers or [])
         self.failure = ''
 
@@ -334,11 +460,13 @@ class ThreadClass(QtCore.QThread):
             controller.start()
             if not controller.is_run:
                 return
+            self.gap_signal.emit(controller.gap_snapshot())
             self.ready.emit(f'Serial connected: {controller.port}' if controller.port else
                             'Standalone simulation - no IPC connection')
             signals = {'ENVSTT': self.env_signal, 'OPRSTT': self.opr_signal, 'BRKSTT': self.brk_signal}
             while not controller.stop_event.is_set():
-                controller.poll()
+                if controller.poll():
+                    self.gap_signal.emit(controller.gap_snapshot())
                 while True:
                     try:
                         message = controller.messages.get_nowait()

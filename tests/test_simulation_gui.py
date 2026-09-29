@@ -78,17 +78,17 @@ def test_selected_rack_commands_fault_clear_stop_restart(window):
     group.simulatorErrorButton.click()
     until(app, lambda: win.breakdown_data[1][9][0] == 1)
     assert 'Rack 9: Obstructed' in group.rackGroupErrorLineEdit.text()
+    group.ObstructCheckBox.setChecked(False)
+    group.simulatorErrorButton.click()
+    until(app, lambda: win.breakdown_data[1][9] == [0, 0, 0])
     group.localButtons[0].click()
     until(app, lambda: win.rack_group[1].master_controller.opening_racks == [9])
     group.rackButtons[0].click()
     assert group.rackGroupErrorLineEdit.text() == ''
     assert not group.ObstructCheckBox.isChecked()
     group.rackButtons[2].click()
-    assert group.ObstructCheckBox.isChecked()
-    group.ObstructCheckBox.setChecked(False)
-    group.simulatorErrorButton.click()
-    until(app, lambda: win.breakdown_data[1][9] == [0, 0, 0])
-    until(app, lambda: group.displacement.value() > 0)
+    assert not group.ObstructCheckBox.isChecked()
+    until(app, lambda: group.displacement.value() > 0, timeout=20)
     assert win.operation_data[1][7][1] == 0
     group.stopButton.click()
     until(app, group.runButton.isEnabled)
@@ -182,8 +182,13 @@ def test_connected_groups_route_every_rack_and_recover_disconnect(window, monkey
         wires['TEST-A'].inject(SimulationAdapter().encode({'address': address, 'action': 'OPEN'}))
     wires['TEST-A'].inject('0|7|1')  # Must not leak into the other group.
     wires['TEST-B'].inject('0|12|3')
-    until(app, lambda: all(win.operation_data[0][r][1] > 0 for r in (1, 2, 6))
-          and win.operation_data[1][12][1] > 0)
+    until(app, lambda: win.rack_group[0].master_controller.gap_controller.current_step is not None
+            and len(win.uic.rackGroupList[1].speedGraph.history.get(12, ())) >= 2)
+    first_controller = win.rack_group[0].master_controller
+    assert first_controller.current_gap == 6
+    assert first_controller.gap_controller.current_step['rack_id'] == 6
+    assert list(first_controller.gap_controller.pending_commands) == [(2, 1), (6, 1)]
+    assert sum(rack.is_moving for rack in first_controller.gap_controller.racks.values()) == 1
     assert win.operation_data[1][7][1] == 0
     assert win.operation_data[0][3][1] == 0
     other = win.uic.rackGroupList[2]
@@ -211,7 +216,7 @@ def test_chart_history_isolated_and_retained_until_restart(window):
     until(app, group.simulatorErrorButton.isEnabled)
     until(app, lambda: len(group.speedGraph.history) == 6)
     group.localButtons[0].click()
-    until(app, lambda: len(group.speedGraph.history[1]) >= 3)
+    until(app, lambda: win.operation_data[0][1][1] == 64, timeout=30)
     group.stopButton.click()
     until(app, group.runButton.isEnabled)
     before = {rack: list(values) for rack, values in group.speedGraph.history.items()}
@@ -230,7 +235,8 @@ def test_chart_history_isolated_and_retained_until_restart(window):
     group.speedGraph.refresh_visible()
     assert group.speedGraph.time_range() == frozen
     assert not group.speedGraph.refresh.isActive()
-    assert len(before[2]) == 1  # No fabricated samples for the idle rack.
+    assert any(speed > 0 for _, speed, _ in before[2])  # Rack 2 moves to open GAP 1.
+    assert all(speed == 0 for _, speed, _ in before[1])  # Logical target stays physically still.
     group.runButton.click()
     assert group.speedGraph.history == {}
     until(app, lambda: len(group.speedGraph.history) == 6)
@@ -313,3 +319,63 @@ def test_light_and_binary_readings_fit_small_dashboard(window):
     assert group.light.reading.text() == 'OFF'
     group.rackButtons[0].click()
     assert group.light.reading.text() == 'ON'
+
+
+def test_physical_motion_details_show_mm_and_selected_rack(window):
+    from Simulation.gap_controller import GapMovementController
+
+    app, win = window
+    simulation = GapMovementController(range(1, 7))
+    simulation.enqueue(3, 1)
+    for _ in range(30):
+        simulation.advance(1)
+    simulation.enqueue(4, 1)
+    simulation.advance(0)
+    simulation.advance(2.08)
+    group = win.uic.rackGroupList[0]
+    group.rackGroupImage.set_gap_state(simulation.snapshot())
+    group.rackButtons[2].click()
+    assert group.movementSpeed.value() == 25
+    assert group.displacement.value() == pytest.approx(52)
+    assert 'MOVING LEFT' in group.motionDetails.text()
+    assert '300 → 200 mm' in group.motionDetails.text()
+    assert 'Duration: 4.0 s' in group.motionDetails.text()
+    assert 'Progress: 52%' in group.motionDetails.text()
+    group.rackButtons[0].click()
+    assert group.movementSpeed.value() == 0
+    assert 'State: IDLE' in group.motionDetails.text()
+
+
+def test_ventilation_light_and_close_controls_follow_group_state(window):
+    app, win = window
+    group = win.uic.rackGroupList[0]
+    group.runButton.click()
+    until(app, group.simulatorErrorButton.isEnabled)
+    controller = win.rack_group[0].master_controller
+    controller.gap_controller.speed_mm_s = 1000  # Speed up UI wiring test only.
+    assert group.localButtons[0].isEnabled()
+    assert not group.localButtons[1].isEnabled()
+    group.localButtons[2].click()
+    until(app, lambda: controller.system_state == 'VENTILATED')
+    until(app, lambda: group.localButtons[1].text() == 'Close group')
+    assert '5 gaps' in group.gapStateLineEdit.text()
+    assert not group.localButtons[2].isEnabled()
+    assert group.localButtons[0].isEnabled()
+    assert 'VENTILATED' in group.motionDetails.text()
+    win.resize(1024, 768)
+    win.show()
+    for _ in range(5):
+        app.processEvents()
+    assert win.uic.scrollArea.horizontalScrollBar().maximum() == 0
+    group.localButtons[3].click()
+    until(app, lambda: group.light.value() == 1)
+    assert group.rackGroupImage.gap_state['lights'][1]
+    assert group.localButtons[3].text() == 'Light is on'
+    assert not group.localButtons[3].isEnabled()
+    assert controller.system_state == 'VENTILATED'
+    group.localButtons[1].click()
+    until(app, lambda: controller.system_state == 'IDLE')
+    until(app, lambda: group.localButtons[2].isEnabled())
+    assert [r.position_mm for r in controller.gap_controller.racks.values()] == [0, 100, 200, 300, 400, 500]
+    assert not group.localButtons[1].isEnabled()
+    assert controller.lights[0]

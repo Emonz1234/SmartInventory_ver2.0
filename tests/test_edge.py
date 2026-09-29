@@ -251,6 +251,7 @@ def test_signed_envelope_topic_and_registry_identity():
 def test_serial_adapters_preserve_both_existing_protocols():
     command = {"address": 7, "action": "OPEN"}
     assert SimulationAdapter().encode(command) == "0|7|1"
+    assert SimulationAdapter().encode({"address": 7, "action": "HOME"}) == "0|7|4"
     assert json.loads(HardwareAdapter().encode(command)) == {"rack_id": 7, "action": "open"}
     assert SimulationAdapter().parse("ENVSTT|7|22|60|80|Có").payload["smoke"] == 1
     assert HardwareAdapter().parse('{"rack_id":7,"temperature":22}').msg_type == "telemetry"

@@ -155,7 +155,7 @@ class Store:
             return "applied"
 
     def execute_local(self, operation_id, rack_id, action, send):
-        if action not in {"OPEN", "CLOSE", "VENTILATE", "LIGHT"}:
+        if action not in {"OPEN", "CLOSE", "VENTILATE", "LIGHT", "HOME", "LIGHT_OFF"}:
             raise ValueError("Unsupported device command")
         if type(rack_id) is not int or rack_id < 1:
             raise ValueError("Invalid rack ID")

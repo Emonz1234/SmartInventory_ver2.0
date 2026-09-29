@@ -2,8 +2,10 @@
 from PyQt6 import QtCore, QtGui, QtWidgets
 try:
     from .dashboard_widgets import MetricCard, RackCanvas, OperationChart, COLORS
+    from .topology import GROUP_COUNT
 except ImportError:
     from dashboard_widgets import MetricCard, RackCanvas, OperationChart, COLORS
+    from topology import GROUP_COUNT
 
 STYLE = """
 QMainWindow, QWidget#root { background: #eef2f7; color: #24354e; }
@@ -20,6 +22,10 @@ QPushButton { background: #f3f6fb; border: 1px solid #d6e0ed; border-radius: 5px
 QPushButton:hover { background: #e7effc; border-color: #8fb4ef; }
 QPushButton:checked, QPushButton#primary { background: #2563eb; color: white; border-color: #2563eb; }
 QPushButton#stop { color: #c44754; background: #fff3f4; border-color: #efd2d7; }
+QPushButton#openRack { background: #e9f6f0; color: #13765b; border-color: #a7d8c6; }
+QPushButton#closeRack { background: #edf3ff; color: #2459ad; border-color: #b5ccef; }
+QPushButton[illuminated="true"] { background: #fff4ce; color: #886000; border-color: #e8c96a; }
+QPushButton#openRack:disabled, QPushButton#closeRack:disabled { background: #f5f7fa; color: #aeb9c8; border-color: #e7edf4; }
 QPushButton:disabled { background: #f5f7fa; color: #aeb9c8; border-color: #e7edf4; }
 QPushButton#primary:disabled, QPushButton#stop:disabled { background: #f5f7fa; color: #aeb9c8; border-color: #e7edf4; }
 QComboBox { padding: 5px 9px; border: 1px solid #d6e0ed; border-radius: 5px; background: white; min-height: 19px; }
@@ -77,6 +83,11 @@ class MyGroupBox:
         rack_panel, rack_layout = panel('01   RACK OVERVIEW')
         rack_panel.setMaximumHeight(240)
         self.rackGroupImage = RackCanvas(self.selected_rack_id)
+        rack_heading = QtWidgets.QHBoxLayout()
+        rack_heading.addWidget(rack_layout.takeAt(0).widget())
+        rack_heading.addStretch()
+        rack_heading.addWidget(label('Click a rack to select · Green: open / ventilated · Yellow: light on', 'muted'))
+        rack_layout.addLayout(rack_heading)
         rack_layout.addWidget(self.rackGroupImage, 1)
         root.addWidget(rack_panel, 2)
 
@@ -96,8 +107,12 @@ class MyGroupBox:
         self.runButton.setObjectName('primary')
         self.stopButton = QtWidgets.QPushButton('Stop')
         self.stopButton.setObjectName('stop')
+        self.homeButton = QtWidgets.QPushButton('Return Home')
+        self.homeButton.setToolTip('Move the access gap back to the right of Rack 6')
+        self.homeButton.setEnabled(False)
         connection.addWidget(self.runButton)
         connection.addWidget(self.stopButton)
+        connection.addWidget(self.homeButton)
         layout.addLayout(connection)
         commands = QtWidgets.QHBoxLayout()
         commands.addWidget(label('Rack', 'muted'))
@@ -111,16 +126,22 @@ class MyGroupBox:
             self.rackButtons.append(button)
         commands.addSpacing(12)
         self.localButtons = []
-        for text in ('Open', 'Close', 'Ventilate', 'Light'):
+        for text in ('Open', 'Close', 'Ventilate group', 'Light on'):
             button = QtWidgets.QPushButton(text)
             commands.addWidget(button, 1)
             self.localButtons.append(button)
+        self.localButtons[0].setObjectName('openRack')
+        self.localButtons[1].setObjectName('closeRack')
         layout.addLayout(commands)
         self.rackGroupStateLineEdit = label('No operation data', 'muted')
+        self.gapStateLineEdit = label('GAP 6  /  IDLE', 'badge')
         state_row = QtWidgets.QHBoxLayout()
         title = layout.takeAt(0).widget()
-        state_row.addWidget(title)
+        title.deleteLater()
+        self.selectedRackLabel = label(f'Rack {self.selected_rack_id} · Closed', 'section')
+        state_row.addWidget(self.selectedRackLabel)
         state_row.addStretch()
+        state_row.addWidget(self.gapStateLineEdit)
         state_row.addWidget(self.rackGroupStateLineEdit)
         layout.insertLayout(0, state_row)
         root.addWidget(controls)
@@ -147,11 +168,14 @@ class MyGroupBox:
         monitoring.addWidget(env, 5)
         opr, opr_layout = panel('04   OPERATION · LIVE HISTORY')
         values = QtWidgets.QHBoxLayout()
-        self.movementSpeed = MetricCard('Speed', '↗', 'm/s', compact=True)
-        self.displacement = MetricCard('Displacement', '↔', 'm', compact=True)
+        self.movementSpeed = MetricCard('Speed', '↗', 'mm/s', compact=True)
+        self.displacement = MetricCard('Displacement', '↔', 'mm', compact=True)
         values.addWidget(self.movementSpeed)
         values.addWidget(self.displacement)
         opr_layout.addLayout(values)
+        self.motionDetails = label('Select a rack to inspect physical movement', 'muted')
+        self.motionDetails.setWordWrap(True)
+        opr_layout.addWidget(self.motionDetails)
         self.speedGraph = OperationChart()
         opr_layout.addWidget(self.speedGraph, 1)
         monitoring.addWidget(opr, 6)
@@ -196,7 +220,7 @@ class Ui_MainWindow:
         self.groupSelector.setFixedWidth(125)
         self.groupSelector.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.groupStack = QtWidgets.QStackedWidget()
-        for index in range(21):
+        for index in range(GROUP_COUNT):
             group = MyGroupBox(index + 1)
             self.rackGroupList.append(group)
             self.groupStack.addWidget(group.rackGroup)

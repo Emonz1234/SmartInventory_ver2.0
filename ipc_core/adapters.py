@@ -4,7 +4,7 @@ import json
 
 class SimulationAdapter:
     def encode(self, command):
-        action = {"OPEN": 1, "CLOSE": 2, "VENTILATE": 3, "LIGHT": 0}[command["action"]]
+        action = {"OPEN": 1, "CLOSE": 2, "VENTILATE": 3, "LIGHT": 0, "HOME": 4, "LIGHT_OFF": 5}[command["action"]]
         return f"0|{int(command['address'])}|{action}"
 
     def parse(self, raw):

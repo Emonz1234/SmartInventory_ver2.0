@@ -4,6 +4,10 @@ import math
 import time
 
 from PyQt6 import QtCore, QtGui, QtWidgets
+try:
+    from .gap_controller import RACK_PITCH_MM, SLOT_COUNT
+except ImportError:
+    from gap_controller import RACK_PITCH_MM, SLOT_COUNT
 
 COLORS = {'muted': '#8291a5', 'normal': '#168268', 'active': '#2563eb',
           'warning': '#d48a16', 'error': '#d14452'}
@@ -82,6 +86,7 @@ class RackCanvas(QtWidgets.QWidget):
         self.rack_ids = list(range(first_rack, first_rack + 6))
         self.selected = first_rack
         self.operations, self.faults = {}, {}
+        self.gap_state = None
         self.setMinimumHeight(96)
         self.setMaximumHeight(220)
         self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
@@ -99,25 +104,59 @@ class RackCanvas(QtWidgets.QWidget):
         self.selected = rack_id
         self.update()
 
+    def set_gap_state(self, state):
+        self.gap_state = state
+        self.update()
+
     def mousePressEvent(self, event):
-        index = min(5, max(0, int(event.position().x() * 6 / max(1, self.width()))))
-        self.rackClicked.emit(self.rack_ids[index])
+        x = event.position().x()
+        slot_width = self.width() / SLOT_COUNT
+        positions = (self.gap_state or {}).get('racks', {})
+        nearest = min(self.rack_ids, key=lambda rack: abs(
+            x - (float(positions.get(rack, positions.get(str(rack), {})).get('position_mm', self.rack_ids.index(rack) * RACK_PITCH_MM)) / RACK_PITCH_MM + 0.5) * slot_width
+        ))
+        rack_position = float(positions.get(nearest, positions.get(str(nearest), {})).get('position_mm', self.rack_ids.index(nearest) * RACK_PITCH_MM)) / RACK_PITCH_MM
+        if abs(x - (rack_position + 0.5) * slot_width) <= slot_width * 0.45:
+            self.rackClicked.emit(nearest)
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        width = self.width() / 6
+        slot_width = self.width() / SLOT_COUNT
+        gap_state = self.gap_state or {}
+        rack_positions = gap_state.get('racks', {})
+        positions = [rack_positions.get(rack, {}).get('position_mm', i * RACK_PITCH_MM)
+                     for i, rack in enumerate(self.rack_ids)]
+        # Render the actual free intervals, including distributed ventilation gaps.
+        for left, right in zip(positions, positions[1:] + [SLOT_COUNT * RACK_PITCH_MM]):
+            start = left + RACK_PITCH_MM
+            width_mm = right - start
+            if width_mm <= .1:
+                continue
+            gap_rect = QtCore.QRectF(start / RACK_PITCH_MM * slot_width + 1, 5,
+                                    width_mm / RACK_PITCH_MM * slot_width - 2, self.height() - 10)
+            painter.setPen(QtGui.QPen(QtGui.QColor('#168268'), 1, QtCore.Qt.PenStyle.DashLine))
+            painter.setBrush(QtGui.QColor('#e7f5ef'))
+            painter.drawRoundedRect(gap_rect, 4, 4)
+            painter.setFont(QtGui.QFont('Segoe UI', 8))
+            painter.drawText(gap_rect, QtCore.Qt.AlignmentFlag.AlignCenter,
+                             'GAP' if width_mm > 50 else f'{width_mm:.0f}')
+        active_rack = gap_state.get('active_rack')
+        moving_rack = (gap_state.get('moving') or {}).get('rack_id')
+        moving_direction = (gap_state.get('moving') or {}).get('direction')
         for i, rack in enumerate(self.rack_ids):
-            operation = self.operations.get(rack)
             fault = any(self.faults.get(rack, ()))
             selected = rack == self.selected
-            position = operation[1] if operation else 0
-            locked = bool(operation[2]) if operation else None
-            moving = operation and operation[0] > 0
-            color = COLORS['error' if fault else 'active' if selected or moving else 'muted']
-            rect = QtCore.QRectF(i * width + 4, 3, width - 8, self.height() - 6)
-            painter.setPen(QtGui.QPen(QtGui.QColor(color), 2 if selected or fault else 1))
-            painter.setBrush(QtGui.QColor('#eff5ff' if selected else '#f8fafc'))
+            rack_state = rack_positions.get(rack, rack_positions.get(str(rack), {}))
+            moving = rack == moving_rack or bool(rack_state.get('is_moving'))
+            status = 'FAULT' if fault else rack_state.get('access_state', 'CLOSED')
+            light_on = gap_state.get('lights', {}).get(rack, False)
+            position_px = float(rack_state.get('position_mm', i * RACK_PITCH_MM)) / RACK_PITCH_MM * slot_width
+            color = COLORS['error' if fault or rack_state.get('movement_state') == 'ERROR' else
+                           'active' if selected or moving else 'normal' if status in ('OPEN', 'VENTILATED') else 'muted']
+            rect = QtCore.QRectF(position_px + 4, 3, slot_width - 8, self.height() - 6)
+            painter.setPen(QtGui.QPen(QtGui.QColor(color), 2 if selected or fault or moving else 1))
+            painter.setBrush(QtGui.QColor('#fff8df' if light_on else '#eaf2ff' if selected else '#f8fafc'))
             painter.drawRoundedRect(rect, 9, 9)
             painter.setPen(QtGui.QColor('#24354e'))
             font = painter.font()
@@ -125,6 +164,10 @@ class RackCanvas(QtWidgets.QWidget):
             painter.setFont(font)
             painter.drawText(rect.adjusted(10, 7, -10, -rect.height() + 28),
                              QtCore.Qt.AlignmentFlag.AlignLeft, f'RACK {rack:02d}')
+            if moving:
+                painter.setPen(QtGui.QColor('#2563eb'))
+                painter.drawText(rect.adjusted(8, 22, -8, -rect.height() + 40),
+                                 QtCore.Qt.AlignmentFlag.AlignLeft, moving_direction or '')
             font.setBold(False)
             painter.setFont(font)
             body = rect.adjusted(12, 34, -12, -39)
@@ -132,7 +175,7 @@ class RackCanvas(QtWidgets.QWidget):
             painter.setPen(QtGui.QPen(QtGui.QColor('#a9b8ca'), 1))
             painter.drawRoundedRect(body, 4, 4)
             # Each door stays inside its own column, preserving all six racks at any width.
-            gap = min(0.32, max(0, position / 64) * 0.32) * body.width()
+            gap = (0.32 if rack == active_rack else 0) * body.width()
             door = body.adjusted(gap, 0, 0, 0)
             painter.setBrush(QtGui.QColor('#ffffff' if selected else '#f0f4f8'))
             painter.drawRoundedRect(door, 4, 4)
@@ -141,15 +184,13 @@ class RackCanvas(QtWidgets.QWidget):
             handle = QtCore.QRectF(door.center().x() - 13, body.bottom() - 13, 26, 4)
             painter.setBrush(QtGui.QColor('#667b93'))
             painter.drawRoundedRect(handle, 2, 2)
-            status = ('FAULT' if fault else 'MOVING' if moving else
-                      'OPEN' if position > 0 else 'CLOSED') if operation else 'NO DATA'
             painter.setPen(QtGui.QColor(color))
             painter.drawText(rect.adjusted(9, rect.height() - 34, -9, -16),
                              QtCore.Qt.AlignmentFlag.AlignCenter, status)
             painter.setPen(QtGui.QColor('#667b93'))
             painter.drawText(rect.adjusted(9, rect.height() - 18, -9, -1),
                              QtCore.Qt.AlignmentFlag.AlignCenter,
-                             'LOCKED' if locked else 'UNLOCKED' if locked is not None else '—')
+                             'LIGHT ON' if light_on else 'LIGHT OFF')
 
 
 class OperationChart(QtWidgets.QWidget):
@@ -225,7 +266,7 @@ class OperationChart(QtWidgets.QWidget):
         start, end = self.time_range()
         samples = [v for v in self.history.get(self.selected, ()) if start <= v[0] <= end]
         half = self.height() / 2
-        for series, title, color in ((1, 'SPEED · m/s', '#2563eb'), (2, 'DISPLACEMENT · m', '#0f927c')):
+        for series, title, color in ((1, 'SPEED · mm/s', '#2563eb'), (2, 'DISPLACEMENT · mm', '#0f927c')):
             offset = (series - 1) * half
             area = QtCore.QRectF(43, offset + 23, self.width() - 58, half - 47)
             if area.height() <= 0:

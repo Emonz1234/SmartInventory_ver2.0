@@ -49,7 +49,7 @@ export const EdgeWorkspace = ({ session, permissions, onSessionExpired }: EdgeWo
     finally { setBusy(false) }
   }
   async function send(kind: string) {
-    if (['OPEN', 'CLOSE', 'VENTILATE', 'LIGHT'].includes(kind)) {
+    if (['OPEN', 'CLOSE', 'VENTILATE', 'LIGHT', 'HOME'].includes(kind)) {
       const actionKey = `${rack}:${kind}`
       let requestKey = localRequestKeys.current.get(actionKey)
       if (!requestKey) {
@@ -91,7 +91,7 @@ export const EdgeWorkspace = ({ session, permissions, onSessionExpired }: EdgeWo
     <Card><CardContent><Typography variant="h6">Chọn vị trí và thao tác</Typography><Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ my: 2 }}>
       <TextField select label="Tủ/nhóm" value={cabinet} onChange={e => { setCabinet(e.target.value); setRack(''); setBin('') }} sx={{ minWidth: 190 }}><MenuItem value="">Tất cả</MenuItem>{cabinets.map(c => <MenuItem key={c.id} value={c.id}>{c.cabinet_code} · {c.cabinet_name}</MenuItem>)}</TextField>
       <TextField select label="Rack / địa chỉ Serial" value={rack} onChange={e => { setRack(e.target.value); setBin('') }} sx={{ minWidth: 200 }}><MenuItem value="">Chọn rack</MenuItem>{racks.map(r => <MenuItem key={r.id} value={r.id}>{r.rack_name} · address {r.rack_code}</MenuItem>)}</TextField>
-    </Stack><Stack direction="row" spacing={1}>{['OPEN', 'CLOSE', 'VENTILATE', 'LIGHT'].map(kind => <Button key={kind} disabled={!hardwareReady || !canOperate || !rack || busy} onClick={() => void act(() => send(kind), false)}>{kind}</Button>)}</Stack>
+    </Stack><Stack direction="row" spacing={1}>{['OPEN', 'CLOSE', 'VENTILATE', 'LIGHT', 'HOME'].map(kind => <Button key={kind} disabled={!hardwareReady || !canOperate || !rack || busy} onClick={() => void act(() => send(kind), false)}>{kind}</Button>)}</Stack>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ my: 2 }}>
         <TextField select label="Hàng hóa" value={item} onChange={e => setItem(e.target.value)} sx={{ minWidth: 190 }}><MenuItem value="">Chọn hàng</MenuItem>{items.filter(i => i.is_active).map(i => <MenuItem key={i.id} value={i.id}>{i.item_code} · {i.item_name}</MenuItem>)}</TextField>
         <TextField select label="Ô chứa" value={bin} onChange={e => setBin(e.target.value)} sx={{ minWidth: 190 }}><MenuItem value="">Chọn ô</MenuItem>{bins.map(b => <MenuItem key={b.id} value={b.id}>{b.bin_code}</MenuItem>)}</TextField>

@@ -1,5 +1,4 @@
-"""Six-rack simulator with one Serial owner and independent rack states."""
-import math
+"""Six-rack simulator with one Serial owner and sequential GAP movement."""
 import os
 import random
 import threading
@@ -9,25 +8,21 @@ from queue import Queue, Empty
 import serial
 try:
     from Simulation.topology import GROUP_COUNT, RACKS_PER_GROUP
+    from Simulation.gap_controller import GapMovementController, ACTION_NAMES, MOVE_DISTANCE_MM
 except ImportError:
     from topology import GROUP_COUNT, RACKS_PER_GROUP
+    from gap_controller import GapMovementController, ACTION_NAMES, MOVE_DISTANCE_MM
 
 MAX_RACK_NUMBER = RACKS_PER_GROUP
-MAX_TEMPERATURE, MIN_TEMPERATURE = 22, 20
-MAX_HUMIDITY, MIN_HUMIDITY = 80, 40
-RACK_MOVEMENT_SPEED = 4.0
-RACK_MAX_MOVEMENT_SPEED = 15
-RACK_WEIGHT = 80.0
 RACK_MAX_DISPLACEMENT = 64.0
 ENV_DATA_SEND_INTERVAL = 10
-OPR_DATA_SEND_INTERVAL = 1
-MASTER_CONTROLLER_IDLE_STATE = 'master_controller_idle_state'
+OPR_DATA_SEND_INTERVAL = 0.1
 
 
 class MasterCom:
     def __init__(self, rack_group_id=0, port=None, baudrate=9600, timeout=0.05):
         if not 0 <= rack_group_id < GROUP_COUNT:
-            raise ValueError('Group index must be between 0 and 20')
+            raise ValueError(f'Group index must be between 0 and {GROUP_COUNT - 1}')
         self.rack_group_id = rack_group_id
         # Explicit empty port selects standalone; None loads environment configuration.
         self.port = (os.getenv(f'SIMULATION_SERIAL_PORT_{rack_group_id}') or
@@ -47,13 +42,11 @@ class MasterCom:
                      (self.rack_group_id + 1) * MAX_RACK_NUMBER + 1)
 
     def reset_state(self):
-        self.is_run = self.is_rack_operation = self.is_error = self.is_reading = False
-        self.state = MASTER_CONTROLLER_IDLE_STATE
-        self.rack_group_state = -1  # Diagnostic compatibility; never drives individual racks.
-        self.current_keys = []
+        self.is_run = self.is_rack_operation = self.is_reading = False
+        self.gap_controller = GapMovementController(self.rack_ids)
+        self.gap_dirty = False
         self.error_racks = [[] for _ in self.rack_ids]
         self.ventilating_racks_status = [[0.0, 0] for _ in self.rack_ids]
-        self.rack_states = [-1 for _ in self.rack_ids]
         self.lights = [False for _ in self.rack_ids]
         self.ventilating_racks, self.opening_racks, self.closing_racks = [], [], []
         self.env_messages = [f'ENVSTT|{r}|20.0|40.0|80.0|0' for r in self.rack_ids]
@@ -88,6 +81,7 @@ class MasterCom:
             now = time.monotonic()
             self._next_env = now + ENV_DATA_SEND_INTERVAL
             self._next_operation = now + OPR_DATA_SEND_INTERVAL
+            self._last_operation_update = now
         except Exception:
             self.execute_stopRunning()
             raise
@@ -119,54 +113,120 @@ class MasterCom:
                        f'{40 + value * 40:.2f}|{80 - value * 1.8:.2f}|0')
             self._publish(self._cache(self.env_messages, message))
 
-    def create_movement_speed_number(self, rack_id, random_parameter, settling_time=1.5):
-        position = self.ventilating_racks_status[self._local_index(rack_id + 1)][0]
-        proportional = RACK_MAX_MOVEMENT_SPEED / settling_time
-        if position <= 3.2:
-            base = proportional / 3
-        elif position < 15:
-            base = proportional * 0.4 + 0.6 * RACK_MAX_MOVEMENT_SPEED
-        elif position < 47:
-            base = RACK_MAX_MOVEMENT_SPEED
-        elif position < 59.4:
-            base = RACK_MAX_MOVEMENT_SPEED - proportional * 0.25
-        else:
-            base = RACK_MAX_MOVEMENT_SPEED - proportional
-        return round(random_parameter * math.pow(-0.4, round(random_parameter * 10)) + base, 2)
+    @property
+    def current_gap(self):
+        return self.gap_controller.current_gap
 
-    def _motion(self, rack_id, action):
-        # Public generators retain the original zero-based global rack index.
-        index = self._local_index(rack_id + 1)
-        position, direction = self.ventilating_racks_status[index]
-        speed = self.create_movement_speed_number(rack_id, random.random())
-        endpoint, state = 0, action
-        if self.error_racks[index]:
-            speed = 0.0
-        else:
-            closing = action == 2 or (action == 3 and direction == 1)
-            position = round(max(0.0, min(RACK_MAX_DISPLACEMENT,
-                                        position + (-speed if closing else speed))), 2)
-            if action == 3 and not closing and position >= RACK_MAX_DISPLACEMENT:
-                direction = 1
-            elif (closing and position <= 0) or (action == 1 and position >= RACK_MAX_DISPLACEMENT):
-                speed, endpoint, state, direction = 0.0, 1, -1, 0
-                for active in (self.opening_racks, self.closing_racks, self.ventilating_racks):
-                    if rack_id + 1 in active:
-                        active.remove(rack_id + 1)
-        self.ventilating_racks_status[index] = [position, direction]
-        self.rack_states[index] = state
-        self.is_rack_operation = bool(self.opening_racks or self.closing_racks or self.ventilating_racks)
-        return self._cache(self.opr_messages,
-                           f'OPRSTT|{rack_id + 1}|{speed}|{position}|0|{endpoint}|{state}')
+    @property
+    def active_rack(self):
+        return self.gap_controller.active_rack
 
-    def create_operation_ventilateStatusData(self, rack_id):
-        return self._motion(rack_id, 3)
+    @property
+    def system_state(self):
+        return self.gap_controller.system_state
 
-    def create_operation_open_rack_statusData(self, rack_id):
-        return self._motion(rack_id, 1)
+    def _sync_legacy_activity(self):
+        commands = []
+        if self.gap_controller.current_command is not None:
+            commands.append(self.gap_controller.current_command[:2])
+        commands.extend(self.gap_controller.pending_commands)
+        self.opening_racks = [rack_id for rack_id, action in commands if action == 1]
+        self.closing_racks = [rack_id for rack_id, action in commands if action in (2, 4)]
+        self.ventilating_racks = [rack_id for rack_id, action in commands if action == 3]
+        self.is_rack_operation = bool(commands or self.gap_controller.current_step is not None)
 
-    def create_operation_close_rack_statusData(self, rack_id):
-        return self._motion(rack_id, 2)
+    def _publish_operation(self, rack_id, speed, displacement, endpoint, state, direction=0):
+        index = self._local_index(rack_id)
+        self.ventilating_racks_status[index] = [float(displacement), direction]
+        message = f'OPRSTT|{rack_id}|{float(speed)}|{float(displacement)}|0|{endpoint}|{state}'
+        self._publish(self._cache(self.opr_messages, message))
+
+    def _handle_gap_events(self, events):
+        for event in events:
+            kind = event['type']
+            if kind == 'command_started':
+                action_name = ACTION_NAMES[event['action']]
+                if event['action'] in (1, 2, 3, 4):
+                    state = 2 if event['action'] == 4 else event['action']
+                    position = self.ventilating_racks_status[self._local_index(event['rack_id'])][0]
+                    self._publish_operation(event['rack_id'], 0, position, 0, state)
+                print(f"[SIM] {action_name}_RACK started rack={event['rack_id']}")
+                print(f"[SIM] current_gap={event['current_gap']} target_gap={event['target_gap']}")
+            elif kind == 'step_started':
+                state = 1 if event['direction'] == 'LEFT' else 2
+                print(f"[SIM] Moving rack {event['rack_id']} {event['direction']}")
+                self._publish_operation(event['rack_id'], 0, 0, 0, state,
+                                        1 if event['direction'] == 'LEFT' else -1)
+            elif kind == 'step_progress':
+                state = 1 if event['direction'] == 'LEFT' else 2
+                # Keep legacy IPC wire units at this boundary only; GUI uses mm snapshots.
+                physical = self.gap_controller.racks[event['rack_id']]
+                wire_scale = RACK_MAX_DISPLACEMENT / MOVE_DISTANCE_MM
+                self._publish_operation(event['rack_id'], physical.speed_mm_s * wire_scale,
+                                        event['progress'] * wire_scale, 0, state,
+                                        1 if event['direction'] == 'LEFT' else -1)
+                command = self.gap_controller.current_command
+                if command and command[1] in (1, 2, 3, 4):
+                    state = 2 if command[1] == 4 else command[1]
+                    position = self.ventilating_racks_status[self._local_index(command[0])][0]
+                    self._publish_operation(command[0], 0, position, 0, state)
+            elif kind == 'step_completed':
+                print(f"[SIM] Rack {event['rack_id']} completed; current_gap={event['current_gap']}")
+                # A physical step ending is not the logical command endpoint.
+                state = 1 if event['direction'] == 'LEFT' else 2
+                self._publish_operation(event['rack_id'], 0, 0, 0, state)
+            elif kind == 'command_completed':
+                rack_id, action = event['rack_id'], event['action']
+                if action in (0, 5):
+                    self.lights[self._local_index(rack_id)] = action == 0
+                    position = self.ventilating_racks_status[self._local_index(rack_id)][0]
+                    self._publish_operation(rack_id, 0, position, 1, 0)
+                    continue
+                displacement = RACK_MAX_DISPLACEMENT if action == 1 else 0.0
+                for other_id in self.rack_ids:
+                    if other_id == rack_id:
+                        continue
+                    previous = self.opr_messages[self._local_index(other_id)].split('|')
+                    if float(previous[3]) != 0 or previous[5:] != ['1', '-1']:
+                        self._publish_operation(other_id, 0, 0, 1, -1)
+                self._publish_operation(rack_id, 0, displacement, 1, -1)
+                print(f"[SIM] {ACTION_NAMES[action]}_RACK completed rack={rack_id} current_gap={event['current_gap']}")
+            elif kind == 'movement_error':
+                command_rack = event['command_rack_id'] or event['rack_id']
+                self._publish_operation(command_rack, 0, 0, 1, -2)
+                print(f"[SIM] MOVEMENT_ERROR rack={event['rack_id']} current_gap={event['current_gap']} reason={event['reason']}")
+            elif kind == 'command_rejected':
+                self._publish_operation(event['rack_id'], 0, 0, 1, -2)
+                print(f"[SIM] Command rejected rack={event['rack_id']} reason={event['reason']}")
+        self._sync_legacy_activity()
+        self.gap_dirty = True
+
+    def gap_snapshot(self):
+        return {**self.gap_controller.snapshot(),
+                'lights': dict(zip(self.rack_ids, self.lights)),
+                'captured_at': time.monotonic() - self.session_started}
+
+    def _complete_action(self, rack_id, action):
+        index = self._local_index(rack_id)
+        if (action in (1, 2) and self.error_racks[index]) or (action == 3 and any(self.error_racks)):
+            self._publish_operation(rack_id, 0, 0, 1, -2)
+            print(f'[SIM] Command rejected rack={rack_id}: active hardware breakdown')
+            return False
+        try:
+            queued = self.gap_controller.enqueue(rack_id, action)
+        except ValueError as exc:
+            self._publish_operation(rack_id, 0, 0, 1, -2)
+            print(f'[SIM] Command rejected rack={rack_id} action={action}: {exc}')
+            return False
+        if not queued:
+            return True
+        self._sync_legacy_activity()
+        self.gap_dirty = True
+        if action == 1:
+            print(f'[SIM] OPEN_RACK requested rack={rack_id} current_gap={self.current_gap}')
+        elif action == 4:
+            print(f'[SIM] RETURN_HOME requested current_gap={self.current_gap}')
+        return True
 
     def create_breakdownStatusData(self, error_numbers, rack_id):
         self._local_index(rack_id + 1)
@@ -179,7 +239,6 @@ class MasterCom:
         if any(e not in (1, 2, 3) for e in errors):
             raise ValueError('Unknown fault')
         self.error_racks[index] = errors
-        self.is_error = any(self.error_racks)
         self._publish(self.create_breakdownStatusData(errors, rack_id - 1))
         if errors:
             parts = self.opr_messages[index].split('|')
@@ -188,38 +247,25 @@ class MasterCom:
 
     def determine_operationInformation(self, message):
         parts = message.strip().split('|')
-        if len(parts) != 3 or parts[0] != '0' or parts[2] not in ('0', '1', '2', '3'):
+        if len(parts) != 3 or parts[0] != '0' or parts[2] not in ('0', '1', '2', '3', '4', '5'):
             return False
         try:
             rack_id = int(parts[1])
-            index = self._local_index(rack_id)
+            self._local_index(rack_id)
         except ValueError:
             return False
         action = int(parts[2])
-        if action == 0:
-            self.lights[index] = True
-            if self.rack_states[index] == -1:
-                position = self.ventilating_racks_status[index][0]
-                self._publish(self._cache(self.opr_messages, f'OPRSTT|{rack_id}|0.0|{position}|0|1|0'))
-            return True
-        target = {1: self.opening_racks, 2: self.closing_racks, 3: self.ventilating_racks}[action]
-        if rack_id in target:
-            return True
-        # A conflicting command cannot replace an unfinished physical movement.
-        if any(rack_id in active for active in (self.opening_racks, self.closing_racks, self.ventilating_racks)):
-            return False
-        target.append(rack_id)
-        self.ventilating_racks_status[index][1] = 0
-        self.rack_states[index] = action
-        self.is_rack_operation = True
-        return True
+        if action == 4:
+            rack_id = self.rack_ids[0]
+        return self._complete_action(rack_id, action)
 
-    def step_operations(self):
-        for active, generate in ((self.opening_racks, self.create_operation_open_rack_statusData),
-                                 (self.closing_racks, self.create_operation_close_rack_statusData),
-                                 (self.ventilating_racks, self.create_operation_ventilateStatusData)):
-            for rack_id in list(active):
-                self._publish(generate(rack_id - 1))
+    def step_operations(self, elapsed=1.0, blocked_racks=None):
+        blocked = ({rack_id for rack_id, faults in zip(self.rack_ids, self.error_racks) if any(faults)}
+                   if blocked_racks is None else set(blocked_racks))
+        events = self.gap_controller.advance(elapsed, blocked_racks=blocked)
+        if events:
+            self._handle_gap_events(events)
+        return events
 
     def read_serial_once(self):
         if self.ser is None:
@@ -241,7 +287,7 @@ class MasterCom:
 
     def poll(self, now=None):
         if not self.is_run or self.stop_event.is_set():
-            return
+            return False
         self.read_serial_once()
         for _ in range(100):
             try:
@@ -259,12 +305,17 @@ class MasterCom:
                 self._publish(frame)
             self._next_env = now + ENV_DATA_SEND_INTERVAL
         if now >= self._next_operation:
-            self.step_operations()
+            elapsed = max(0.0, now - self._last_operation_update)
+            self.step_operations(elapsed)
+            self._last_operation_update = now
             self._next_operation = now + OPR_DATA_SEND_INTERVAL
+        changed = self.gap_dirty
+        self.gap_dirty = False
+        return changed
 
     def execute_stopRunning(self):
         self.stop_event.set()
-        self.is_run = self.is_reading = self.is_rack_operation = self.is_error = False
+        self.is_run = self.is_reading = self.is_rack_operation = False
         if self.ser is not None:
             try:
                 self.ser.close()

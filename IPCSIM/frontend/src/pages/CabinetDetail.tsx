@@ -48,6 +48,8 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
 
     const completed = trackedRacks.filter((rack) => {
       const rackId = Number(rack.id)
+      // Keep confirmations when earlier racks leave the rolling telemetry window.
+      if (completedRackIds.includes(rackId)) return true
       const rackEntries = operationTelemetry.data
         .filter((entry: any) => Number(entry.rack_id) === rackId && Number(entry.id) > baselineOperationId)
         .sort((a: any, b: any) => Number(a.id ?? 0) - Number(b.id ?? 0))
@@ -63,12 +65,12 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
       return operation.kind === 'OPEN' ? displacement >= 64 : displacement <= 0
     })
     const completedIds = completed.map((rack) => Number(rack.id))
-    setCompletedRackIds(completedIds)
+    if (completedIds.length !== completedRackIds.length) setCompletedRackIds(completedIds)
     if (completedIds.length !== trackedRacks.length) return
 
     setOperationPhase(failedRacks.length ? 'uncertain' : 'success')
     void queryClient.invalidateQueries({ queryKey: ['cabinet', id, 'racks'] })
-  }, [baselineOperationId, failedRacks.length, id, operation, operationPhase, operationTelemetry.data, queryClient, sentRackIds])
+  }, [baselineOperationId, completedRackIds, failedRacks.length, id, operation, operationPhase, operationTelemetry.data, queryClient, sentRackIds])
 
   useEffect(() => {
     if (operationPhase !== 'waiting') return

@@ -103,7 +103,7 @@ def device_command(request: Request, data: dict):
     if 'inventory.add_operation' not in identity.get('permissions', []):
         raise HTTPException(403, 'Tài khoản hiện tại không có quyền điều khiển thiết bị')
     action = str(data.get('kind', '')).upper()
-    if action not in {'OPEN', 'CLOSE', 'VENTILATE', 'LIGHT'}:
+    if action not in {'OPEN', 'CLOSE', 'VENTILATE', 'LIGHT', 'HOME', 'LIGHT_OFF'}:
         raise HTTPException(400, 'Unsupported device command')
     rack_id = data.get('rack_id')
     if type(rack_id) is not int or rack_id < 1:
