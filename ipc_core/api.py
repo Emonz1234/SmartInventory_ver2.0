@@ -96,6 +96,7 @@ def health():
               for row in runtime.store.records() if row['kind'] == 'rack'} if links else {}
     return {"device_id": settings.DEVICE_ID, "device_type": settings.DEVICE_TYPE,
             "serial_connected": serial_manager.connected, "simulation_online": settings.DEVICE_TYPE == "IPCSIM" and serial_manager.connected,
+            "hardware_enabled": settings.DEVICE_TYPE != "IPC" or settings.HARDWARE_ENABLED,
             "database_healthy": True, "server_synced": runtime.synced,
             "serial_groups": serial_status()['groups'],
             "serial_routes": routes,
@@ -105,7 +106,7 @@ def health():
 @app.get("/api/operations/pending")
 def pending():
     with app.state.runtime.store.transaction() as db:
-        return [dict(r) for r in db.execute("SELECT * FROM edge_operations WHERE state NOT IN ('confirmed','failed')")]
+        return [dict(r) for r in db.execute("SELECT * FROM edge_operations WHERE state NOT IN ('confirmed','failed','local_sent','rejected')")]
 
 
 @app.get("/api/device/snapshot")

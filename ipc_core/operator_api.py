@@ -37,7 +37,7 @@ def login(data: dict):
                 del sessions[key]
         if len(sessions) >= 100:
             raise HTTPException(429, 'Quá nhiều phiên đăng nhập')
-        sessions[token] = {'client': client, 'expires': time.monotonic()+8*3600, 'lock': threading.Lock()}
+        sessions[token] = {'client': client, 'identity': identity, 'expires': time.monotonic()+8*3600, 'lock': threading.Lock()}
     return {'session': token, **identity}
 
 
@@ -46,6 +46,26 @@ def logout(request: Request):
     with guard:
         sessions.pop(request.headers.get('X-Operator-Session', ''), None)
     return {'authenticated': False}
+
+
+@router.get('/session')
+def current_session(request: Request):
+    key = request.headers.get('X-Operator-Session', '')
+    identity = session(request)
+    try:
+        with identity['lock']:
+            current = identity['client'].request('session')
+    except ValueError:
+        with guard:
+            sessions.pop(key, None)
+        raise HTTPException(403, 'Phiên đăng nhập Server đã hết hạn') from None
+    except Exception:
+        raise HTTPException(503, 'Server không phản hồi để xác minh phiên') from None
+    if not current.get('authenticated'):
+        with guard:
+            sessions.pop(key, None)
+        raise HTTPException(403, 'Phiên đăng nhập Server đã hết hạn')
+    return current
 
 
 def central(request, path, method='GET', body=None):
@@ -75,6 +95,35 @@ def operate(request: Request, data: dict):
         raise HTTPException(409, 'Thiết bị phải online và đồng bộ; offline chỉ đọc cache')
     data = {**data, 'device_id': settings.DEVICE_ID}
     return central(request, 'operations', 'POST', data)
+
+
+@router.post('/device-commands')
+def device_command(request: Request, data: dict):
+    identity = session(request).get('identity', {})
+    if 'inventory.add_operation' not in identity.get('permissions', []):
+        raise HTTPException(403, 'Tài khoản hiện tại không có quyền điều khiển thiết bị')
+    action = str(data.get('kind', '')).upper()
+    if action not in {'OPEN', 'CLOSE', 'VENTILATE', 'LIGHT'}:
+        raise HTTPException(400, 'Unsupported device command')
+    rack_id = data.get('rack_id')
+    if type(rack_id) is not int or rack_id < 1:
+        raise HTTPException(400, 'A valid rack_id is required')
+    request_key = data.get('request_key')
+    if not isinstance(request_key, str) or not request_key or len(request_key) > 128:
+        raise HTTPException(400, 'A valid request_key is required')
+
+    runtime = request.app.state.runtime
+    if settings.DEVICE_TYPE == 'IPC' and not settings.HARDWARE_ENABLED:
+        raise HTTPException(503, 'Physical hardware integration is disabled on this IPC')
+    if not runtime.serial.connected:
+        raise HTTPException(503, 'Local Serial is disconnected; device command was not sent')
+    try:
+        state = runtime.store.execute_local(request_key, rack_id, action, runtime.send_checked)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from None
+    except Exception:
+        raise HTTPException(503, 'Serial result is uncertain; inspect the rack before retrying') from None
+    return {'id': request_key, 'rack_id': rack_id, 'kind': action, 'state': state}
 
 
 @router.post('/operations/{operation_id}/confirm')

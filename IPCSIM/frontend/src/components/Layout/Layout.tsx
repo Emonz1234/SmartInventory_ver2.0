@@ -4,12 +4,14 @@ import { Sidebar, DRAWER_WIDTH } from './Sidebar'
 
 interface LayoutProps {
   children: React.ReactNode
+  operatorName: string
+  onLogout: () => void
 }
 
-export const Layout = ({ children }: LayoutProps) => {
+export const Layout = ({ children, operatorName, onLogout }: LayoutProps) => {
   return (
     <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Header />
+      <Header operatorName={operatorName} onLogout={onLogout} />
       <Box sx={{ display: 'flex', width: '100%', mt: '64px' }}>
         <Sidebar />
         <Box
@@ -24,7 +26,7 @@ export const Layout = ({ children }: LayoutProps) => {
           }}
         >
           <Alert severity="info" sx={{ mb: 2 }}>
-            Dữ liệu cục bộ đồng bộ từ Server. Chọn Inventory hoặc Operation để đăng nhập tài khoản vận hành; quản trị danh mục tại Server.
+            Dữ liệu cục bộ đồng bộ từ Server. Quản trị danh mục tại Server.
             {(import.meta as any).env.VITE_SERVER_UI_URL && <Link sx={{ ml: 1 }} href={(import.meta as any).env.VITE_SERVER_UI_URL}>Mở Control Center</Link>}
           </Alert>
           {children}

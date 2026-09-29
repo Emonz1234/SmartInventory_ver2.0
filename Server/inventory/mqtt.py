@@ -33,7 +33,8 @@ def receive(route, raw):
                 raise ValueError("Sync ACK does not match transfer")
             Outbox.objects.filter(device=device, channel="sync", body__revision__lte=message["revision"]).update(acknowledged=True)
             device.acknowledged_revision = max(device.acknowledged_revision, message["revision"])
-            device.save(update_fields=["acknowledged_revision"])
+            device.last_sync = timezone.now()
+            device.save(update_fields=["acknowledged_revision", "last_sync"])
         return
     seen = Receipt.objects.filter(device=device, message_id=message["message_id"]).exists()
     if not seen:
@@ -71,6 +72,8 @@ def receive(route, raw):
             if address is not None and not device.cabinet_set.filter(rack__address=address).exists():
                 raise ValueError("Telemetry rack outside assignment")
             RuntimeEvent.objects.create(device=device, message_id=message["message_id"], payload=payload)
+            from .monitoring import ingest
+            ingest(device, payload, message["timestamp"])
             # Legacy Serial has no command_id. Correlate conservatively only after a
             # matching moving state, never from initial/idle endpoint snapshots.
             from datetime import datetime

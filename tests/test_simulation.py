@@ -60,6 +60,29 @@ def test_start_initializes_all_six_racks_without_serial(group):
         controller.execute_stopRunning()
 
 
+def test_environment_and_breakdown_publish_every_five_minutes():
+    from Simulation.virtual_serial.virtual_master_controller import ENV_DATA_SEND_INTERVAL
+
+    controller = MasterCom(rack_group_id=0, port='')
+    controller.start()
+    try:
+        assert ENV_DATA_SEND_INTERVAL == 5 * 60
+        due = controller._next_env
+        controller._next_operation = due + 1000
+        while not controller.messages.empty():
+            controller.messages.get_nowait()
+
+        controller.poll(now=due - 0.1)
+        assert controller.messages.empty()
+
+        controller.poll(now=due)
+        assert controller.messages.qsize() == 12
+        assert controller._next_env == due + 5 * 60
+        assert controller._next_operation == due + 1000
+    finally:
+        controller.execute_stopRunning()
+
+
 def test_multirack_motion_fault_clear_and_ventilation_cycle():
     c = MasterCom(1, port='')
     c.start()

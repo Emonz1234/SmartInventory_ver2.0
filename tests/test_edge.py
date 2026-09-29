@@ -1,10 +1,16 @@
 import json
 import sqlite3
+import time
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 import pytest
+from fastapi import HTTPException
+from starlette.requests import Request
 from ipc_core.store import Store, RevisionGap
 from ipc_core.protocol import envelope, checksum, encode, decode, validate, topic
 from ipc_core.adapters import HardwareAdapter, SimulationAdapter
+from ipc_core.runtime import Runtime
+from ipc_core.operator_api import device_command, sessions
 
 
 def snapshot(device="sim-a", rev=1, records=None, **overrides):
@@ -27,6 +33,26 @@ def test_database_identity_and_independence(tmp_path):
     assert b.records() == []
     with pytest.raises(ValueError):
         Store(tmp_path / "a.db", "other", "IPC")
+
+
+def test_server_status_logs_follow_lease_and_sync_revision(tmp_path, capsys):
+    settings = SimpleNamespace(DB_PATH=str(tmp_path / "runtime.db"), DEVICE_ID="sim-a", DEVICE_TYPE="IPCSIM")
+    runtime = Runtime(settings, SimpleNamespace(connected=False))
+    runtime.report_server_state()
+    assert "[Server] MQTT status: offline" in capsys.readouterr().out
+
+    runtime.store.apply(snapshot())
+    runtime.connected = True
+    runtime.lease_until = time.time() + 30
+    runtime.remote_revision = 1
+    runtime.report_server_state()
+    output = capsys.readouterr().out
+    assert "[Server] MQTT status: online" in output
+    assert "[Server] Database synchronized at revision 1" in output
+
+    runtime.lease_until = 0
+    runtime.report_server_state()
+    assert "[Server] MQTT status: offline" in capsys.readouterr().out
 
 
 def test_full_sync_duplicate_stale_and_scope(store):
@@ -113,6 +139,90 @@ def test_physical_intent_never_replays_after_failure_or_restart(store):
     restarted = Store(store.path, "sim-a", "IPCSIM")
     assert restarted.execute(message, write_then_crash, True) == "uncertain"
     assert len(sent) == 1
+
+
+def test_local_device_commands_work_offline_and_are_idempotent(store):
+    store.apply(snapshot(records=[{
+        "key": "rack:1", "kind": "rack", "domain": "IPCSIM",
+        "data": {"id": 1, "rack_code": "7"}
+    }]))
+    sent = []
+
+    assert store.execute_local("local-op-1", 1, "OPEN", sent.append) == "local_sent"
+    restarted = Store(store.path, "sim-a", "IPCSIM")
+    assert restarted.execute_local("local-op-1", 1, "OPEN", sent.append) == "local_sent"
+    assert sent == [{"rack_id": 1, "address": 7, "action": "OPEN"}]
+
+
+def test_local_device_command_resolves_serial_address_when_primary_key_differs(store):
+    store.apply(snapshot(records=[{
+        "key": "rack:259", "kind": "rack", "domain": "IPCSIM",
+        "data": {"id": 259, "rack_code": "1"}
+    }]))
+    sent = []
+
+    assert store.execute_local("local-address-op", 1, "OPEN", sent.append) == "local_sent"
+    assert sent == [{"rack_id": 259, "address": 1, "action": "OPEN"}]
+
+
+def test_local_uncertain_command_is_not_replayed_after_restart(store):
+    store.apply(snapshot(records=[{
+        "key": "rack:1", "kind": "rack", "domain": "IPCSIM",
+        "data": {"id": 1, "rack_code": "7"}
+    }]))
+    sent = []
+
+    def write_then_lose_result(body):
+        sent.append(body)
+        raise IOError("Serial result was lost")
+
+    with pytest.raises(IOError):
+        store.execute_local("local-op-2", 1, "CLOSE", write_then_lose_result)
+    restarted = Store(store.path, "sim-a", "IPCSIM")
+    assert restarted.execute_local("local-op-2", 1, "CLOSE", write_then_lose_result) == "local_uncertain"
+    assert len(sent) == 1
+
+
+def test_local_device_command_api_needs_no_server_but_checks_permission(store):
+    store.apply(snapshot(records=[{
+        "key": "rack:1", "kind": "rack", "domain": "IPCSIM",
+        "data": {"id": 1, "rack_code": "7"}
+    }]))
+    sent = []
+    runtime = SimpleNamespace(
+        store=store,
+        serial=SimpleNamespace(connected=True),
+        send_checked=lambda body: sent.append(body)
+    )
+    app = SimpleNamespace(state=SimpleNamespace(runtime=runtime))
+
+    def request_for(token):
+        return Request({
+            "type": "http",
+            "headers": [(b"x-operator-session", token.encode())],
+            "app": app
+        })
+
+    expires = time.monotonic() + 60
+    sessions["local-command-test"] = {
+        "identity": {"permissions": ["inventory.add_operation"]},
+        "expires": expires
+    }
+    sessions["local-command-viewer-test"] = {
+        "identity": {"permissions": []},
+        "expires": expires
+    }
+    command = {"rack_id": 1, "kind": "OPEN", "request_key": "local-api-op"}
+    try:
+        assert device_command(request_for("local-command-test"), command)["state"] == "local_sent"
+        assert device_command(request_for("local-command-test"), command)["state"] == "local_sent"
+        assert sent == [{"rack_id": 1, "address": 7, "action": "OPEN"}]
+        with pytest.raises(HTTPException) as error:
+            device_command(request_for("local-command-viewer-test"), command)
+        assert error.value.status_code == 403
+    finally:
+        sessions.pop("local-command-test", None)
+        sessions.pop("local-command-viewer-test", None)
 
 
 def test_offline_and_wrong_revision_commands_rejected(store):

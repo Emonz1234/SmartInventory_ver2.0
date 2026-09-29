@@ -115,6 +115,8 @@ def create_operation(user, data):
     if not valid_id(data.get("request_key")):
         raise ValueError("request_key must be a unique identifier up to 64 characters")
     device = Device.objects.select_for_update().get(pk=data["device_id"])
+    from .permissions import require, source
+    require(user, "cabinet.control" if data["kind"] in {"OPEN", "CLOSE", "VENTILATE", "LIGHT"} else "inventory.move", source(device.device_type))
     old = Operation.objects.filter(request_key=data["request_key"]).first()
     if old:
         if old.device_id != device.pk or old.kind != data["kind"] or old.rack_id != int(data["rack_id"]) or old.quantity != int(data.get("quantity", 0)) or old.item_id != data.get("item_id") or old.bin_id != data.get("bin_id"):
@@ -128,6 +130,8 @@ def create_operation(user, data):
     if device.device_type == 'IPC' and not settings.HARDWARE_ENABLED:
         raise ValueError('Hardware integration is not implemented; IPC control is disabled')
     rack = Rack.objects.get(pk=data["rack_id"], cabinet__device=device, cabinet__domain=device.device_type)
+    if rack.cabinet.configuration_status == "pending_simulator":
+        raise ValueError("Simulator does not support this cabinet group yet")
     kind = data["kind"]
     if kind not in {"PUT", "PICK", "ADJUST", "OPEN", "CLOSE", "VENTILATE", "LIGHT"}:
         raise ValueError("Unsupported operation")
@@ -153,6 +157,8 @@ def create_operation(user, data):
         quantity=qty, requested_by=user, request_key=data["request_key"], expires_at=timezone.now()+timedelta(seconds=30))
     queue(device, "command", "command.execute", command_payload(operation),
           command_id=str(operation.pk), revision=device.revision)
+    from .models import AuditLog
+    AuditLog.objects.create(actor=user, action="command.create", resource="operation", object_id=str(operation.pk), source_type=source(device.device_type), after={"kind": kind})
     return operation
 
 
@@ -161,6 +167,8 @@ def confirm_operation(user, operation_id, note, success=True):
     # Lock ordering is always devices -> operation -> stock, including reassignment.
     devices = list(Device.objects.select_for_update().order_by("pk"))
     op = Operation.objects.select_for_update().get(pk=operation_id)
+    from .permissions import require, source
+    require(user, "inventory.move" if op.item_id else "cabinet.control", source(op.device.device_type))
     if op.state in {"confirmed", "failed", "cancelled"}:
         if (op.state == "confirmed") != success:
             raise ValueError("Operation already resolved with another outcome")
@@ -183,9 +191,16 @@ def confirm_operation(user, operation_id, note, success=True):
         stock.quantity += delta
         stock.save()
         Ledger.objects.create(operation=op, delta=delta, quantity_after=stock.quantity)
+        from .models import InventoryTransaction
+        InventoryTransaction.objects.create(operation=op, item=op.item, source_type=source(op.device.device_type),
+            kind={'PUT':'INBOUND','PICK':'OUTBOUND','ADJUST':'ADJUST'}[op.kind], quantity=op.quantity,
+            from_location=op.bin if op.kind=='PICK' else None, to_location=op.bin if op.kind!='PICK' else None,
+            actor=user, note=note, request_key='operation-'+str(op.pk))
     op.state = "confirmed" if success else "failed"
     op.confirmed_by, op.confirmation_note = user, note
     op.save()
+    from .models import AuditLog
+    AuditLog.objects.create(actor=user, action="operation.confirm", resource="operation", object_id=str(op.pk), source_type=source(op.device.device_type), after={"state":op.state, "note":note})
     queue(op.device, "command", "command.finalize", {"state": op.state, "command": command_payload(op)}, command_id=str(op.pk))
     for device in devices:
         refresh(device)

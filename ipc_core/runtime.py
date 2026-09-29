@@ -17,6 +17,8 @@ class Runtime:
         self.lease_until = 0
         self.connected = False
         self.remote_revision = None
+        self._reported_server_online = None
+        self._reported_synced = None
         self.stop_event = threading.Event()
         self.client = None
         self.thread = None
@@ -31,6 +33,19 @@ class Runtime:
 
     def request_sync(self):
         self.store.emit("sync", "sync.request", {}, dataset_id=self.settings.DEVICE_ID, revision=self.store.revision())
+
+    def report_server_state(self):
+        online, synced = self.online, self.synced
+        if online != self._reported_server_online:
+            state = "online" if online else "offline (no valid Server lease)"
+            print(f"[Server] MQTT status: {state}")
+            self._reported_server_online = online
+        if synced != self._reported_synced:
+            if synced:
+                print(f"[Server] Database synchronized at revision {self.store.revision()}")
+            else:
+                print("[Server] Database not synchronized")
+            self._reported_synced = synced
 
     def send_checked(self, body):
         # Preserve the existing physical breakdown interlock for open/close.
@@ -123,6 +138,7 @@ class Runtime:
 
     def start(self):
         if not self.settings.MQTT_HOST:
+            print("[MQTT] Disabled: MQTT_HOST is empty")
             return
         import paho.mqtt.client as mqtt
         cfg = self.settings
@@ -135,10 +151,17 @@ class Runtime:
             self.connected = not reason.is_failure
             self.lease_until = 0
             if self.connected:
+                print(f"[MQTT] Broker connected: {cfg.MQTT_HOST}:{cfg.MQTT_PORT} (TLS {'on' if cfg.MQTT_TLS else 'off'})")
                 c.subscribe(f"inventory/v1/{cfg.DEVICE_ID}/down/+", qos=1)
                 self.request_sync()
+            else:
+                print(f"[MQTT] Broker connection failed: {reason}")
+            self.report_server_state()
         def disconnected(*args):
             self.connected, self.lease_until = False, 0
+            reason = args[3] if len(args) > 3 else "connection closed"
+            print(f"[MQTT] Broker disconnected: {reason}")
+            self.report_server_state()
         def incoming(c, userdata, msg):
             if msg.retain and msg.topic.endswith('/command'):
                 log.error("Rejected retained command")
@@ -153,6 +176,7 @@ class Runtime:
                 return
             c.ack(msg.mid, msg.qos)
         self.client.on_connect, self.client.on_disconnect, self.client.on_message = connected, disconnected, incoming
+        print(f"[MQTT] Connecting to broker {cfg.MQTT_HOST}:{cfg.MQTT_PORT} (TLS {'on' if cfg.MQTT_TLS else 'off'})")
         self.client.connect_async(cfg.MQTT_HOST, cfg.MQTT_PORT, keepalive=20)
         self.client.loop_start()
         self.thread = threading.Thread(target=self.pump, daemon=True)
@@ -162,6 +186,7 @@ class Runtime:
         heartbeat = 0
         while not self.stop_event.wait(2):
             try:
+                self.report_server_state()
                 if not self.connected:
                     continue
                 if time.monotonic()-heartbeat > 10:

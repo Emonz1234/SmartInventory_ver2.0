@@ -1,63 +1,29 @@
-# Smart Inventory System
+﻿# Smart Inventory
 
-Server Django + React + PostgreSQL quản lý nhiều IPC/IPCSIM qua MQTT. IPC/IPCSIM
-dùng chung Python core, FastAPI, React, SQLite và journal lệnh. IPCSIM nối Simulation
-PyQt6 qua Serial. Hardware chưa phát triển và bị khóa mặc định.
+Server Django/React/PostgreSQL quản lý IPC1 và IPCSIM qua MQTT. Hai loại thiết bị
+sử dụng chung core, API và nghiệp vụ; dữ liệu thiết bị và tồn kho phân theo REAL/SIMULATION.
+Simulation nối IPCSIM qua Serial; mỗi edge có SQLite và cấu hình riêng.
 
-```text
-Người vận hành edge: React → FastAPI → Django (session + CSRF)
-Thiết bị:       Django worker ↔ MQTT broker ↔ IPC/IPCSIM ↔ Serial ↔ Simulation
-Database:      PostgreSQL tại Server       SQLite riêng từng device
-```
+## Hướng dẫn
 
-React edge chỉ gọi FastAPI local; gateway FastAPI kiểm tra scope rồi gọi Django.
-Sync, lệnh xuống thiết bị và phản hồi runtime luôn đi qua MQTT. Edge không kết nối
-PostgreSQL. Tồn kho thực IPC và mô phỏng IPCSIM tách domain.
+1. **[Cài đặt lần đầu](docs/first-time-setup.md)** — cấu hình Docker Compose cho Server,
+   PostgreSQL/MQTT, bootstrap database, backup và cấu hình edge.
+2. **[Khởi chạy từ lần thứ hai](docs/startup.md)** — lệnh Docker bật/tắt Server và
+   khởi chạy Simulation, IPCSIM, IPC1 sau khi setup.
 
-## Bắt đầu
+## Cấu trúc chính
 
-Yêu cầu: Python 3.12, Node.js 22.12+ hoặc 24, PostgreSQL 16, Mosquitto 2.
-Docker Compose dùng để đóng gói Server; IPCSIM/Simulation chạy native để dùng COM.
-OpenSSL dùng khi tạo chứng chỉ. Đưa Python, Node và các công cụ vào PATH.
-
-```powershell
-python -m venv .venv
-.venv/Scripts/python -m pip install -r requirements.txt
-.venv/Scripts/python -m pip install -r IPCSIM/requirements.txt -r Simulation/requirements.txt
-```
-
-Tiếp tục theo **[hướng dẫn triển khai một/hai máy](docs/deployment.md)**.
-Không dùng SQLite cũ làm DB_PATH mới; không seed production tự động.
-
-## Cấu trúc
-
-| Thư mục | Trách nhiệm |
+| Thư mục | Vai trò |
 |---|---|
-| `Server/`, `Server/frontend/` | Django, migration, REST, MQTT worker, React |
-| `ipc_core/` | Database, sync, protocol, adapters, FastAPI và operator gateway dùng chung |
-| `IPCSIM/frontend/` | React/MUI dùng chung cho IPC1 và IPCSIM, phục vụ tại `/ui/` |
-| `IPC/`, `IPCSIM/` | Launcher và cấu hình từng loại instance |
-| `Simulation/` | Controller mô phỏng, Serial, dashboard PyQt6 |
-| `Hardware/` | Interface tương lai; chưa có firmware |
-| `deploy/` | Compose, Dockerfiles, nginx, Mosquitto ACL/TLS |
-| `tests/`, `tools/` | Kiểm thử, backup, cấu hình và công cụ kiểm tra |
-| `legacy/` | Prototype/tài liệu lịch sử, không dùng triển khai |
+| `Server/` | Backend Django, React, dữ liệu trung tâm và MQTT worker |
+| `ipc_core/` | Runtime, API, đồng bộ, SQLite và Serial dùng chung |
+| `IPC/`, `IPCSIM/` | Launcher và cấu hình riêng cho từng instance |
+| `IPCSIM/frontend/` | UI React local dùng chung cho IPC/IPCSIM |
+| `Simulation/` | Mô phỏng rack và GUI PyQt6 |
+| `deploy/`, `tools/`, `tests/` | Đóng gói, tiện ích cấu hình và kiểm thử |
+| `Hardware/` | Ghi chú hợp đồng tích hợp phần cứng |
+| `legacy/` | Mã lịch sử để đối chiếu |
 
-## Tài liệu
-
-- [Cài đặt, cấu hình, sử dụng và nghiệm thu hai máy](docs/deployment.md)
-- [Kết quả rà soát và giới hạn kiểm thử](docs/system-audit.md)
-- [Khôi phục React, bootstrap và danh sách topology](docs/react-bootstrap.md)
-- [Simulation dashboard](docs/simulation-dashboard.md)
-- [Kiến trúc và ownership](docs/architecture.md)
-- [Migration dữ liệu cũ và recovery](docs/runbook.md)
-- [Tích hợp Hardware](Hardware/README.md)
-
-```powershell
-.venv/Scripts/python -m pytest tests IPCSIM/tests -q
-.venv/Scripts/python Server/manage.py test Server.inventory --noinput
-```
-
-Django cần database test riêng và tài khoản CREATEDB. Xem hướng dẫn để bật kiểm thử
-MQTT/process. Test TCP không thay thế COM/ESP32 hoặc hai máy vật lý. Compose chưa
-được chạy ở môi trường hiện tại vì chưa có Docker.
+Bootstrap mới tạo IPC1 1 group × 6 rack và IPCSIM 22 group × 6 rack.
+Simulator hiện hỗ trợ 21 group; group thứ 22 chờ tích hợp. Điều khiển REAL vẫn bị
+khóa mặc định cho đến khi phần cứng được kiểm tra. Xem [ghi chú Hardware](Hardware/README.md).

@@ -1,11 +1,14 @@
-import { AppBar, Toolbar, Box, Typography, Chip, Stack } from '@mui/material'
-import { useAuthStore } from '@store/authStore'
+import { AppBar, Toolbar, Box, Typography, Chip, IconButton, Stack, Tooltip } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import api from '@api/client'
-import { CloudSync, Circle } from '@mui/icons-material'
+import { CloudSync, Circle, Logout } from '@mui/icons-material'
 
-export const Header = () => {
-  const user = useAuthStore((s) => s.user)
+interface HeaderProps {
+  operatorName: string
+  onLogout: () => void
+}
+
+export const Header = ({ operatorName, onLogout }: HeaderProps) => {
   const query = useQuery({ queryKey: ['header-health'], queryFn: async () => (await api.get('/system/health')).data, refetchInterval: 2000 })
   const status = query.isError ? {} : query.data || {}
 
@@ -29,10 +32,10 @@ export const Header = () => {
         <Stack direction="row" spacing={2} alignItems="center">
           <Box sx={{ textAlign: 'right' }}>
             <Typography variant="body2" display="block">
-              {user?.username}
+              {operatorName}
             </Typography>
             <Typography variant="caption" display="block" sx={{ color: 'rgba(0,0,0,0.6)' }}>
-              Local read access
+              Server operator
             </Typography>
           </Box>
           <Chip
@@ -43,6 +46,11 @@ export const Header = () => {
             variant="outlined"
             sx={{ borderColor: 'rgba(0,0,0,0.12)' }}
           />
+          <Tooltip title="Đăng xuất">
+            <IconButton aria-label="Đăng xuất" onClick={onLogout} color="inherit">
+              <Logout />
+            </IconButton>
+          </Tooltip>
           <Chip
             size="medium"
             icon={<CloudSync sx={{ fontSize: '0.9rem !important' }} />}

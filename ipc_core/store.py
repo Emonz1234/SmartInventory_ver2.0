@@ -154,6 +154,55 @@ class Store:
             self.ack(db, message)
             return "applied"
 
+    def execute_local(self, operation_id, rack_id, action, send):
+        if action not in {"OPEN", "CLOSE", "VENTILATE", "LIGHT"}:
+            raise ValueError("Unsupported device command")
+        if type(rack_id) is not int or rack_id < 1:
+            raise ValueError("Invalid rack ID")
+
+        with self.transaction() as db:
+            previous = db.execute("SELECT body,state FROM edge_operations WHERE id=?", (operation_id,)).fetchone()
+            if previous:
+                recorded = json.loads(previous["body"])
+                if recorded.get("requested_rack_id", recorded.get("rack_id")) != rack_id or recorded.get("kind") != action:
+                    raise ValueError("Request key reused with a different command")
+                return previous["state"]
+
+            rack = db.execute("SELECT body FROM edge_records WHERE dataset=? AND key=?",
+                              (self.device_id, f"rack:{rack_id}")).fetchone()
+            if not rack:
+                candidates = []
+                for row in db.execute("SELECT body FROM edge_records WHERE dataset=?", (self.device_id,)):
+                    record = json.loads(row["body"])
+                    if record.get("kind") == "rack" and str(record.get("data", {}).get("rack_code")) == str(rack_id):
+                        candidates.append(record)
+                if len(candidates) != 1:
+                    raise ValueError("Rack ID or Serial address is not present uniquely in the local topology cache")
+                rack_data = candidates[0].get("data", {})
+            else:
+                rack_data = json.loads(rack["body"]).get("data", {})
+            try:
+                address = int(rack_data["rack_code"])
+                resolved_rack_id = int(rack_data["id"])
+            except (KeyError, TypeError, ValueError):
+                raise ValueError("Rack has no valid local Serial address") from None
+
+            body = {"rack_id": resolved_rack_id, "requested_rack_id": rack_id, "kind": action, "address": address}
+            db.execute("INSERT INTO edge_operations(id,body,state,result) VALUES(?,?,?,NULL)",
+                       (operation_id, canonical(body), "local_uncertain"))
+
+        command = {"rack_id": resolved_rack_id, "address": address, "action": action}
+        try:
+            send(command)
+        except ValueError:
+            with self.transaction() as db:
+                db.execute("UPDATE edge_operations SET state='rejected' WHERE id=?", (operation_id,))
+            raise
+
+        with self.transaction() as db:
+            db.execute("UPDATE edge_operations SET state='local_sent' WHERE id=?", (operation_id,))
+        return "local_sent"
+
     def execute(self, message, send, online):
         command_id, body = message["command_id"], message["payload"]
         with self.transaction() as db:

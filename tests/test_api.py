@@ -20,6 +20,7 @@ with TestClient(app) as c:
     assert c.post('/api/transactions/pick',headers=h,json={}).status_code == 409
     assert c.get('/api/racks/1/open',headers=h).status_code == 409
     assert c.post('/api/operator/login',json={}).status_code == 401
+    assert c.get('/api/operator/session',headers=h).status_code == 403
     assert c.get('/api/operator/operations',headers=h).status_code == 403
     assert c.post('/api/operator/operations',headers=h,json={'device_id':'other'}).status_code == 403
     assert c.post('/api/operator/operations',headers=h,json={}).status_code == 409

@@ -16,6 +16,7 @@ class Device(models.Model):
     revision = models.PositiveBigIntegerField(default=0)
     acknowledged_revision = models.PositiveBigIntegerField(default=0)
     snapshot = models.JSONField(default=list)
+    last_sync = models.DateTimeField(null=True, blank=True)
 
 
 class Cabinet(models.Model):
@@ -27,6 +28,7 @@ class Cabinet(models.Model):
     description = models.TextField(blank=True)
     topology_locked = models.BooleanField(default=False)
     configuration_status = models.CharField(max_length=32, default='pending')
+    area = models.CharField(max_length=120, blank=True)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["domain", "code"], name="cabinet_domain_code")]
@@ -46,11 +48,18 @@ class Shelf(models.Model):
     code = models.CharField(max_length=64)
     level = models.PositiveIntegerField(default=1)
 
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['rack', 'code'], name='shelf_rack_code')]
+
 
 class Bin(models.Model):
     shelf = models.ForeignKey(Shelf, on_delete=models.PROTECT)
     code = models.CharField(max_length=64)
     capacity = models.PositiveIntegerField(default=0)
+    reserved = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['shelf', 'code'], name='bin_shelf_code')]
 
 
 class Category(models.Model):
@@ -148,3 +157,79 @@ class AuditLog(models.Model):
     before = models.JSONField(default=dict)
     after = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
+    source_type = models.CharField(max_length=10, default='ALL')
+    result = models.CharField(max_length=32, default='success')
+
+
+SOURCES = [('REAL', 'Real'), ('SIMULATION', 'Simulation')]
+
+
+class RolePermission(models.Model):
+    role = models.ForeignKey('auth.Group', on_delete=models.CASCADE)
+    permission = models.CharField(max_length=64)
+    scope = models.CharField(max_length=10, choices=SOURCES + [('ALL', 'All')])
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['role', 'permission', 'scope'], name='role_permission_scope')]
+
+
+class RackStatus(models.Model):
+    rack = models.OneToOneField(Rack, on_delete=models.CASCADE)
+    values = models.JSONField(default=dict)
+    updated_at = models.DateTimeField()
+
+
+class EnvironmentStatus(models.Model):
+    rack = models.ForeignKey(Rack, on_delete=models.PROTECT)
+    device = models.ForeignKey(Device, on_delete=models.PROTECT)
+    source_type = models.CharField(max_length=10, choices=SOURCES)
+    values = models.JSONField()
+    created_at = models.DateTimeField(db_index=True)
+
+
+class Alarm(models.Model):
+    rack = models.ForeignKey(Rack, on_delete=models.PROTECT)
+    device = models.ForeignKey(Device, on_delete=models.PROTECT)
+    source_type = models.CharField(max_length=10, choices=SOURCES)
+    code = models.CharField(max_length=64)
+    severity = models.CharField(max_length=16)
+    active = models.BooleanField(default=True)
+    created_at = models.DateTimeField()
+    cleared_at = models.DateTimeField(null=True)
+    acknowledged_at = models.DateTimeField(null=True)
+    acknowledged_by = models.ForeignKey('auth.User', null=True, on_delete=models.PROTECT)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['rack', 'code'], condition=Q(active=True), name='one_active_alarm')]
+
+
+class InventoryTransaction(models.Model):
+    TYPES = [(s, s) for s in ['INBOUND', 'OUTBOUND', 'MOVE', 'BORROW', 'RETURN', 'ADJUST']]
+    item = models.ForeignKey(Item, on_delete=models.PROTECT)
+    source_type = models.CharField(max_length=10, choices=SOURCES)
+    kind = models.CharField(max_length=10, choices=TYPES)
+    quantity = models.PositiveIntegerField()
+    from_location = models.ForeignKey(Bin, null=True, on_delete=models.PROTECT, related_name='outgoing')
+    to_location = models.ForeignKey(Bin, null=True, on_delete=models.PROTECT, related_name='incoming')
+    actor = models.ForeignKey('auth.User', on_delete=models.PROTECT)
+    note = models.TextField()
+    request_key = models.CharField(max_length=64, unique=True)
+    borrow = models.ForeignKey('self', null=True, on_delete=models.PROTECT)
+    operation = models.OneToOneField(Operation, null=True, on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=Q(source_type__in=['REAL', 'SIMULATION']), name='transaction_valid_source'),
+            models.CheckConstraint(condition=Q(quantity__gt=0) | Q(kind='ADJUST'), name='transaction_positive_quantity'),
+            models.CheckConstraint(condition=(
+                Q(kind__in=['INBOUND', 'RETURN', 'ADJUST'], from_location__isnull=True, to_location__isnull=False)
+                | Q(kind__in=['OUTBOUND', 'BORROW'], from_location__isnull=False, to_location__isnull=True)
+                | Q(kind='MOVE', from_location__isnull=False, to_location__isnull=False)
+            ), name='transaction_location_shape'),
+        ]
+
+
+class SystemSetting(models.Model):
+    key = models.CharField(max_length=64, primary_key=True)
+    value = models.FloatField()

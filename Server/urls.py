@@ -8,3 +8,11 @@ urlpatterns = [path("admin/", admin.site.urls), path("api/session", views.sessio
     path("api/operations/<uuid:operation_id>/confirm", views.confirm), path("api/ledger", views.ledger),
     path("api/events", views.events), path('api/audit', views.audit)]
 urlpatterns += [path(f"api/{name}", views.resources, {"resource": name}) for name in views.RESOURCES]
+
+from .inventory.console import console
+urlpatterns += [path('api/' + name, console, {'resource':name}) for name in [
+    'dashboard', 'ipcs', 'cabinet-groups', 'rack-status', 'environment', 'alarms', 'goods',
+    'storage-locations', 'inventory-transactions', 'users', 'roles', 'permissions', 'audit-logs', 'settings']]
+urlpatterns += [path('api/ipcs/<str:pk>', console, {'resource':'ipcs'}),
+    path('api/racks/<int:pk>/commands', console, {'resource':'commands'}),
+    path('api/alarms/<int:pk>/acknowledge', console, {'resource':'alarms'})]

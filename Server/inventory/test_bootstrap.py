@@ -13,18 +13,19 @@ class BootstrapTests(TestCase):
     def test_scope_mapping_no_stock_and_repeat_preserves_admin_changes(self):
         self.bootstrap()
         ipc, sim = Device.objects.get(pk='IPC1'), Device.objects.get(pk='IPCSIM')
-        self.assertEqual(Cabinet.objects.filter(device=ipc).count(), 6)
-        self.assertEqual(Cabinet.objects.filter(device=sim).count(), 21)
-        self.assertEqual(Rack.objects.filter(cabinet__device=ipc).count(), 0)
-        self.assertEqual(Rack.objects.filter(cabinet__device=sim).count(), 126)
+        self.assertEqual(Cabinet.objects.filter(device=ipc).count(), 1)
+        self.assertEqual(Cabinet.objects.filter(device=sim).count(), 22)
+        self.assertEqual(Rack.objects.filter(cabinet__device=ipc).count(), 6)
+        self.assertEqual(Rack.objects.filter(cabinet__device=sim).count(), 132)
         for rack in Rack.objects.filter(cabinet__device=sim).select_related('cabinet'):
             self.assertEqual((rack.address - 1)//6 + 1, int(rack.cabinet.code))
         self.assertEqual(Bin.objects.count(), 3)
         self.assertEqual(Item.objects.filter(is_demo=True).count(), 5)
         self.assertEqual(Category.objects.count(), 2)
         self.assertEqual(Stock.objects.count() + Operation.objects.count() + Ledger.objects.count(), 0)
-        for device, count in ((ipc, 6), (sim, 21)):
+        for device, count, rack_count in ((ipc, 1, 6), (sim, 22, 132)):
             self.assertEqual(sum(r['kind'] == 'cabinet' for r in device.snapshot), count)
+            self.assertEqual(sum(r['kind'] == 'rack' for r in device.snapshot), rack_count)
             self.assertTrue(all(r.get('domain', device.device_type) == device.device_type for r in device.snapshot))
         item = Item.objects.first()
         item.name, item.is_active = 'Admin retained name', False
@@ -41,6 +42,14 @@ class BootstrapTests(TestCase):
         self.assertFalse(item.is_active)
         self.assertEqual(cabinet.name, 'Admin cabinet')
         self.assertEqual(Bin.objects.count(), 3)
+
+    def test_sim_only_bootstrap_creates_twenty_two_groups_without_ipc(self):
+        call_command('bootstrap_inventory', sim_only=True, stdout=io.StringIO())
+        self.assertFalse(Device.objects.filter(pk='IPC1').exists())
+        sim = Device.objects.get(pk='IPCSIM')
+        self.assertEqual(Cabinet.objects.filter(device=sim).count(), 22)
+        self.assertEqual(Rack.objects.filter(cabinet__device=sim).count(), 132)
+        self.assertEqual(sum(row['kind'] == 'rack' for row in sim.snapshot), 132)
 
     def test_dry_run_and_conflict_roll_back_all_changes(self):
         self.bootstrap(dry_run=True)
@@ -73,5 +82,5 @@ class BootstrapTests(TestCase):
         self.assertEqual(self.client.patch('/api/cabinets', {'id': cabinet.pk, 'code': '7'}, content_type='application/json').status_code, 400)
         self.assertEqual(self.client.delete('/api/cabinets', {'id': cabinet.pk}, content_type='application/json').status_code, 400)
         self.assertEqual(self.client.post('/api/racks', {'cabinet_id': cabinet.pk, 'address': 1}, content_type='application/json').status_code, 400)
-        self.assertEqual(AuditLog.objects.filter(actor=admin).count(), 2)
+        self.assertEqual(AuditLog.objects.filter(actor=admin, result="success").count(), 2)
         self.assertEqual(self.client.get('/api/audit').status_code, 200)

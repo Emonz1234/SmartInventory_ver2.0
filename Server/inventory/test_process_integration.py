@@ -102,10 +102,11 @@ class ProcessIntegration(TransactionTestCase):
                         return {}
                 eventually(lambda: snapshot().get('health', {}).get('server_synced'), seconds=60)
                 eventually(lambda: physical_snapshot().get('health', {}).get('server_synced'), seconds=60)
-                self.assertEqual(sum(r['kind']=='cabinet' for r in snapshot()['records']), 21)
-                self.assertEqual(sum(r['kind']=='cabinet' for r in physical_snapshot()['records']), 6)
+                self.assertEqual(sum(r['kind']=='cabinet' for r in snapshot()['records']), 22)
+                self.assertEqual(sum(r['kind']=='rack' for r in snapshot()['records']), 132)
+                self.assertEqual(sum(r['kind']=='cabinet' for r in physical_snapshot()['records']), 1)
                 self.assertFalse(physical_snapshot()['health']['serial_connected'])
-                self.assertFalse(any(r['kind']=='rack' for r in physical_snapshot()['records']))
+                self.assertEqual(sum(r['kind']=='rack' for r in physical_snapshot()['records']), 6)
                 def edge_api(path, data=None, session_token=''):
                     request = Request(f'http://127.0.0.1:{api_port}/api/operator/{path}',
                         data=json.dumps(data).encode() if data is not None else None,
