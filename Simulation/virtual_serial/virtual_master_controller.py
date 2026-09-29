@@ -180,7 +180,7 @@ class MasterCom:
                 if action in (0, 5):
                     self.lights[self._local_index(rack_id)] = action == 0
                     position = self.ventilating_racks_status[self._local_index(rack_id)][0]
-                    self._publish_operation(rack_id, 0, position, 1, 0)
+                    self._publish_operation(rack_id, 0, position, 1, action)
                     continue
                 displacement = RACK_MAX_DISPLACEMENT if action == 1 else 0.0
                 for other_id in self.rack_ids:

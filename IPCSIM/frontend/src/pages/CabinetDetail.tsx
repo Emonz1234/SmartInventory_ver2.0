@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { cabinetAPI } from '@api/cabinet'
-import { Alert, Avatar, Box, Button, Card, CardContent, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Grid, LinearProgress, Stack, Typography } from '@mui/material'
+import { Alert, Avatar, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, LinearProgress, Snackbar, Stack, Typography } from '@mui/material'
 import { Air, ArrowBack, CheckCircle, ErrorOutline, Lightbulb, Lock, LockOpen, Storage } from '@mui/icons-material'
 import api from '@api/client'
 import { systemAPI } from '@api/system'
+import { RackOperationPanel } from '@components/RackOperationPanel'
 
 type CabinetOperation = {
   kind: 'OPEN' | 'CLOSE' | 'VENTILATE' | 'LIGHT'
@@ -30,21 +31,37 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
   const [sentRackIds, setSentRackIds] = useState<number[]>([])
   const [completedRackIds, setCompletedRackIds] = useState<number[]>([])
   const [failedRacks, setFailedRacks] = useState<Array<{ rack: any; message: string }>>([])
+  const [rackPanelBusy, setRackPanelBusy] = useState(false)
+  const [cabinetVentilated, setCabinetVentilated] = useState(false)
+  const [lightCommandBusy, setLightCommandBusy] = useState(false)
+  const [lightFeedback, setLightFeedback] = useState<{ severity: 'success' | 'warning' | 'error'; message: string } | null>(null)
   const canOperate = permissions.includes('inventory.add_operation')
   const query = useQuery({ queryKey: ['cabinet', id, 'racks'], queryFn: async () => (await cabinetAPI.getRacks(Number(id))).data, refetchInterval: 2000 })
   const racks: any[] = query.data || []
   const operationTelemetry = useQuery({
     queryKey: ['cabinet-operation-telemetry', operation?.requestKey],
     queryFn: async () => (await systemAPI.getOperationData(100)).data.data,
-    enabled: !!operation && operationPhase === 'waiting',
+    enabled: !!operation && ['sending', 'waiting'].includes(operationPhase) && ['OPEN', 'CLOSE', 'VENTILATE'].includes(operation.kind),
     refetchInterval: 500,
     staleTime: 0
   })
 
   useEffect(() => {
-    if (!operation || operationPhase !== 'waiting' || !operationTelemetry.data) return
+    if (!operation || !['sending', 'waiting'].includes(operationPhase) || !operationTelemetry.data) return
     const trackedRacks = operation.racks.filter((rack) => sentRackIds.includes(Number(rack.id)))
     if (!trackedRacks.length) return
+
+    const failedEntry = operationTelemetry.data
+      .filter((entry: any) => Number(entry.id) > baselineOperationId && Number(entry.state) === -2 && Number(entry.is_endpoint) === 1)
+      .sort((a: any, b: any) => Number(b.id ?? 0) - Number(a.id ?? 0))[0]
+    if (failedEntry) {
+      const failedRack = operation.racks.find(rack => Number(rack.id) === Number(failedEntry.rack_id))
+      if (failedRack) setFailedRacks(previous => previous.some(item => Number(item.rack.id) === Number(failedRack.id))
+        ? previous
+        : [...previous, { rack: failedRack, message: 'Simulation reported a movement fault.' }])
+      setOperationPhase('uncertain')
+      return
+    }
 
     const completed = trackedRacks.filter((rack) => {
       const rackId = Number(rack.id)
@@ -67,10 +84,11 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
     const completedIds = completed.map((rack) => Number(rack.id))
     if (completedIds.length !== completedRackIds.length) setCompletedRackIds(completedIds)
     if (completedIds.length !== trackedRacks.length) return
+    if (sentRackIds.length + failedRacks.length < operation.racks.length) return
 
     setOperationPhase(failedRacks.length ? 'uncertain' : 'success')
     void queryClient.invalidateQueries({ queryKey: ['cabinet', id, 'racks'] })
-  }, [baselineOperationId, completedRackIds, failedRacks.length, id, operation, operationPhase, operationTelemetry.data, queryClient, sentRackIds])
+  }, [baselineOperationId, completedRackIds, failedRacks, id, operation, operationPhase, operationTelemetry.data, queryClient, sentRackIds])
 
   useEffect(() => {
     if (operationPhase !== 'waiting') return
@@ -150,6 +168,27 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
     setFailedRacks([])
   }
 
+  const sendLightCommand = async (rack: any, kind: 'LIGHT' | 'LIGHT_OFF') => {
+    if (!canOperate || operation || rackPanelBusy || lightCommandBusy) return
+    setLightCommandBusy(true)
+    try {
+      const requestKey = Array.from(crypto.getRandomValues(new Uint8Array(24)), value => value.toString(16).padStart(2, '0')).join('')
+      const response = await api.post('/operator/device-commands', {
+        rack_id: Number(rack.id),
+        kind,
+        request_key: requestKey
+      }, { headers: { 'X-Operator-Session': session } })
+      setLightFeedback(response.data.state === 'local_sent'
+        ? { severity: 'success', message: `Rack ${rack.rack_code} light turned ${kind === 'LIGHT' ? 'on' : 'off'}.` }
+        : { severity: 'warning', message: 'Light command delivery is uncertain. Check the rack before retrying.' })
+    } catch (error: any) {
+      if (error?.response?.status === 403) onSessionExpired()
+      setLightFeedback({ severity: 'error', message: error?.response?.data?.detail || error?.message || 'Light command failed.' })
+    } finally {
+      setLightCommandBusy(false)
+    }
+  }
+
   const dialogTitle = operationPhase === 'success'
     ? operation?.kind === 'VENTILATE'
       ? 'Cabinet ventilation complete'
@@ -165,74 +204,46 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
           : operationPhase === 'sent'
             ? 'Operation sent'
             : 'Confirm operation'
+  const ventilationMovingEvent = operation?.kind === 'VENTILATE'
+    ? operationTelemetry.data?.filter((entry: any) => Number(entry.id) > baselineOperationId && Number(entry.movement_speed) > 0 &&
+      Number(entry.is_endpoint) !== 1 && [1, 2].includes(Number(entry.state)))
+      .sort((a: any, b: any) => Number(b.id) - Number(a.id))[0]
+    : undefined
+  const ventilationMovingRack = ventilationMovingEvent && racks.find(rack => Number(rack.id) === Number(ventilationMovingEvent.rack_id))
 
-  return <Stack spacing={2}>
-    <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ md: 'center' }} spacing={2} sx={{ p: { xs: 2, md: 2.5 }, borderRadius: 2, background: 'linear-gradient(115deg, rgba(0,119,163,0.10), rgba(0,119,163,0.02) 58%, #fff 100%)', border: '1px solid', borderColor: 'divider' }}>
-      <Box>
-        <Button size="small" startIcon={<ArrowBack />} onClick={() => navigate('/cabinets')} sx={{ mb: 1, minHeight: 32, px: 1 }}>Cabinets</Button>
-        <Typography variant="h4" sx={{ fontWeight: 800, lineHeight: 1.15 }}>Cabinet {id}</Typography>
-        <Typography color="text.secondary" sx={{ mt: 0.5 }}>Rack status and local controls</Typography>
-      </Box>
-      <Button
-        variant="contained"
-        color="info"
-        startIcon={<Air />}
-        disabled={!canOperate || operationBusy || !!operation || !racks.length}
-        onClick={() => requestOperation('VENTILATE', racks)}
-        sx={{ minHeight: 44, px: 2.25, alignSelf: { xs: 'stretch', md: 'center' } }}
-      >
-        Ventilate cabinet
-      </Button>
-    </Stack>
-    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
-      <Chip icon={<Storage />} label={`${racks.length} racks`} variant="outlined" />
-      <Chip label="Local Serial control" color="success" variant="outlined" />
-      {!canOperate && <Chip label="Operator access required" color="warning" variant="outlined" />}
-    </Stack>
+  return <Stack spacing={1.25}>
+    <Box sx={{ pb: 1.25, borderBottom: '1px solid', borderColor: 'divider' }}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1.25}>
+        <Stack direction="row" alignItems="center" spacing={1} minWidth={0}>
+          <Button size="small" startIcon={<ArrowBack />} onClick={() => navigate('/cabinets')} sx={{ minHeight: 34, px: 1, flexShrink: 0 }}>Cabinets</Button>
+          <Box sx={{ minWidth: 0 }}>
+            <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+              <Typography variant="h5" sx={{ fontWeight: 760, lineHeight: 1.15 }}>Cabinet {id}</Typography>
+              <Chip size="small" icon={<Storage />} label={`${racks.length} racks`} variant="outlined" />
+              {!canOperate && <Chip size="small" label="Operator access required" color="warning" variant="outlined" />}
+            </Stack>
+            <Typography variant="caption" color="text.secondary">Rack operation and cabinet ventilation</Typography>
+          </Box>
+        </Stack>
+        <Button
+          variant="contained"
+          color="info"
+          size="small"
+          startIcon={<Air />}
+          disabled={!canOperate || operationBusy || !!operation || rackPanelBusy || cabinetVentilated || !racks.length}
+          onClick={() => requestOperation('VENTILATE', racks)}
+          sx={{ minHeight: 38, px: 1.75, alignSelf: { xs: 'stretch', sm: 'center' }, flexShrink: 0 }}
+        >
+          Ventilate cabinet
+        </Button>
+      </Stack>
+    </Box>
     {query.isError && <Alert severity="error">Could not load cabinet racks. Check the local IPC connection and retry.</Alert>}
     {!query.isLoading && !query.data?.length && <Alert severity="warning">No racks are configured for this cabinet.</Alert>}
-    <Grid container spacing={1.5}>{racks.map((rack: any, index: number) => {
-      const rackState = String(rack.status || '').trim().toLowerCase()
-      const isOpen = rackState === 'open' || rackState === 'opened'
-      const isClosed = rackState === 'closed'
-      const isMoving = ['opening', 'closing', 'moving'].includes(rackState)
-      return <Grid item xs={12} sm={6} lg={4} key={rack.id}>
-        <Card variant="outlined" sx={{ height: '100%', borderRadius: 1.5, borderColor: isOpen ? 'success.light' : 'divider', transition: 'border-color 160ms ease, box-shadow 160ms ease', '&:hover': { boxShadow: 2 } }}>
-          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-            <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1.5}>
-              <Stack direction="row" spacing={1.25} alignItems="center" minWidth={0}>
-                <Avatar variant="rounded" sx={{ width: 38, height: 38, bgcolor: isOpen ? 'success.50' : 'primary.50', color: isOpen ? 'success.dark' : 'primary.main' }}>
-                  {isOpen ? <LockOpen fontSize="small" /> : <Lock fontSize="small" />}
-                </Avatar>
-                <Box minWidth={0}>
-                  <Typography variant="subtitle1" fontWeight={750} noWrap>{rack.rack_name || `Rack ${index + 1}`}</Typography>
-                  <Typography variant="caption" color="text.secondary">Address {rack.rack_code}</Typography>
-                </Box>
-              </Stack>
-              <Chip size="small" label={rack.status || 'Unknown'} color={isOpen ? 'success' : 'default'} sx={{ maxWidth: 110 }} />
-            </Stack>
-            <Divider sx={{ my: 1.5 }} />
-            <Stack direction="row" justifyContent="space-between" spacing={1}>
-              <Box><Typography variant="caption" color="text.secondary">Position</Typography><Typography variant="body2" fontWeight={600}>{rack.position ?? '--'}</Typography></Box>
-              <Box sx={{ textAlign: 'right' }}><Typography variant="caption" color="text.secondary">Updated</Typography><Typography variant="body2" fontWeight={600}>{rack.last_updated || '--'}</Typography></Box>
-            </Stack>
-            <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
-              {isClosed && <Button size="small" variant="contained" startIcon={<LockOpen />} disabled={!canOperate || operationBusy || !!operation} onClick={() => requestOperation('OPEN', [rack])} sx={{ flex: 1, minHeight: 38, px: 1 }}>
-                Open
-              </Button>}
-              {isOpen && <Button size="small" variant="outlined" startIcon={<Lock />} disabled={!canOperate || operationBusy || !!operation} onClick={() => requestOperation('CLOSE', [rack])} sx={{ flex: 1, minHeight: 38, px: 1 }}>
-                Close
-              </Button>}
-              {isMoving && <Chip label="Moving" color="info" variant="outlined" sx={{ flex: 1 }} />}
-              {!isOpen && !isClosed && !isMoving && <Chip label="Awaiting status" variant="outlined" sx={{ flex: 1 }} />}
-              <Button size="small" variant="outlined" aria-label={`Toggle light for ${rack.rack_name || `rack ${index + 1}`}`} disabled={!canOperate || operationBusy || !!operation} onClick={() => requestOperation('LIGHT', [rack])} sx={{ minWidth: 40, minHeight: 38, px: 1 }}>
-                <Lightbulb fontSize="small" />
-              </Button>
-            </Stack>
-          </CardContent>
-        </Card>
-      </Grid>
-    })}</Grid>
+    <RackOperationPanel cabinetId={id} racks={racks} session={session} permissions={permissions} onSessionExpired={onSessionExpired} onLightRequest={sendLightCommand} lightBusy={lightCommandBusy} ventilation={operation?.kind === 'VENTILATE' ? { phase: operationPhase, baselineId: baselineOperationId, sentRackIds, completedRackIds } : null} externalVentilated={operation?.kind === 'VENTILATE' && operationPhase === 'success'} onBusyChange={setRackPanelBusy} onVentilatedChange={setCabinetVentilated} externalGapInvalidation={operation?.kind === 'VENTILATE' && ['success', 'uncertain'].includes(operationPhase) ? operation.requestKey : ''} blocked={!!operation} />
+    <Snackbar open={!!lightFeedback} autoHideDuration={3500} onClose={() => setLightFeedback(null)} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
+      {lightFeedback ? <Alert severity={lightFeedback.severity} variant="filled" onClose={() => setLightFeedback(null)}>{lightFeedback.message}</Alert> : <span />}
+    </Snackbar>
     <Dialog open={!!operation} onClose={closeOperationDialog} maxWidth="sm" fullWidth disableEscapeKeyDown={operationPhase === 'sending' || operationPhase === 'waiting'} PaperProps={{ sx: { borderRadius: 2, overflow: 'hidden' } }}>
       <Box sx={{ height: 5, bgcolor: operationPhase === 'success' ? 'success.main' : operationPhase === 'uncertain' ? 'warning.main' : 'info.main' }} />
       <DialogTitle sx={{ pb: 1, fontWeight: 750 }}>{dialogTitle}</DialogTitle>
@@ -254,21 +265,27 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
               <Box>
                 <Typography fontWeight={700}>{operationPhase === 'sending' ? 'Sending local commands' : 'Waiting for simulation'}</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {operationPhase === 'sending' ? 'Contacting each rack through the local Serial link.' : 'Completion is confirmed by fresh endpoint telemetry.'}
+                  {operation?.kind === 'VENTILATE'
+                    ? ventilationMovingRack
+                      ? `Moving Rack ${racks.findIndex(rack => rack.id === ventilationMovingRack.id) + 1} ${Number(ventilationMovingEvent?.state) === 1 ? 'LEFT' : 'RIGHT'} · ${Math.min(100, Math.round(Number(ventilationMovingEvent?.displacement || 0) / 64 * 100))}%`
+                      : operationPhase === 'sending' ? 'Dispatching ventilation commands…' : 'Waiting for the six rack endpoints.'
+                    : operationPhase === 'sending' ? 'Contacting each rack through the local Serial link.' : 'Completion is confirmed by fresh endpoint telemetry.'}
                 </Typography>
               </Box>
             </Stack>
-            {operationPhase === 'waiting' && <LinearProgress variant="determinate" value={sentRackIds.length ? completedRackIds.length / sentRackIds.length * 100 : 0} sx={{ height: 7, borderRadius: 4 }} />}
+            {operationPhase === 'waiting' && <LinearProgress variant="determinate" value={operation?.kind === 'VENTILATE' ? completedRackIds.length / Math.max(1, operation.racks.length) * 100 : sentRackIds.length ? completedRackIds.length / sentRackIds.length * 100 : 0} sx={{ height: 7, borderRadius: 4 }} />}
+            {operation?.kind === 'VENTILATE' && <Alert severity="info" icon={<Air />}>Ventilation target: six racks evenly spaced with five 20 mm gaps. The access aisle is unavailable during this cycle. {completedRackIds.length}/6 complete.</Alert>}
             <Stack spacing={0.75}>
               {operation?.racks.map((rack: any) => {
                 const rackId = Number(rack.id)
                 const complete = completedRackIds.includes(rackId)
                 const failed = failedRacks.some(item => Number(item.rack.id) === rackId)
                 const sent = sentRackIds.includes(rackId)
+                const isMoving = operation.kind === 'VENTILATE' && Number(ventilationMovingEvent?.rack_id) === rackId
                 return <Stack key={rackId} direction="row" alignItems="center" spacing={1} sx={{ py: 0.75, px: 1, borderRadius: 1, bgcolor: 'background.default' }}>
                   {complete ? <CheckCircle color="success" fontSize="small" /> : failed ? <ErrorOutline color="error" fontSize="small" /> : <CircularProgress size={16} />}
                   <Typography variant="body2" sx={{ flex: 1 }}>{rack.rack_name || `Rack ${rack.rack_code}`}</Typography>
-                  <Chip size="small" label={complete ? 'Complete' : failed ? 'Not confirmed' : sent ? 'Running' : 'Queued'} color={complete ? 'success' : failed ? 'error' : 'default'} variant={complete || failed ? 'filled' : 'outlined'} />
+                  <Chip size="small" label={complete ? 'Complete' : failed ? 'Not confirmed' : isMoving ? `Moving ${Number(ventilationMovingEvent?.state) === 1 ? 'LEFT' : 'RIGHT'}` : sent ? operation.kind === 'VENTILATE' ? 'Ventilating' : 'Running' : 'Queued'} color={complete ? 'success' : failed ? 'error' : isMoving ? 'warning' : 'default'} variant={complete || failed ? 'filled' : 'outlined'} />
                 </Stack>
               })}
             </Stack>

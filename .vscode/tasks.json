@@ -13,6 +13,17 @@
 			],
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "Test IPCSIM cabinet operation UI",
+			"type": "shell",
+			"command": "node.exe",
+			"args": [
+				"tests/cabinet_operation_browser.cjs"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
 		}
 	]
 }

@@ -192,5 +192,11 @@ def test_chart_metadata_uses_acquisition_time_without_changing_serial(monkeypatc
         assert timestamp == 2.75 and light is True
         assert frame == 'OPRSTT|1|0.0|0.0|0|1|0'
         assert SimulationAdapter().parse(frame).payload['state'] == 0
+        c.determine_operationInformation('0|1|5')
+        c.step_operations(0)
+        off_frame, _, light = c.operation_samples.get_nowait()
+        assert not light
+        assert off_frame == 'OPRSTT|1|0.0|0.0|0|1|5'
+        assert SimulationAdapter().parse(off_frame).payload['state'] == 5
     finally:
         c.execute_stopRunning()
