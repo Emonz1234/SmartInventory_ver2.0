@@ -192,12 +192,19 @@ class Runtime:
                 if time.monotonic()-heartbeat > 10:
                     self.store.emit("status", "status.heartbeat", {"serial_connected": self.serial.connected})
                     heartbeat = time.monotonic()
+                batch_started = time.monotonic()
                 for row in self.store.pending():
                     msg = json.loads(row["body"])
                     info = self.client.publish(topic(self.settings.DEVICE_ID, "up", row["channel"]), encode(msg, self.settings.DEVICE_SECRET), qos=1)
                     info.wait_for_publish(timeout=2)
                     if row["channel"] == "ack" and info.is_published():
                         self.store.delivered(row["id"])
+                    elif info.is_published():
+                        self.store.sent(row["id"])
+                    else:
+                        break
+                    if time.monotonic()-batch_started >= 2:
+                        break
             except Exception:
                 log.exception("Outbox send failed; retrying")
 

@@ -35,6 +35,68 @@ def test_database_identity_and_independence(tmp_path):
         Store(tmp_path / "a.db", "other", "IPC")
 
 
+def test_control_messages_bypass_backlog_and_heartbeat_is_coalesced(store):
+    for i in range(150):
+        store.emit('events', 'events.serial', {'sequence': i})
+    store.emit('status', 'status.heartbeat', {'serial_connected': False})
+    latest = store.emit('status', 'status.heartbeat', {'serial_connected': True})
+    ack = store.emit('ack', 'ack.applied', {}, correlation_id='snapshot')
+    sync = store.emit('sync', 'sync.request', {}, dataset_id='sim-a', revision=0)
+    pending = store.pending()
+    assert [r['id'] for r in pending[:3]] == [latest['message_id'], ack['message_id'], sync['message_id']]
+    with store.transaction() as db:
+        assert db.execute("SELECT count(*) FROM edge_outbox WHERE channel='events'").fetchone()[0] == 150
+        assert db.execute("SELECT count(*) FROM edge_outbox WHERE channel='status'").fetchone()[0] == 1
+
+
+def test_outbox_retry_delay_survives_restart(store, monkeypatch):
+    monkeypatch.setattr('ipc_core.store.time.time', lambda: 1000)
+    msg = store.emit('events', 'events.serial', {})
+    store.sent(msg['message_id'])
+    reopened = Store(store.path, store.device_id, store.device_type)
+    assert reopened.pending() == []
+    monkeypatch.setattr('ipc_core.store.time.time', lambda: 1015)
+    assert reopened.pending()[0]['id'] == msg['message_id']
+    reopened.delivered(msg['message_id'])
+    assert reopened.pending() == []
+
+
+def test_existing_outbox_schema_is_upgraded_without_losing_events(tmp_path):
+    path = tmp_path / 'old.db'
+    with sqlite3.connect(path) as db:
+        db.execute('CREATE TABLE edge_outbox(id TEXT PRIMARY KEY, channel TEXT, body TEXT, attempts INTEGER DEFAULT 0)')
+        msg = envelope('sim-a', 'IPCSIM', 'events.serial', {})
+        db.execute('INSERT INTO edge_outbox(id,channel,body) VALUES(?,?,?)', (msg['message_id'], 'events', json.dumps(msg)))
+    upgraded = Store(path, 'sim-a', 'IPCSIM')
+    assert upgraded.pending()[0]['id'] == msg['message_id']
+    upgraded.sent(msg['message_id'])
+    assert upgraded.pending() == []
+
+
+def test_pump_sends_fresh_heartbeat_before_backlog_and_keeps_unpublished_event(tmp_path):
+    settings = SimpleNamespace(DB_PATH=str(tmp_path / 'pump.db'), DEVICE_ID='sim-a',
+                               DEVICE_TYPE='IPCSIM', DEVICE_SECRET='x' * 48)
+    runtime = Runtime(settings, SimpleNamespace(connected=True))
+    for i in range(120):
+        runtime.store.emit('events', 'events.serial', {'sequence': i})
+    runtime.connected = True
+    waits = iter([False, True])
+    runtime.stop_event = SimpleNamespace(wait=lambda _: next(waits))
+    sent_channels = []
+
+    def publish(route, raw, qos):
+        sent_channels.append(route.rsplit('/', 1)[-1])
+        return SimpleNamespace(wait_for_publish=lambda timeout: None,
+                               is_published=lambda: route.endswith('/status'))
+
+    runtime.client = SimpleNamespace(publish=publish)
+    runtime.pump()
+    assert sent_channels == ['status', 'events']
+    with runtime.store.transaction() as db:
+        assert db.execute("SELECT count(*) FROM edge_outbox WHERE channel='events' AND sent_at IS NULL").fetchone()[0] == 120
+        assert db.execute("SELECT attempts FROM edge_outbox WHERE channel='status'").fetchone()[0] == 1
+
+
 def test_server_status_logs_follow_lease_and_sync_revision(tmp_path, capsys):
     settings = SimpleNamespace(DB_PATH=str(tmp_path / "runtime.db"), DEVICE_ID="sim-a", DEVICE_TYPE="IPCSIM")
     runtime = Runtime(settings, SimpleNamespace(connected=False))

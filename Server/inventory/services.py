@@ -1,5 +1,5 @@
 from datetime import timedelta
-from uuid import uuid4
+from uuid import uuid4, uuid5, NAMESPACE_URL
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
@@ -8,6 +8,19 @@ from .models import Device, Cabinet, Rack, Shelf, Bin, Item, Stock, Operation, L
 
 
 def queue(device, channel, kind, payload, **metadata):
+    if channel == 'ack' and metadata.get('correlation_id'):
+        # Reuse the same durable ACK even after a replay following a lost delivery.
+        ack_id = uuid5(NAMESPACE_URL, f'inventory/ack/{device.pk}/{kind}/{metadata["correlation_id"]}')
+        message = envelope(device.pk, device.device_type, kind, payload, **metadata)
+        message['message_id'] = str(ack_id)
+        pending, created = Outbox.objects.get_or_create(id=ack_id,
+            defaults={'device': device, 'channel': channel, 'body': message})
+        if not created and pending.acknowledged:
+            Outbox.objects.filter(pk=ack_id).update(acknowledged=False, sent_at=None)
+        return pending.body
+    if kind == 'status.lease':
+        Outbox.objects.filter(device=device, channel=channel, acknowledged=False,
+            body__message_type=kind).update(acknowledged=True)
     message = envelope(device.pk, device.device_type, kind, payload, **metadata)
     Outbox.objects.create(id=message["message_id"], device=device, channel=channel, body=message)
     return message

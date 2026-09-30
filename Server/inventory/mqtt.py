@@ -155,14 +155,20 @@ def run_worker(stop=None):
                 time.sleep(1)
                 continue
             cutoff = timezone.now()-timedelta(seconds=5)
-            from django.db.models import Q
+            from django.db.models import Q, Case, When, Value, IntegerField
             try:
                 expire_operations()
-                rows = list(Outbox.objects.filter(acknowledged=False, device__enabled=True).filter(Q(sent_at=None)|Q(sent_at__lt=cutoff)).select_related("device")[:100])
+                rows = list(Outbox.objects.filter(acknowledged=False, device__enabled=True)
+                    .filter(Q(sent_at=None)|Q(sent_at__lt=cutoff))
+                    .annotate(priority=Case(When(channel='status', then=Value(0)),
+                        When(channel='command', then=Value(1)), When(channel='sync', then=Value(2)),
+                        default=Value(3), output_field=IntegerField()))
+                    .order_by('priority', 'sent_at', 'id').select_related("device")[:100])
             except DatabaseError:
                 log.exception("Database unavailable; retaining outbox and retrying")
                 time.sleep(2)
                 continue
+            batch_started = time.monotonic()
             for out in rows:
                 try:
                     info = client.publish(topic(out.device_id, "down", out.channel), encode(out.body, out.device.secret), qos=1)
@@ -174,6 +180,8 @@ def run_worker(stop=None):
                         # An application ACK may race ahead of this PUBACK update.
                         # Never reset an already acknowledged durable message.
                         Outbox.objects.filter(pk=out.pk).update(**update)
+                    if time.monotonic()-batch_started >= 2:
+                        break
                 except Exception:
                     log.exception("Outbox publish failed; retrying")
                     break

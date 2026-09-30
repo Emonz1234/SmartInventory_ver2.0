@@ -1,6 +1,7 @@
 """SQLite journal and atomic read-model sync shared by both edge types."""
 import json
 import sqlite3
+import time
 from contextlib import contextmanager, closing
 from pathlib import Path
 from ipc_core.protocol import canonical, checksum, envelope
@@ -34,6 +35,8 @@ class Store:
                 if has_cabinets and db.execute("SELECT 1 FROM cabinets LIMIT 1").fetchone():
                     raise ValueError("Legacy populated database: back up/import it and choose a NEW edge DB_PATH")
             db.execute("INSERT OR IGNORE INTO edge_identity VALUES(1,?,?)", (device_id, device_type))
+            if 'sent_at' not in {r[1] for r in db.execute('PRAGMA table_info(edge_outbox)')}:
+                db.execute('ALTER TABLE edge_outbox ADD COLUMN sent_at REAL')
 
     def connect(self):
         db = sqlite3.connect(self.path, timeout=30)
@@ -64,6 +67,9 @@ class Store:
         return row[0] if row else 0
 
     def enqueue(self, db, channel, message):
+        if message['message_type'] == 'status.heartbeat':
+            # Only the latest liveness sample is useful; preserve all business events.
+            db.execute("DELETE FROM edge_outbox WHERE channel='status' AND json_extract(body,'$.message_type')='status.heartbeat'")
         db.execute("INSERT OR IGNORE INTO edge_outbox(id,channel,body) VALUES(?,?,?)",
                    (message["message_id"], channel, canonical(message)))
 
@@ -81,7 +87,16 @@ class Store:
 
     def pending(self):
         with self.transaction() as db:
-            return [dict(row) for row in db.execute("SELECT * FROM edge_outbox LIMIT 100")]
+            return [dict(row) for row in db.execute('''SELECT * FROM edge_outbox
+                WHERE sent_at IS NULL OR sent_at <= ?
+                ORDER BY CASE channel WHEN 'status' THEN 0 WHEN 'ack' THEN 1
+                    WHEN 'sync' THEN 2 ELSE 3 END, COALESCE(sent_at,0), rowid LIMIT 100''',
+                (time.time()-15,))]
+
+    def sent(self, message_id):
+        with self.transaction() as db:
+            db.execute('UPDATE edge_outbox SET sent_at=?, attempts=attempts+1 WHERE id=?',
+                       (time.time(), message_id))
 
     def delivered(self, message_id):
         with self.transaction() as db:
