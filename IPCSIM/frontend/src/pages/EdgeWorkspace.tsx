@@ -38,9 +38,10 @@ export const EdgeWorkspace = ({ session, permissions, onSessionExpired }: EdgeWo
   const bins = ofKind('bin').filter(b => shelves.some(s => s.id === b.shelf_id))
   const groupReady = !Object.keys(health.serial_groups || {}).length || health.serial_routes?.[rack] === true
   const hardwareReady = health.serial_connected && groupReady && health.hardware_enabled !== false && ['IPC', 'IPCSIM'].includes(health.device_type) && !snapshot.isError
-  const inventoryReady = hardwareReady && health.server_online && health.server_synced
-  const canOperate = permissions.includes('inventory.add_operation')
-  const canConfirm = permissions.includes('inventory.change_operation')
+  const inventoryReady = hardwareReady && health.local_operation_available
+  const canOperate = permissions.includes('cabinet.control')
+  const canInventory = permissions.includes('inventory.move')
+  const canConfirm = permissions.includes('inventory.move')
   const pending = (operations.data || []).filter((op: any) => !['confirmed', 'failed', 'cancelled'].includes(op.state))
   async function act(work: () => Promise<any>, refreshServer = true) {
     setBusy(true); setError(''); setNotice('')
@@ -67,26 +68,37 @@ export const EdgeWorkspace = ({ session, permissions, onSessionExpired }: EdgeWo
       }
       return
     }
-    const requestKey = Array.from(crypto.getRandomValues(new Uint8Array(24)), n => n.toString(16).padStart(2, '0')).join('')
+    const actionKey = `inventory:${kind}:${rack}:${item}:${bin}:${quantity}`
+    let requestKey = localRequestKeys.current.get(actionKey)
+    if (!requestKey) {
+      requestKey = Array.from(crypto.getRandomValues(new Uint8Array(24)), n => n.toString(16).padStart(2, '0')).join('')
+      localRequestKeys.current.set(actionKey, requestKey)
+    }
     const body: any = { rack_id: Number(rack), kind, request_key: requestKey }
     if (['PUT', 'PICK', 'ADJUST'].includes(kind)) Object.assign(body, { item_id: Number(item), bin_id: Number(bin), quantity })
     const response = await api.post('/operator/operations', body, { headers })
-    setNotice(`Lệnh ${response.data.id}: ${response.data.state}. Chưa xác nhận tồn kho.`)
+    localRequestKeys.current.delete(actionKey)
+    setNotice(`Lệnh ${response.data.id}: ${response.data.state}. Chờ mở tủ hoàn tất, xác nhận số lượng thực tế rồi đóng tủ để ghi nhận tồn kho.`)
   }
   return <Stack spacing={2}>
     <Typography variant="h4">{health.device_id || 'Edge'} · Vận hành cục bộ</Typography>
     <Stack direction="row" spacing={1} flexWrap="wrap">
-      <Chip label={`Server: ${health.server_online ? 'online' : 'offline'}`} color={health.server_online ? 'success' : 'default'} />
+      <Chip label={`Server: ${health.server_connection_status || 'DISCONNECTED'}`} color={health.server_online ? 'success' : 'default'} />
+      <Chip label={`Hardware: ${health.hardware_status || 'OFFLINE'}`} />
+      <Chip label={`Local operation: ${health.local_operation_available ? 'AVAILABLE' : 'UNAVAILABLE'}`} />
+      <Chip label={`Pending transactions: ${health.pending_transactions ?? 0}`} />
       <Chip label={`Serial: ${health.serial_connected ? 'connected' : 'disconnected'}`} />
       <Chip label={`Revision ${health.revision ?? '—'} · ${health.server_synced ? 'đã đồng bộ' : 'chờ đồng bộ'}`} />
       <Chip label={`${cabinets.length} tủ/nhóm · ${allRacks.length} rack · Outbox ${state.outbox_count ?? '—'}`} />
     </Stack>
     {health.device_type === 'IPC' && !health.hardware_enabled && <Alert severity="warning">Hardware chưa được bật trên IPC; lệnh phần cứng đang bị vô hiệu hóa.</Alert>}
     {!hardwareReady && <Alert severity="info">Điều khiển phần cứng cần topology đã cache tại IPC và kết nối Serial cục bộ.</Alert>}
-    {!inventoryReady && <Alert severity="info">PICK/PUT/ADJUST vẫn cần Server online và đồng bộ để bảo vệ tồn kho có thẩm quyền.</Alert>}
-    {!health.server_online && <Alert severity="warning">Server offline: OPEN/CLOSE/VENTILATE/LIGHT vẫn được gửi cục bộ khi Serial sẵn sàng; thay đổi tồn kho đang chờ kết nối.</Alert>}
+    {!inventoryReady && <Alert severity="info">PUT/PICK cần dữ liệu local đã đồng bộ lần đầu và Serial sẵn sàng cho vị trí đã chọn.</Alert>}
+    {!health.server_online && <Alert severity="warning">Offline Mode: IPC lưu nghiệp vụ và tồn kho tại local. Transaction sẽ tự gửi khi Server kết nối lại.</Alert>}
+    <Typography>Last successful sync: {health.last_successful_sync || 'Chưa đồng bộ'}</Typography>
+    {health.sync_error && <Alert severity="error">{health.sync_error}</Alert>}
     {snapshot.isError && <Alert severity="error">Không đọc được API local; dữ liệu hiển thị là lần nhận gần nhất.</Alert>}
-    {operations.isError && <Alert severity="warning">Không lấy được lịch sử Server. Kiểm tra kết nối/phiên đăng nhập trước khi gửi lại lệnh.</Alert>}
+    {operations.isError && <Alert severity="warning">Không đọc được lịch sử local. Kiểm tra API IPC và phiên đăng nhập.</Alert>}
     {error && <Alert severity="error">{error}</Alert>}{notice && <Alert severity="success">{notice}</Alert>}
     <Card><CardContent><Typography variant="h6">Chọn vị trí và thao tác</Typography><Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ my: 2 }}>
       <TextField select label="Tủ/nhóm" value={cabinet} onChange={e => { setCabinet(e.target.value); setRack(''); setBin('') }} sx={{ minWidth: 190 }}><MenuItem value="">Tất cả</MenuItem>{cabinets.map(c => <MenuItem key={c.id} value={c.id}>{c.cabinet_code} · {c.cabinet_name}</MenuItem>)}</TextField>
@@ -96,7 +108,7 @@ export const EdgeWorkspace = ({ session, permissions, onSessionExpired }: EdgeWo
         <TextField select label="Hàng hóa" value={item} onChange={e => setItem(e.target.value)} sx={{ minWidth: 190 }}><MenuItem value="">Chọn hàng</MenuItem>{items.filter(i => i.is_active).map(i => <MenuItem key={i.id} value={i.id}>{i.item_code} · {i.item_name}</MenuItem>)}</TextField>
         <TextField select label="Ô chứa" value={bin} onChange={e => setBin(e.target.value)} sx={{ minWidth: 190 }}><MenuItem value="">Chọn ô</MenuItem>{bins.map(b => <MenuItem key={b.id} value={b.id}>{b.bin_code}</MenuItem>)}</TextField>
         <TextField label="Số lượng" type="number" inputProps={{ min: 0, step: 1 }} value={quantity} onChange={e => setQuantity(Number(e.target.value))} />
-      </Stack><Stack direction="row" spacing={1}>{['PUT', 'PICK', 'ADJUST'].map(kind => <Button key={kind} disabled={!inventoryReady || !canOperate || !rack || !item || !bin || busy || !Number.isInteger(quantity) || quantity < (kind === 'ADJUST' ? 0 : 1)} onClick={() => void act(() => send(kind))}>{kind}</Button>)}</Stack>
+      </Stack><Stack direction="row" spacing={1}>{['PUT', 'PICK'].map(kind => <Button key={kind} disabled={!inventoryReady || !canInventory || !rack || !item || !bin || busy || !Number.isInteger(quantity) || quantity < (kind === 'ADJUST' ? 0 : 1)} onClick={() => void act(() => send(kind))}>{kind}</Button>)}</Stack>
       {!bins.length && <Typography sx={{ mt: 1 }}>Chưa cấu hình ô chứa cho rack này. Quản trị tại Server; không tự giả định cấu trúc.</Typography>}
     </CardContent></Card>
     <Card><CardContent><Typography variant="h6">Kết quả và xác nhận</Typography><Rows rows={operations.data || state.pending || []} />
@@ -107,7 +119,7 @@ export const EdgeWorkspace = ({ session, permissions, onSessionExpired }: EdgeWo
         })}>{success ? 'Xác nhận' : 'Thất bại'}</Button>)}</Stack>
     </CardContent></Card>
     <Card><CardContent><Typography variant="h6">Danh mục hàng hóa (mẫu được đánh dấu is_demo)</Typography><Rows rows={items} /></CardContent></Card>
-    <Card><CardContent><Typography variant="h6">Tồn kho đã xác nhận · cache</Typography><Rows rows={ofKind('stock')} /></CardContent></Card>
+    <Card><CardContent><Typography variant="h6">Tồn kho vận hành local</Typography><Rows rows={ofKind('stock')} /></CardContent></Card>
     <Card><CardContent><Typography variant="h6">Topology từ Server</Typography><Rows rows={cabinets} /></CardContent></Card>
     <Card><CardContent><Typography variant="h6">Ô chứa thuộc rack đã chọn</Typography><Rows rows={bins} /></CardContent></Card>
     <Card><CardContent><Typography variant="h6">Lịch sử thao tác local</Typography><Rows rows={state.operation_history || []} /></CardContent></Card>

@@ -16,7 +16,8 @@ def queue(device, channel, kind, payload, **metadata):
         pending, created = Outbox.objects.get_or_create(id=ack_id,
             defaults={'device': device, 'channel': channel, 'body': message})
         if not created and pending.acknowledged:
-            Outbox.objects.filter(pk=ack_id).update(acknowledged=False, sent_at=None)
+            Outbox.objects.filter(pk=ack_id).update(acknowledged=False, sent_at=None, body=message)
+            pending.body = message
         return pending.body
     if kind == 'status.lease':
         Outbox.objects.filter(device=device, channel=channel, acknowledged=False,
@@ -28,6 +29,11 @@ def queue(device, channel, kind, payload, **metadata):
 
 def records_for(device):
     records = []
+    from .offline import auth_records
+    records.extend(auth_records(device))
+    records.append({'key': 'device:config', 'kind': 'device_config', 'domain': device.device_type,
+                    'data': {'device_id': device.pk, 'device_type': device.device_type, 'enabled': device.enabled,
+                             'offline_protocol': 1}})
     def add(kind, key, data, domain=None):
         records.append(dict(key=f"{kind}:{key}", kind=kind, data=data, **({"domain": domain} if domain else {})))
     for item in Item.objects.order_by("pk"):

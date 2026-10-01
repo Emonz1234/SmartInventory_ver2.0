@@ -24,7 +24,7 @@ export const Header = ({ operatorName, onLogout }: HeaderProps) => {
               {status.device_type === 'IPC' ? 'Hardware Control' : 'Simulation Control'}
             </Typography>
             <Typography variant="caption" sx={{ color: '#b45309', fontWeight: 700, letterSpacing: 0.8 }}>
-              {status.device_type === 'IPC' ? 'HARDWARE NOT IMPLEMENTED' : 'SIMULATION ENVIRONMENT'}
+              {status.offline_mode ? 'OFFLINE MODE' : status.device_type === 'IPC' ? 'HARDWARE' : 'SIMULATION ENVIRONMENT'}
             </Typography>
           </Box>
         </Stack>
@@ -35,17 +35,21 @@ export const Header = ({ operatorName, onLogout }: HeaderProps) => {
               {operatorName}
             </Typography>
             <Typography variant="caption" display="block" sx={{ color: 'rgba(0,0,0,0.6)' }}>
-              Server operator
+              Local operator
             </Typography>
           </Box>
           <Chip
             size="medium"
             icon={<Circle sx={{ fontSize: '0.7rem !important' }} />}
-            label={status.serial_connected ? 'Serial: Connected' : 'Serial: Offline'}
+            label={`Hardware: ${status.hardware_status || 'OFFLINE'}`}
             color={status.serial_connected ? 'success' : 'default'}
             variant="outlined"
             sx={{ borderColor: 'rgba(0,0,0,0.12)' }}
           />
+          <Tooltip title={`Last sync: ${status.last_successful_sync || 'Never'}${status.sync_error ? ' · ' + status.sync_error : ''}`}>
+            <Chip label={`Local: ${status.local_operation_available ? 'AVAILABLE' : 'UNAVAILABLE'} · Pending: ${status.pending_transactions ?? 0}`}
+              color={status.sync_error ? 'error' : status.local_operation_available ? 'success' : 'default'} variant="outlined" />
+          </Tooltip>
           <Tooltip title="Đăng xuất">
             <IconButton aria-label="Đăng xuất" onClick={onLogout} color="inherit">
               <Logout />

@@ -12,7 +12,7 @@ class ConcurrentConfirmation(TransactionTestCase):
     @skipUnlessDBFeature("has_select_for_update")
     def test_two_confirmations_post_one_ledger_entry(self):
         user = get_user_model().objects.create_superuser("checker", "", "test-password")
-        device = Device.objects.create(device_id="physical", device_type="IPC", name="physical", secret="s"*48)
+        device = Device.objects.create(device_id="physical", device_type="IPC", name="physical")
         cabinet = Cabinet.objects.create(code="c", name="c", domain="IPC", device=device)
         rack = Rack.objects.create(cabinet=cabinet, address=1)
         shelf = Shelf.objects.create(rack=rack, code="s")

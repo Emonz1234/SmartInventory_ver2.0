@@ -1,7 +1,5 @@
 """Explicit, non-destructive Server bootstrap. No startup seed and no stock fabrication."""
 import json
-from pathlib import Path
-import secrets
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.contrib.auth.models import Group, Permission
@@ -10,38 +8,32 @@ from Server.inventory.services import refresh
 
 
 class Command(BaseCommand):
-    help = 'Bootstrap IPC1 (1 group x 6 racks) and IPCSIM (22 groups x 6 racks)'
+    help = 'Bootstrap IPC01 (1 group x 6 racks) and IPCSIM01 (22 groups x 6 racks)'
 
     def add_arguments(self, parser):
-        parser.add_argument('--ipc-device-id', default='IPC1')
-        parser.add_argument('--sim-device-id', default='IPCSIM')
+        parser.add_argument('--ipc-device-id', default='IPC01')
+        parser.add_argument('--sim-device-id', default='IPCSIM01')
         parser.add_argument('--sim-only', action='store_true', help='Bootstrap only the existing IPCSIM device and its 22 groups')
         parser.add_argument('--demo-catalog', action='store_true')
         parser.add_argument('--demo-locations', action='store_true')
-        parser.add_argument('--credentials-file', help='New file for device secrets; never printed to console')
         parser.add_argument('--dry-run', action='store_true')
 
     def handle(self, *args, **options):
         from ipc_core.protocol import valid_id
         from Simulation.topology import GROUP_COUNT, RACKS_PER_GROUP as MAX_RACK_NUMBER
-        output = Path(options['credentials_file']).resolve() if options['credentials_file'] else None
-        if output and output.exists():
-            raise CommandError('Credentials file exists; refusing to overwrite')
         ids = [options['ipc_device_id'], options['sim_device_id']]
         if len(set(ids)) != 2 or not all(valid_id(v) and v != 'inventory-server' for v in ids):
             raise CommandError('Device IDs must be unique and valid')
         topologies = ((ids[1], 'IPCSIM', 22),) if options['sim_only'] else ((ids[0], 'IPC', 1), (ids[1], 'IPCSIM', 22))
         counts = {}
-        credentials = {}
         with transaction.atomic():
             # Same ordering as master-data services; lock current registry before changing scopes.
             list(Device.objects.select_for_update().order_by('pk'))
             for identity, kind, total in topologies:
                 device, created = Device.objects.get_or_create(device_id=identity, defaults={
-                    'device_type': kind, 'name': identity, 'secret': secrets.token_urlsafe(48)})
+                    'device_type': kind, 'name': identity})
                 if device.device_type != kind:
                     raise CommandError(f'{identity} already belongs to another domain')
-                credentials[identity] = {'DEVICE_ID': identity, 'DEVICE_TYPE': kind, 'DEVICE_SECRET': device.secret}
                 counts[kind] = {'cabinets_added': 0, 'racks_added': 0}
                 if kind == 'IPC' and Cabinet.objects.filter(device=device).exclude(code='1').exists():
                     raise CommandError('Existing IPC topology has multiple groups; reconcile existing locations before bootstrapping the one-group topology')
@@ -102,10 +94,5 @@ class Command(BaseCommand):
                 AuditLog.objects.create(action='bootstrap', resource='topology', object_id=','.join(identity for identity, _, _ in topologies), after=counts)
             if options['dry_run']:
                 transaction.set_rollback(True)
-        if output and not options['dry_run']:
-            output.parent.mkdir(parents=True, exist_ok=True)
-            with output.open('x', encoding='utf-8') as handle:
-                json.dump(credentials, handle, ensure_ascii=False, indent=2)
-            output.chmod(0o600)
         self.stdout.write(json.dumps({'dry_run': options['dry_run'], 'added': counts,
             'stock_created': 0, 'transactions_created': 0}, ensure_ascii=False))

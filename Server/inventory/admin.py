@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Device, Cabinet, Rack, Shelf, Bin, Item, Stock, Operation, Ledger, RuntimeEvent, Category, AuditLog
+from .models import Device, Cabinet, Rack, Shelf, Bin, Item, Stock, Operation, Ledger, RuntimeEvent, Category, AuditLog, PhysicalTransaction
 
 
 class AuditAdmin(admin.ModelAdmin):
@@ -12,7 +12,16 @@ class AuditAdmin(admin.ModelAdmin):
 
 
 class DeviceAdmin(AuditAdmin):
-    exclude = ("secret",)
+    exclude = ("snapshot",)
+
+
+class PhysicalTransactionAdmin(AuditAdmin):
+    exclude = ('payload',)
+    list_display = ('transaction_id', 'device', 'status', 'applied_revision', 'error', 'received_at')
+    list_filter = ('status', 'device')
+
+
+admin.site.register(PhysicalTransaction, PhysicalTransactionAdmin)
 
 
 admin.site.register(Device, DeviceAdmin)

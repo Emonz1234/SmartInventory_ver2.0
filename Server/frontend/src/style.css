@@ -8,6 +8,213 @@
   font-synthesis: none;
   font-size: 14px;
 }
+.inv-filter {
+  display: grid;
+  grid-template-columns: 2fr repeat(3, 1fr);
+  gap: 12px;
+}
+.inv-filter label,
+.inv-adjust label {
+  display: grid;
+  gap: 6px;
+}
+.inv-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.inv-toggle input {
+  width: auto;
+}
+.inv-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0;
+}
+.inv-catalog {
+  margin: 10px 0;
+  color: #52697a;
+}
+.inv-catalog summary {
+  cursor: pointer;
+  padding: 8px 0;
+}
+.inv-catalog form {
+  background: #f5f8fa;
+  padding: 16px;
+  border-radius: 8px;
+}
+.inv-catalog fieldset > p {
+  grid-column: 1/-1;
+}
+.inv-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #edf1f5;
+  color: #415269;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.inv-chip.real,
+.inv-chip.normal,
+.inv-chip.synced,
+.inv-chip.available,
+.inv-chip.completed {
+  background: #e1f3ea;
+  color: #146044;
+}
+.inv-chip.simulation {
+  background: #ede6fd;
+  color: #6941a5;
+}
+.inv-chip.low-stock,
+.inv-chip.pending,
+.inv-chip.busy {
+  background: #fff1cd;
+  color: #805000;
+}
+.inv-chip.out-of-stock,
+.inv-chip.fault,
+.inv-chip.failed {
+  background: #ffe3e3;
+  color: #a02020;
+}
+.inv-product-head,
+.inv-product-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1.2fr 1.3fr;
+  gap: 14px;
+  align-items: center;
+}
+.inv-product-head {
+  font-size: 11px;
+  color: #617281;
+  padding: 12px 0;
+  border-bottom: 1px solid #dce4e8;
+}
+.inv-product-row {
+  padding: 16px 0;
+  border-bottom: 1px solid #edf1f5;
+}
+.inventory-workspace small,
+.inv-history small {
+  display: block;
+  color: #637586;
+  margin-top: 5px;
+  font-size: 12px;
+}
+.inv-product-row .link {
+  font-weight: 700;
+}
+.inv-tree details {
+  margin: 10px 0 10px 16px;
+}
+.inv-tree summary {
+  padding: 10px;
+  cursor: pointer;
+  font-weight: 700;
+  background: #f4f7fa;
+  border-radius: 7px;
+}
+.inv-location {
+  border: 1px solid #dee7ec;
+  padding: 16px;
+  margin: 12px 0;
+  border-radius: 9px;
+  display: grid;
+  gap: 7px;
+}
+.inv-location button {
+  justify-self: start;
+}
+.inv-drawer {
+  position: fixed;
+  inset: 0 0 0 auto;
+  margin: 0;
+  width: min(780px, 95vw);
+  height: 100dvh;
+  max-height: 100dvh;
+  border: 0;
+  padding: 26px;
+  overflow-y: auto;
+  color: #172c3c;
+  box-shadow: -10px 0 40px #0002;
+}
+.inv-drawer::backdrop {
+  background: #122b3b66;
+}
+.inv-overview {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  background: #f4f7fa;
+  padding: 16px;
+  border-radius: 9px;
+}
+.inv-overview dt {
+  font-size: 11px;
+  color: #607383;
+}
+.inv-overview dd {
+  margin: 5px 0;
+  font-weight: 700;
+}
+.inv-adjust {
+  display: block;
+  background: #f2f6f8;
+  padding: 20px;
+  border-radius: 8px;
+}
+.inv-adjust label {
+  margin: 12px 0;
+}
+.inv-history article {
+  border-bottom: 1px solid #dce4e8;
+  padding: 14px 0;
+}
+.inv-history article > div {
+  margin-bottom: 8px;
+}
+.metrics.inventory-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.inv-dashboard {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.inv-dashboard p strong {
+  float: right;
+}
+@media (max-width: 1150px) {
+  .inv-filter {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .inv-product-head {
+    display: none;
+  }
+  .inv-product-row {
+    grid-template-columns: 2fr 1fr 1fr;
+  }
+  .metrics.inventory-metrics {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+@media (max-width: 760px) {
+  .inv-filter,
+  .inv-dashboard {
+    grid-template-columns: 1fr 1fr;
+  }
+  .inv-product-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .inv-overview,
+  .metrics.inventory-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
 * {
   box-sizing: border-box;
 }
@@ -467,4 +674,18 @@ footer {
   dl {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+.inv-history.compact article {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 4px 12px;
+  padding: 10px 0;
+}
+.inv-history.compact p {
+  margin: 0;
+  font-size: 12px;
+}
+.inv-history.compact article > div {
+  margin: 0;
 }

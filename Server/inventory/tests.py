@@ -14,7 +14,7 @@ class InventoryTests(TestCase):
         self.item = Item.objects.create(code="PART", name="Part", unit="piece")
         self.devices = []
         for idx, kind in enumerate(["IPC", "IPCSIM", "IPCSIM"]):
-            d = Device.objects.create(device_id=f"device-{idx}", device_type=kind, name=kind, secret="x"*48, last_seen=timezone.now(), serial_connected=True)
+            d = Device.objects.create(device_id=f"device-{idx}", device_type=kind, name=kind, last_seen=timezone.now(), serial_connected=True)
             c = Cabinet.objects.create(code=f"cab-{idx}", name="Cabinet", domain=kind)
             r = Rack.objects.create(cabinet=c, address=1)
             s = Shelf.objects.create(rack=r, code="shelf")
@@ -34,14 +34,14 @@ class InventoryTests(TestCase):
     def result(self, op, state="sent"):
         d = op.device
         msg = envelope(d.pk, d.device_type, "events.command_result", {"state": state}, command_id=str(op.pk))
-        receive(topic(d.pk, "up", "events"), encode(msg, d.secret))
+        receive(topic(d.pk, "up", "events"), encode(msg))
         return msg
 
     def test_inventory_confirmation_is_atomic_idempotent_and_domain_isolated(self):
         op = self.command()
         self.assertEqual(Stock.objects.get(bin=op.bin).quantity, 10)
         msg = self.result(op)
-        receive(topic(op.device_id, "up", "events"), encode(msg, op.device.secret))
+        receive(topic(op.device_id, "up", "events"), encode(msg))
         confirm_operation(self.user, op.pk, "Operator counted actual removal")
         confirm_operation(self.user, op.pk, "Duplicate confirmation")
         self.assertEqual(Stock.objects.get(bin=op.bin).quantity, 7)
@@ -62,15 +62,16 @@ class InventoryTests(TestCase):
         d.refresh_from_db()
         self.assertFalse(any(x["kind"] == "rack" for x in d.snapshot))
 
-    def test_spoofed_type_secret_and_cross_device_result(self):
+    def test_spoofed_type_and_cross_device_result(self):
         op = self.command()
         d = op.device
         msg = envelope(d.pk, "IPC", "events.command_result", {"state": "sent"}, command_id=str(op.pk))
         with self.assertRaises(ValueError):
-            receive(topic(d.pk, "up", "events"), encode(msg, d.secret))
+            receive(topic(d.pk, "up", "events"), encode(msg))
         msg["device_type"] = d.device_type
+        msg["device_id"] = "another-device"
         with self.assertRaises(ValueError):
-            receive(topic(d.pk, "up", "events"), encode(msg, "z"*48))
+            receive(topic(d.pk, "up", "events"), encode(msg))
 
     def test_offline_no_operation(self):
         d = self.devices[1][0]
@@ -90,7 +91,7 @@ class InventoryTests(TestCase):
         out = Outbox.objects.filter(device=d, channel="sync").first()
         msg = envelope(d.pk, d.device_type, "ack.applied", {}, correlation_id=str(out.pk), dataset_id=d.pk, revision=999)
         with self.assertRaises(ValueError):
-            receive(topic(d.pk, "up", "ack"), encode(msg, d.secret))
+            receive(topic(d.pk, "up", "ack"), encode(msg))
 
     def test_rest_authentication_and_csrf(self):
         c = Client(enforce_csrf_checks=True)
@@ -99,6 +100,16 @@ class InventoryTests(TestCase):
         c.force_login(self.user)
         self.assertEqual(c.get("/api/devices").status_code, 200)
         self.assertEqual(c.post("/api/operations", {}, content_type="application/json").status_code, 403)
+
+    def test_device_registration_does_not_issue_device_secret(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            "/api/devices",
+            '{"device_id":"registered-sim","device_type":"IPCSIM","name":"Simulation"}',
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json(), {"device_id": "registered-sim"})
 
     def test_timeout_never_invents_failure_or_inventory_success(self):
         from .services import expire_operations
@@ -114,7 +125,7 @@ class InventoryTests(TestCase):
         device = op.device
         def telemetry(payload):
             message = envelope(device.pk, device.device_type, 'events.serial', dict(rack_id=op.rack.address, **payload))
-            receive(topic(device.pk, 'up', 'events'), encode(message, device.secret))
+            receive(topic(device.pk, 'up', 'events'), encode(message))
             op.refresh_from_db()
         telemetry(dict(state=-1, is_endpoint=1, displacement=64))
         self.assertEqual(op.execution_state, 'awaiting_device')

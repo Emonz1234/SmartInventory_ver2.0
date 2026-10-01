@@ -37,6 +37,8 @@ class Store:
             db.execute("INSERT OR IGNORE INTO edge_identity VALUES(1,?,?)", (device_id, device_type))
             if 'sent_at' not in {r[1] for r in db.execute('PRAGMA table_info(edge_outbox)')}:
                 db.execute('ALTER TABLE edge_outbox ADD COLUMN sent_at REAL')
+            from ipc_core.local_repository import migrate
+            migrate(db)
 
     def connect(self):
         db = sqlite3.connect(self.path, timeout=30)
@@ -106,7 +108,15 @@ class Store:
         with self.transaction() as db:
             return [json.loads(r[0]) for r in db.execute("SELECT body FROM edge_records ORDER BY key")]
 
-    def apply(self, message, project=None):
+    def public_records(self):
+        with self.transaction() as db:
+            records = [json.loads(r[0]) for r in db.execute("SELECT body FROM edge_records ORDER BY key")]
+            records = [r for r in records if r['kind'] not in ('auth', 'stock')]
+            for row in db.execute('SELECT id,item_id,bin_id,quantity FROM item_locations'):
+                records.append({'key': f'stock:{row[0]}', 'kind': 'stock', 'data': dict(row)})
+            return records
+
+    def apply(self, message, project=None, allow_revision_reset=False):
         dataset = message["dataset_id"]
         if dataset != self.device_id:
             raise ValueError("Dataset outside assignment")
@@ -115,7 +125,12 @@ class Store:
             raise ValueError("Invalid revision")
         with self.transaction() as db:
             current = self.revision(dataset, db)
-            if rev < current:
+            if project:
+                from ipc_core.local_repository import LocalRepository
+                floor = db.execute('SELECT COALESCE(max(server_revision),0) FROM local_transactions').fetchone()[0]
+                if not LocalRepository(self).can_pull(db) or rev < floor:
+                    return 'deferred'
+            if rev < current and (not allow_revision_reset or not project or message["message_type"] != "sync.full"):
                 return "stale"
             if rev == current:
                 cached = [json.loads(r[0]) for r in db.execute("SELECT body FROM edge_records WHERE dataset=? ORDER BY key", (dataset,))]
@@ -161,9 +176,9 @@ class Store:
                     raise ValueError("Duplicate key or cross-domain record")
                 keys.add(key)
                 db.execute("INSERT OR REPLACE INTO edge_records VALUES(?,?,?)", (dataset, key, canonical(record)))
+            db.execute("INSERT OR REPLACE INTO edge_revision VALUES(?,?,?)", (dataset, rev, payload["digest"]))
             if project:
                 project(db)
-            db.execute("INSERT OR REPLACE INTO edge_revision VALUES(?,?,?)", (dataset, rev, payload["digest"]))
             if message["message_type"] == "sync.full":
                 db.execute("DELETE FROM edge_staging WHERE sync_id=?", (message["sync_id"],))
             self.ack(db, message)

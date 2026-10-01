@@ -121,10 +121,11 @@ def console(request, resource, pk=None):
                 active_alarms=Alarm.objects.filter(
                     source_type__in=scopes, active=True
                 ).count(),
-                quantity=Stock.objects.filter(
+                quantity=(Stock.objects.filter(
                     bin__shelf__rack__cabinet__domain__in=domains
                 ).aggregate(n=Sum("quantity"))["n"]
-                or 0,
+                or 0) if len(domains) == 1 else None,
+                quantity_by_source={scope: Stock.objects.filter(bin__shelf__rack__cabinet__domain=SOURCE_DOMAIN[scope]).aggregate(n=Sum('quantity'))['n'] or 0 for scope in scopes},
                 environment=[rack_row(r) for r in racks[:200]],
             )
         )
@@ -287,7 +288,8 @@ def console(request, resource, pk=None):
                         category_id=item.category_id,
                         category=item.category.name if item.category_id else "",
                         status="active" if item.is_active else "inactive",
-                        quantity=sum(s.quantity for s in stocks),
+                        quantity=sum(s.quantity for s in stocks) if len(domains) == 1 else None,
+                        quantity_by_source={scope: sum(s.quantity for s in stocks if source(s.bin.shelf.rack.cabinet.domain) == scope) for scope in scopes},
                         locations=[
                             dict(
                                 location_id=s.bin_id,

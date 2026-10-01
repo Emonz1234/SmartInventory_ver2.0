@@ -23,7 +23,7 @@ with TestClient(app) as c:
     assert c.get('/api/operator/session',headers=h).status_code == 403
     assert c.get('/api/operator/operations',headers=h).status_code == 403
     assert c.post('/api/operator/operations',headers=h,json={'device_id':'other'}).status_code == 403
-    assert c.post('/api/operator/operations',headers=h,json={}).status_code == 409
+    assert c.post('/api/operator/operations',headers=h,json={}).status_code == 403
     assert c.get('/api/device/snapshot',headers=h).json()['records'] == []
     assert c.get('/ui/').status_code in (200, 503)
 '''

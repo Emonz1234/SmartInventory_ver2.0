@@ -24,6 +24,32 @@
 			"isBackground": false,
 			"problemMatcher": [],
 			"group": "test"
+		},
+		{
+			"label": "Build Server frontend",
+			"type": "shell",
+			"command": "npm.cmd",
+			"args": [
+				"--prefix",
+				"Server/frontend",
+				"run",
+				"build"
+			],
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Run Server frontend",
+			"type": "shell",
+			"command": "npm.cmd",
+			"args": [
+				"--prefix",
+				"Server/frontend",
+				"run",
+				"dev"
+			],
+			"isBackground": true,
+			"problemMatcher": []
 		}
 	]
 }

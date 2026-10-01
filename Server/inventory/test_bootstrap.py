@@ -3,6 +3,7 @@ from django.test import TestCase
 from django.core.management import call_command, CommandError
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.test import override_settings
 from .models import Device, Cabinet, Rack, Bin, Item, Category, Stock, Operation, Ledger, AuditLog, Outbox
 
 
@@ -12,7 +13,7 @@ class BootstrapTests(TestCase):
 
     def test_scope_mapping_no_stock_and_repeat_preserves_admin_changes(self):
         self.bootstrap()
-        ipc, sim = Device.objects.get(pk='IPC1'), Device.objects.get(pk='IPCSIM')
+        ipc, sim = Device.objects.get(pk='IPC01'), Device.objects.get(pk='IPCSIM01')
         self.assertEqual(Cabinet.objects.filter(device=ipc).count(), 1)
         self.assertEqual(Cabinet.objects.filter(device=sim).count(), 22)
         self.assertEqual(Rack.objects.filter(cabinet__device=ipc).count(), 6)
@@ -43,10 +44,22 @@ class BootstrapTests(TestCase):
         self.assertEqual(cabinet.name, 'Admin cabinet')
         self.assertEqual(Bin.objects.count(), 3)
 
+    def test_demo_seed_populates_every_sim_cabinet_one_rack_within_capacity(self):
+        with override_settings(DEBUG=True):
+            call_command('seed_demo_data', allow_demo=True, isolated_fixture=True, stdout=io.StringIO())
+        cabinet = Cabinet.objects.get(device_id='IPCSIM01', code='SIM-C01')
+        racks = Rack.objects.filter(cabinet=cabinet).order_by('address')
+        self.assertEqual(racks.count(), 6)
+        for rack in racks:
+            bin_obj = Bin.objects.get(shelf__rack=rack)
+            quantity = sum(Stock.objects.filter(bin=bin_obj).values_list('quantity', flat=True))
+            self.assertGreater(quantity, 0, rack.name)
+            self.assertLessEqual(quantity, bin_obj.capacity, rack.name)
+
     def test_sim_only_bootstrap_creates_twenty_two_groups_without_ipc(self):
         call_command('bootstrap_inventory', sim_only=True, stdout=io.StringIO())
-        self.assertFalse(Device.objects.filter(pk='IPC1').exists())
-        sim = Device.objects.get(pk='IPCSIM')
+        self.assertFalse(Device.objects.filter(pk='IPC01').exists())
+        sim = Device.objects.get(pk='IPCSIM01')
         self.assertEqual(Cabinet.objects.filter(device=sim).count(), 22)
         self.assertEqual(Rack.objects.filter(cabinet__device=sim).count(), 132)
         self.assertEqual(sum(row['kind'] == 'rack' for row in sim.snapshot), 132)
@@ -65,7 +78,7 @@ class BootstrapTests(TestCase):
         viewer = get_user_model().objects.create_user('viewer')
         viewer.groups.add(Group.objects.get(name='Viewer'))
         self.client.force_login(viewer)
-        item, cabinet = Item.objects.first(), Cabinet.objects.filter(device_id='IPC1').first()
+        item, cabinet = Item.objects.first(), Cabinet.objects.filter(device_id='IPC01').first()
         self.assertEqual(self.client.patch('/api/items', {'id': item.pk, 'name': 'Bad'}, content_type='application/json').status_code, 403)
         admin = get_user_model().objects.create_user('admin')
         admin.groups.add(Group.objects.get(name='Admin'))
@@ -73,12 +86,12 @@ class BootstrapTests(TestCase):
         Outbox.objects.all().delete()
         response = self.client.patch('/api/items', {'id': item.pk, 'name': 'Updated', 'is_active': False}, content_type='application/json')
         self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(set(Outbox.objects.values_list('device_id', flat=True)), {'IPC1', 'IPCSIM'})
+        self.assertEqual(set(Outbox.objects.values_list('device_id', flat=True)), {'IPC01', 'IPCSIM01'})
         self.assertTrue(all(row.body['message_type'] == 'sync.delta' for row in Outbox.objects.all()))
         Outbox.objects.all().delete()
         response = self.client.patch('/api/cabinets', {'id': cabinet.pk, 'description': 'Named by admin'}, content_type='application/json')
         self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(set(Outbox.objects.values_list('device_id', flat=True)), {'IPC1'})
+        self.assertEqual(set(Outbox.objects.values_list('device_id', flat=True)), {'IPC01'})
         self.assertEqual(self.client.patch('/api/cabinets', {'id': cabinet.pk, 'code': '7'}, content_type='application/json').status_code, 400)
         self.assertEqual(self.client.delete('/api/cabinets', {'id': cabinet.pk}, content_type='application/json').status_code, 400)
         self.assertEqual(self.client.post('/api/racks', {'cabinet_id': cabinet.pk, 'address': 1}, content_type='application/json').status_code, 400)

@@ -10,6 +10,8 @@ urlpatterns = [path("admin/", admin.site.urls), path("api/session", views.sessio
 urlpatterns += [path(f"api/{name}", views.resources, {"resource": name}) for name in views.RESOURCES]
 
 from .inventory.console import console
+from .inventory.overview import overview
+urlpatterns += [path('api/inventory-overview', overview)]
 urlpatterns += [path('api/' + name, console, {'resource':name}) for name in [
     'dashboard', 'ipcs', 'cabinet-groups', 'rack-status', 'environment', 'alarms', 'goods',
     'storage-locations', 'inventory-transactions', 'users', 'roles', 'permissions', 'audit-logs', 'settings']]

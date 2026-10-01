@@ -16,7 +16,6 @@ class Settings(BaseSettings):
     MQTT_HOST: str = ""
     MQTT_PORT: int = 8883
     MQTT_PASSWORD: str = ""
-    DEVICE_SECRET: str = ""
     MQTT_CA: str = ""
     MQTT_TLS: bool = True
     EDGE_API_TOKEN: str = ""
@@ -43,8 +42,8 @@ class Settings(BaseSettings):
             url = urlsplit(self.SERVER_URL)
             if url.scheme not in {'http', 'https'} or not url.netloc or url.username or url.password:
                 raise ValueError('SERVER_URL must be an http(s) origin without credentials')
-        if self.MQTT_HOST and (len(self.DEVICE_SECRET) < 32 or not self.MQTT_PASSWORD):
-            raise ValueError("MQTT_PASSWORD and a DEVICE_SECRET of at least 32 characters are required")
+        if self.MQTT_HOST and not self.MQTT_PASSWORD:
+            raise ValueError("MQTT_PASSWORD is required")
         Path(self.DB_PATH).resolve().parent.mkdir(parents=True, exist_ok=True)
 
 

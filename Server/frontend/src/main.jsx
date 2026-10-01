@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
+import Inventory from "./Inventory.jsx";
 
 async function api(path, method = "GET", data) {
   const csrf = document.cookie
@@ -31,7 +32,7 @@ const pages = [
   ["Cabinets", "rack-status", "cabinet.view"],
   ["Environment", "environment", "environment.view"],
   ["Alarms", "alarms", "alarm.view"],
-  ["Goods", "goods", "inventory.view"],
+  ["Inventory", "goods", "inventory.view"],
   ["Storage Map", "storage-locations", "inventory.view"],
   ["Transactions", "inventory-transactions", "inventory.view"],
   ["Audit Logs", "audit-logs", "audit.view"],
@@ -42,7 +43,7 @@ const pages = [
 function Badge({ source }) {
   return source ? (
     <span className={"badge " + (source === "SIMULATION" ? "sim" : "real")}>
-      [{source === "SIMULATION" ? "SIM" : source}]
+      [{source}]
     </span>
   ) : null;
 }
@@ -212,14 +213,6 @@ function Form({
 }
 const text = (name) => ({ name });
 const number = (name, optional = false) => ({ name, type: "number", optional });
-const goodsFields = [
-  text("code"),
-  text("name"),
-  text("unit"),
-  number("category_id", true),
-  { name: "description", optional: true },
-  { name: "is_active", type: "boolean", options: ["true", "false"] },
-];
 function App() {
   const [session, setSession] = useState(null),
     [page, setPage] = useState("Dashboard"),
@@ -253,6 +246,13 @@ function App() {
     let alive = true;
     const load = async () => {
       try {
+        if (
+          page === "Inventory" ||
+          (page === "Dashboard" && can("inventory.view"))
+        ) {
+          setData({});
+          return;
+        }
         const endpoint = pages.find((p) => p[0] === page)[1];
         const params = new URLSearchParams({
           source_type: source,
@@ -282,15 +282,6 @@ function App() {
       api("roles")
         .then((roles) => {
           if (alive) setLookup({ roles });
-        })
-        .catch((e) => {
-          if (alive) setError(e.message);
-        });
-    }
-    if (page === "Goods") {
-      api("categories?source_type=" + source)
-        .then((categories) => {
-          if (alive) setLookup({ categories });
         })
         .catch((e) => {
           if (alive) setError(e.message);
@@ -478,40 +469,31 @@ function App() {
           </p>
         )}
         {data === null && !error && <p role="status">Đang tải…</p>}
-        {page === "Dashboard" && data && (
-          <>
-            <div className="metrics">
-              {[
-                ["IPC online", `${data.online} / ${data.ipcs}`],
-                ["Cabinet groups", data.cabinet_groups],
-                ["Racks", data.racks],
-                ["Active alarms", data.active_alarms],
-                ["Inventory quantity", data.quantity],
-              ].map(([title, value]) => (
-                <article key={title}>
-                  <span>{title}</span>
-                  <strong>{value}</strong>
-                </article>
-              ))}
-            </div>
-            <section>
-              <h2>Giám sát rack</h2>
-              <Table
-                rows={data.environment}
-                columns={[
-                  "name",
-                  "source_type",
-                  "ipc_id",
-                  "online",
-                  "temperature",
-                  "humidity",
-                  "weight",
-                  "smoke",
-                  "last_update",
-                ]}
-              />
-            </section>
-          </>
+        {page === "Dashboard" && can("inventory.view") && (
+          <Inventory
+            api={api}
+            source={source}
+            setSource={setSource}
+            session={session}
+            can={can}
+            version={version}
+            dashboard
+          />
+        )}
+        {page === "Dashboard" && !can("inventory.view") && data && (
+          <div className="metrics">
+            {[
+              ["Active IPC", data.online],
+              ["Offline IPC", data.ipcs - data.online],
+              ["Cabinets", data.cabinet_groups],
+              ["Racks", data.racks],
+            ].map(([label, value]) => (
+              <article key={label}>
+                <span>{label}</span>
+                <strong>{value}</strong>
+              </article>
+            ))}
+          </div>
         )}
         {page === "IPC Devices" && (
           <>
@@ -586,16 +568,10 @@ function App() {
                   initial={{ source_type: source === "ALL" ? "REAL" : source }}
                   submit={(d) =>
                     act(async () => {
-                      const r = await api("ipcs", "POST", d);
-                      setLookup({ secret: r.device_secret });
+                      await api("ipcs", "POST", d);
                     })
                   }
                 />
-                {lookup.secret && (
-                  <p className="notice">
-                    Lưu secret vào cấu hình IPC: <code>{lookup.secret}</code>
-                  </p>
-                )}
               </section>
             )}
           </>
@@ -800,103 +776,15 @@ function App() {
             />
           </section>
         )}
-        {page === "Goods" && (
-          <>
-            <section>
-              <h2>
-                Danh mục hàng hóa{" "}
-                <small>Dùng chung · tồn kho tách theo nguồn</small>
-              </h2>
-              <Table
-                rows={rows}
-                onSelect={open}
-                columns={[
-                  "code",
-                  "name",
-                  "category",
-                  "unit",
-                  "status",
-                  "quantity",
-                ]}
-              />
-              {selection && (
-                <div className="inset">
-                  <h3>
-                    {selection.name} · #{selection.id}
-                  </h3>
-                  {selection.locations.map((l, i) => (
-                    <p key={i}>
-                      <Badge source={l.source_type} /> Position #{l.location_id}{" "}
-                      · {l.quantity} {selection.unit}
-                    </p>
-                  ))}
-                  {canAll("inventory.update") && (
-                    <Form
-                      key={selection.id}
-                      fields={goodsFields.map((f) =>
-                        f.name === "category_id"
-                          ? {
-                              ...f,
-                              options: (lookup.categories || []).map((c) => ({
-                                value: c.id,
-                                label: c.name,
-                              })),
-                            }
-                          : f,
-                      )}
-                      initial={{
-                        ...selection,
-                        is_active: selection.status === "active",
-                      }}
-                      submit={(d) =>
-                        mutate("goods", "PATCH", { ...d, id: selection.id })
-                      }
-                    />
-                  )}
-                  <button
-                    className="danger"
-                    disabled={!canAll("inventory.delete") || busy}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          "Xóa hàng hóa? Dữ liệu đã có lịch sử sẽ được bảo vệ.",
-                        )
-                      )
-                        mutate("goods", "DELETE", { id: selection.id })
-                          .then(() => setSelection(null))
-                          .catch(() => {});
-                    }}
-                  >
-                    Xóa hàng hóa
-                  </button>
-                </div>
-              )}
-            </section>
-            {canAll("inventory.create") && (
-              <section>
-                <h2>Thêm hàng hóa</h2>
-                <Form
-                  fields={goodsFields.map((f) =>
-                    f.name === "category_id"
-                      ? {
-                          ...f,
-                          options: (lookup.categories || []).map((c) => ({
-                            value: c.id,
-                            label: c.name,
-                          })),
-                        }
-                      : f,
-                  )}
-                  submit={(d) => mutate("goods", "POST", d)}
-                />
-                <h3>Thêm category</h3>
-                <Form
-                  fields={[text("code"), text("name")]}
-                  submit={(d) => mutate("categories", "POST", d)}
-                />
-              </section>
-            )}
-          </>
+        {page === "Inventory" && (
+          <Inventory
+            api={api}
+            source={source}
+            setSource={setSource}
+            session={session}
+            can={can}
+            version={version}
+          />
         )}
         {page === "Storage Map" && (
           <>
@@ -989,8 +877,9 @@ function App() {
             <section>
               <h2>Ghi nhận giao dịch kho</h2>
               <p>
-                Chỉ xác nhận sau khi kiểm tra hàng hóa thực tế. ADJUST là số
-                lượng tồn mới; RETURN phải tham chiếu giao dịch BORROW.
+                Chỉ xác nhận sau khi kiểm tra hàng hóa thực tế. Để chỉnh tồn,
+                mở Inventory → chi tiết sản phẩm → Inventory Adjustment.
+                RETURN phải tham chiếu giao dịch BORROW.
               </p>
               <Form
                 disabled={!can("inventory.move") || busy}
@@ -1003,7 +892,6 @@ function App() {
                       "MOVE",
                       "BORROW",
                       "RETURN",
-                      "ADJUST",
                     ],
                   },
                   number("item_id"),

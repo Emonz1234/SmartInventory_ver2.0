@@ -13,9 +13,18 @@ log = logging.getLogger(__name__)
 class Runtime:
     def __init__(self, settings, serial):
         self.settings, self.serial = settings, serial
+        self.operation_lock = threading.RLock()
         self.store = Store(settings.DB_PATH, settings.DEVICE_ID, settings.DEVICE_TYPE)
+        from ipc_core.auth_service import AuthService
+        from ipc_core.transaction_service import TransactionService
+        from ipc_core.sync_service import SyncService
+        self.auth = AuthService(self.store)
+        self.transactions = TransactionService(self.store, self.auth, self.send_checked)
+        self.transactions.recover()
+        self.sync = SyncService(self.store)
         self.lease_until = 0
         self.connected = False
+        self.hardware_fault = False
         self.remote_revision = None
         self._reported_server_online = None
         self._reported_synced = None
@@ -29,10 +38,11 @@ class Runtime:
 
     @property
     def synced(self):
-        return self.online and self.remote_revision is not None and self.remote_revision > 0 and self.store.revision() == self.remote_revision
+        return self.online and self.remote_revision is not None and self.remote_revision > 0 and self.store.revision() == self.remote_revision and not self.sync.repo.state()['pending_transactions']
 
     def request_sync(self):
-        self.store.emit("sync", "sync.request", {}, dataset_id=self.settings.DEVICE_ID, revision=self.store.revision())
+        self.sync.full_required = True
+        self.sync.requested_at = 0
 
     def report_server_state(self):
         online, synced = self.online, self.synced
@@ -48,6 +58,10 @@ class Runtime:
             self._reported_synced = synced
 
     def send_checked(self, body):
+        with self.store.transaction() as db:
+            active = self.transactions.repo.active(db)
+            if active and active['transaction_id'] != body.get('transaction_id'):
+                raise ValueError('A local physical transaction owns the hardware')
         # Preserve the existing physical breakdown interlock for open/close.
         if body["action"] in {"OPEN", "CLOSE", "VENTILATE"}:
             from ipc_core.app.utils.timezone import get_current_time
@@ -60,12 +74,23 @@ class Runtime:
 
     def receive(self, route, raw):
         cfg = self.settings
-        message = decode(raw, cfg.DEVICE_SECRET)
+        message = decode(raw)
         validate(route, message, cfg.DEVICE_ID, cfg.DEVICE_TYPE, "down")
         kind = message["message_type"]
-        if kind == "ack.received":
+        if kind == 'ack.transaction':
+            self.sync.acknowledge(message)
+        elif kind == 'status.ready':
+            self.sync.handshake(message['payload'])
+        elif kind == 'status.reconciled':
+            if self.sync.ready and message['payload'].get('revision') == self.store.revision():
+                with self.store.transaction() as db:
+                    allowed = self.sync.repo.can_pull(db)
+                if allowed:
+                    self.sync.reconciled()
+        elif kind == "ack.received":
             self.store.delivered(message["correlation_id"])
         elif kind == "ack.rejected":
+            self.sync.failed(message.get('correlation_id'), message['payload'].get('reason', 'Rejected'))
             with self.store.transaction() as db:
                 db.execute("INSERT INTO edge_runtime(body) VALUES(?)", (json.dumps(message),))
                 db.execute("DELETE FROM edge_outbox WHERE id=?", (message["correlation_id"],))
@@ -74,11 +99,16 @@ class Runtime:
             self.lease_until = min(until, time.time()+35)
             self.remote_revision = message["payload"]["revision"]
         elif kind.startswith("sync."):
+            if not self.sync.accept_master(message):
+                return
             try:
-                self.store.apply(message, project)
-                self.remote_revision = max(self.remote_revision or 0, message["revision"])
+                result = self.store.apply(message, project, allow_revision_reset=True)
+                if result in ('applied', 'duplicate'):
+                    self.sync.reconciled()
+                if result != 'deferred':
+                    self.remote_revision = max(self.remote_revision or 0, message["revision"])
             except (RevisionGap, ValueError, KeyError) as exc:
-                self.store.emit("sync", "sync.error", {"reason": str(exc)}, dataset_id=cfg.DEVICE_ID, revision=self.store.revision())
+                self.request_sync()
                 raise
         elif kind == "command.finalize":
             state = message["payload"]["state"]
@@ -94,6 +124,9 @@ class Runtime:
                 ack = envelope(cfg.DEVICE_ID, cfg.DEVICE_TYPE, "ack.command", {}, correlation_id=message["message_id"])
                 self.store.enqueue(db, "ack", ack)
         elif kind == "command.execute":
+            with self.store.transaction() as db:
+                if self.transactions.repo.active(db):
+                    raise ValueError('Local physical transaction is active')
             body = message["payload"]
             with self.store.transaction() as db:
                 old = db.execute("SELECT * FROM edge_operations WHERE id=?", (message["command_id"],)).fetchone()
@@ -125,6 +158,10 @@ class Runtime:
     def record_serial(self, message):
         if message.msg_type not in {"telemetry", "event", "ack"}:
             return
+        self.transactions.observe(message.payload)
+        fault_keys = ('is_obstructed', 'is_skewed', 'is_overload_motor')
+        if any(key in message.payload for key in fault_keys):
+            self.hardware_fault = any(message.payload.get(key) for key in fault_keys)
         kind = "telemetry.sample" if message.msg_type == "telemetry" else "events.serial"
         channel = kind.split(".")[0]
         outgoing = envelope(self.settings.DEVICE_ID, self.settings.DEVICE_TYPE, kind, message.payload)
@@ -140,25 +177,22 @@ class Runtime:
         if not self.settings.MQTT_HOST:
             print("[MQTT] Disabled: MQTT_HOST is empty")
             return
-        import paho.mqtt.client as mqtt
+        from ipc_core.mqtt_client import create_client
         cfg = self.settings
-        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=cfg.DEVICE_ID, clean_session=False, manual_ack=True)
-        self.client.username_pw_set(cfg.DEVICE_ID, cfg.MQTT_PASSWORD)
-        if cfg.MQTT_TLS:
-            self.client.tls_set(ca_certs=cfg.MQTT_CA or None)
-        self.client.reconnect_delay_set(1, 30)
+        self.client = create_client(cfg)
         def connected(c, userdata, flags, reason, properties):
             self.connected = not reason.is_failure
             self.lease_until = 0
             if self.connected:
                 print(f"[MQTT] Broker connected: {cfg.MQTT_HOST}:{cfg.MQTT_PORT} (TLS {'on' if cfg.MQTT_TLS else 'off'})")
                 c.subscribe(f"inventory/v1/{cfg.DEVICE_ID}/down/+", qos=1)
-                self.request_sync()
+                self.sync.connected()
             else:
                 print(f"[MQTT] Broker connection failed: {reason}")
             self.report_server_state()
         def disconnected(*args):
             self.connected, self.lease_until = False, 0
+            self.sync.disconnected()
             reason = args[3] if len(args) > 3 else "connection closed"
             print(f"[MQTT] Broker disconnected: {reason}")
             self.report_server_state()
@@ -189,13 +223,27 @@ class Runtime:
                 self.report_server_state()
                 if not self.connected:
                     continue
+                outgoing = self.sync.next_message()
+                if outgoing:
+                    try:
+                        info = self.client.publish(topic(self.settings.DEVICE_ID, 'up', outgoing['message_type'].split('.')[0]), encode(outgoing), qos=1)
+                        info.wait_for_publish(timeout=2)
+                        if not info.is_published():
+                            self.sync.failed(outgoing['message_id'], 'MQTT publish not acknowledged')
+                    except Exception as exc:
+                        self.sync.failed(outgoing['message_id'], exc)
+                        raise
                 if time.monotonic()-heartbeat > 10:
                     self.store.emit("status", "status.heartbeat", {"serial_connected": self.serial.connected})
                     heartbeat = time.monotonic()
                 batch_started = time.monotonic()
                 for row in self.store.pending():
+                    # SyncService owns reconnect ordering; discard obsolete legacy sync requests.
+                    if row['channel'] == 'sync':
+                        self.store.delivered(row['id'])
+                        continue
                     msg = json.loads(row["body"])
-                    info = self.client.publish(topic(self.settings.DEVICE_ID, "up", row["channel"]), encode(msg, self.settings.DEVICE_SECRET), qos=1)
+                    info = self.client.publish(topic(self.settings.DEVICE_ID, "up", row["channel"]), encode(msg), qos=1)
                     info.wait_for_publish(timeout=2)
                     if row["channel"] == "ack" and info.is_published():
                         self.store.delivered(row["id"])

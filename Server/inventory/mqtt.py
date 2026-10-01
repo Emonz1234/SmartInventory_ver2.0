@@ -19,9 +19,21 @@ def receive(route, raw):
     if len(parts) != 5:
         raise ValueError("Invalid route")
     device = Device.objects.select_for_update().get(pk=parts[2], enabled=True)
-    message = decode(raw, device.secret)
+    message = decode(raw)
     validate(route, message, device.pk, device.device_type, "up")
     kind, payload = message["message_type"], message["payload"]
+    if kind == 'status.hello':
+        from .services import refresh
+        refresh(device)
+        queue(device, 'status', 'status.ready', {'nonce': payload['nonce'], 'revision': device.revision})
+        return
+    if kind == 'events.transaction':
+        from .offline import replay
+        result = replay(device, payload)
+        Outbox.objects.filter(device=device, body__message_type='ack.transaction',
+                              body__correlation_id=payload['transaction_id'], acknowledged=False).update(acknowledged=True)
+        queue(device, 'ack', 'ack.transaction', result, correlation_id=payload['transaction_id'])
+        return
     if kind == "ack.command":
         Outbox.objects.filter(pk=message["correlation_id"], device=device,
             body__message_type="command.finalize").update(acknowledged=True)
@@ -50,9 +62,26 @@ def receive(route, raw):
         elif kind in {"sync.request", "sync.error"}:
             if message.get("dataset_id") != device.pk:
                 raise ValueError("Unauthorized dataset")
-            # Materialized snapshot is immutable at a revision; batching never reads live tables.
-            Outbox.objects.filter(device=device, channel="sync", acknowledged=False).update(acknowledged=True)
-            full_snapshot(device)
+            if payload.get('offline_protocol') == 1 and kind == 'sync.request':
+                requested = message.get('revision', 0)
+                if requested == device.revision:
+                    queue(device, 'status', 'status.reconciled', {'revision': device.revision}, correlation_id=message['message_id'])
+                else:
+                    deltas = list(Outbox.objects.filter(device=device, channel='sync', body__message_type='sync.delta',
+                                                       body__revision__gt=requested).order_by('body__revision'))
+                    cursor, chain = requested, []
+                    for delta in deltas:
+                        if delta.body['payload']['base_revision'] == cursor:
+                            chain.append(delta.pk)
+                            cursor = delta.body['revision']
+                    if cursor == device.revision and chain and requested >= payload.get('minimum_revision', 0):
+                        Outbox.objects.filter(pk__in=chain).update(acknowledged=False, sent_at=None)
+                    else:
+                        Outbox.objects.filter(device=device, channel='sync', acknowledged=False).update(acknowledged=True)
+                        full_snapshot(device)
+            else:
+                Outbox.objects.filter(device=device, channel="sync", acknowledged=False).update(acknowledged=True)
+                full_snapshot(device)
         elif kind == "events.command_result":
             op = Operation.objects.select_for_update().get(pk=message["command_id"], device=device)
             state = payload["state"]
@@ -119,11 +148,11 @@ def run_worker(stop=None):
             receive(msg.topic, msg.payload)
         except (ValueError, KeyError, TypeError, Device.DoesNotExist, Operation.DoesNotExist) as exc:
             log.exception("Rejected MQTT packet")
-            # Only authenticated envelopes may receive a signed rejection. This
-            # keeps revoked-scope telemetry from blocking the sender's outbox.
+            # Only valid envelopes with registered device identity receive a
+            # rejection, keeping revoked-scope telemetry from blocking the outbox.
             try:
                 device = Device.objects.get(pk=msg.topic.split("/")[2], enabled=True)
-                rejected = decode(msg.payload, device.secret)
+                rejected = decode(msg.payload)
                 validate(msg.topic, rejected, device.pk, device.device_type, "up")
                 with transaction.atomic():
                     queue(device, "ack", "ack.rejected", {"reason": str(exc)}, correlation_id=rejected["message_id"])
@@ -162,6 +191,7 @@ def run_worker(stop=None):
                     .filter(Q(sent_at=None)|Q(sent_at__lt=cutoff))
                     .annotate(priority=Case(When(channel='status', then=Value(0)),
                         When(channel='command', then=Value(1)), When(channel='sync', then=Value(2)),
+                        When(body__message_type='ack.transaction', then=Value(0)),
                         default=Value(3), output_field=IntegerField()))
                     .order_by('priority', 'sent_at', 'id').select_related("device")[:100])
             except DatabaseError:
@@ -171,7 +201,7 @@ def run_worker(stop=None):
             batch_started = time.monotonic()
             for out in rows:
                 try:
-                    info = client.publish(topic(out.device_id, "down", out.channel), encode(out.body, out.device.secret), qos=1)
+                    info = client.publish(topic(out.device_id, "down", out.channel), encode(out.body), qos=1)
                     info.wait_for_publish(timeout=3)
                     if info.is_published():
                         update = {"sent_at": timezone.now(), "attempts": out.attempts+1}

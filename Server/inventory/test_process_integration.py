@@ -79,15 +79,15 @@ class ProcessIntegration(TransactionTestCase):
                     launch('web', ['node', 'Server/frontend/node_modules/vite/bin/vite.js', 'Server/frontend',
                         '--config', 'Server/frontend/vite.config.js', '--host', '127.0.0.1', '--port', str(web_port)],
                         env | {'SERVER_API_URL': f'http://127.0.0.1:{server_port}'})
-                edge_env = env | dict(DEVICE_ID=device.pk, DEVICE_TYPE='IPCSIM', DEVICE_SECRET=device.secret,
+                edge_env = env | dict(DEVICE_ID=device.pk, DEVICE_TYPE='IPCSIM',
                     SERVER_URL=f'http://127.0.0.1:{server_port}',
                     SERIAL_GROUP_PORTS=json.dumps({'1': f'socket://127.0.0.1:{serial_port}', '2': f'socket://127.0.0.1:{serial_port_two}'}),
                     DB_PATH=str(temp/'edge.sqlite3'), EDGE_API_TOKEN='local-test-token', SERIAL_PORT='',
                     EDGE_ENV_FILE=str(temp/'absent.env'))
                 edge_args = [sys.executable, '-m', 'uvicorn', 'ipc_core.api:app', '--host', '127.0.0.1', '--port', str(api_port)]
                 edge = launch('edge', edge_args, edge_env)
-                physical = Device.objects.get(pk='IPC1')
-                physical_env = edge_env | dict(DEVICE_ID=physical.pk, DEVICE_TYPE='IPC', DEVICE_SECRET=physical.secret,
+                physical = Device.objects.get(pk='IPC01')
+                physical_env = edge_env | dict(DEVICE_ID=physical.pk, DEVICE_TYPE='IPC',
                     DB_PATH=str(temp/'physical.sqlite3'), SERIAL_PORT='', SERIAL_GROUP_PORTS='{}', HARDWARE_ENABLED='false')
                 launch('physical', [sys.executable, '-m', 'uvicorn', 'ipc_core.api:app', '--host', '127.0.0.1', '--port', str(physical_port)], physical_env)
                 def physical_snapshot():

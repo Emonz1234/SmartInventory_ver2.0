@@ -37,7 +37,6 @@ class ConsoleTests(TestCase):
                 device_id=domain,
                 device_type=domain,
                 name=domain,
-                secret="x" * 48,
                 last_seen=timezone.now(),
                 serial_connected=True,
             )
@@ -175,8 +174,8 @@ class ConsoleTests(TestCase):
             "telemetry.sample",
             {"rack_id": 1, "temperature": 60, "humidity": 40, "smoke": 1},
         )
-        receive(topic(d.pk, "up", "telemetry"), encode(msg, d.secret))
-        receive(topic(d.pk, "up", "telemetry"), encode(msg, d.secret))
+        receive(topic(d.pk, "up", "telemetry"), encode(msg))
+        receive(topic(d.pk, "up", "telemetry"), encode(msg))
         self.assertEqual(EnvironmentStatus.objects.count(), 1)
         self.assertEqual(Alarm.objects.filter(active=True).count(), 2)
         alarm = Alarm.objects.get(code="smoke")

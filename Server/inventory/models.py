@@ -9,7 +9,6 @@ class Device(models.Model):
     device_id = models.CharField(max_length=64, primary_key=True)
     device_type = models.CharField(max_length=6, choices=TYPES)
     name = models.CharField(max_length=120)
-    secret = models.CharField(max_length=128)
     enabled = models.BooleanField(default=True)
     last_seen = models.DateTimeField(null=True, blank=True)
     serial_connected = models.BooleanField(default=False)
@@ -69,6 +68,7 @@ class Category(models.Model):
 
 
 class Item(models.Model):
+    barcode = models.CharField(max_length=64, blank=True, db_index=True)
     code = models.CharField(max_length=64, unique=True)
     name = models.CharField(max_length=120)
     unit = models.CharField(max_length=32)
@@ -79,8 +79,12 @@ class Item(models.Model):
     is_active = models.BooleanField(default=True)
     is_demo = models.BooleanField(default=False)
 
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['barcode'], condition=~Q(barcode=''), name='item_barcode_unique_nonblank')]
+
 
 class Stock(models.Model):
+    updated_at = models.DateTimeField(auto_now=True)
     item = models.ForeignKey(Item, on_delete=models.PROTECT)
     bin = models.ForeignKey(Bin, on_delete=models.PROTECT)
     quantity = models.PositiveIntegerField(default=0)
@@ -228,6 +232,18 @@ class InventoryTransaction(models.Model):
                 | Q(kind='MOVE', from_location__isnull=False, to_location__isnull=False)
             ), name='transaction_location_shape'),
         ]
+
+
+class PhysicalTransaction(models.Model):
+    """Immutable edge evidence, retained even when reconciliation conflicts."""
+    transaction_id = models.UUIDField(primary_key=True)
+    device = models.ForeignKey(Device, on_delete=models.PROTECT)
+    digest = models.CharField(max_length=64)
+    payload = models.JSONField()
+    status = models.CharField(max_length=16, default='PENDING')
+    error = models.TextField(blank=True)
+    applied_revision = models.PositiveBigIntegerField(null=True)
+    received_at = models.DateTimeField(auto_now_add=True)
 
 
 class SystemSetting(models.Model):

@@ -75,7 +75,7 @@ def test_existing_outbox_schema_is_upgraded_without_losing_events(tmp_path):
 
 def test_pump_sends_fresh_heartbeat_before_backlog_and_keeps_unpublished_event(tmp_path):
     settings = SimpleNamespace(DB_PATH=str(tmp_path / 'pump.db'), DEVICE_ID='sim-a',
-                               DEVICE_TYPE='IPCSIM', DEVICE_SECRET='x' * 48)
+                               DEVICE_TYPE='IPCSIM')
     runtime = Runtime(settings, SimpleNamespace(connected=True))
     for i in range(120):
         runtime.store.emit('events', 'events.serial', {'sequence': i})
@@ -91,7 +91,7 @@ def test_pump_sends_fresh_heartbeat_before_backlog_and_keeps_unpublished_event(t
 
     runtime.client = SimpleNamespace(publish=publish)
     runtime.pump()
-    assert sent_channels == ['status', 'events']
+    assert sent_channels == ['status', 'status', 'events']  # handshake, heartbeat, business backlog
     with runtime.store.transaction() as db:
         assert db.execute("SELECT count(*) FROM edge_outbox WHERE channel='events' AND sent_at IS NULL").fetchone()[0] == 120
         assert db.execute("SELECT attempts FROM edge_outbox WHERE channel='status'").fetchone()[0] == 1
@@ -126,6 +126,13 @@ def test_full_sync_duplicate_stale_and_scope(store):
     assert store.apply(msg) == "stale"
     with pytest.raises(ValueError):
         store.apply(snapshot(device="other"))
+
+
+def test_full_sync_reconciles_higher_local_revision_from_server(store):
+    assert store.apply(snapshot(rev=4)) == "applied"
+    lower_revision = snapshot(rev=2, records=[])
+    assert store.apply(lower_revision, project=lambda db: None, allow_revision_reset=True) == "applied"
+    assert store.revision() == 2
 
 
 def test_batches_out_of_order_and_integrity(store):
@@ -251,8 +258,18 @@ def test_local_device_command_api_needs_no_server_but_checks_permission(store):
         "data": {"id": 1, "rack_code": "7"}
     }]))
     sent = []
+    from ipc_core.auth_service import AuthService
+    from ipc_core.local_repository import LocalRepository
+    import threading
+    with store.transaction() as db:
+        for uid, permissions in ((1, ['cabinet.control']), (2, [])):
+            record = {'key': f'auth:{uid}', 'kind': 'auth', 'data': {'id': uid, 'version': 'v1', 'permissions': permissions}}
+            db.execute('INSERT INTO edge_records VALUES(?,?,?)', ('sim-a', record['key'], json.dumps(record)))
     runtime = SimpleNamespace(
         store=store,
+        auth=AuthService(store),
+        transactions=SimpleNamespace(repo=LocalRepository(store)),
+        operation_lock=threading.RLock(),
         serial=SimpleNamespace(connected=True),
         send_checked=lambda body: sent.append(body)
     )
@@ -267,11 +284,11 @@ def test_local_device_command_api_needs_no_server_but_checks_permission(store):
 
     expires = time.monotonic() + 60
     sessions["local-command-test"] = {
-        "identity": {"permissions": ["inventory.add_operation"]},
+        "identity": {"id": 1, "permissions": ['cabinet.control']}, "version": 'v1',
         "expires": expires
     }
     sessions["local-command-viewer-test"] = {
-        "identity": {"permissions": []},
+        "identity": {"id": 2, "permissions": []}, "version": 'v1',
         "expires": expires
     }
     command = {"rack_id": 1, "kind": "OPEN", "request_key": "local-api-op"}
@@ -297,13 +314,13 @@ def test_offline_and_wrong_revision_commands_rejected(store):
         store.execute(msg, lambda _: pytest.fail("Serial write"), True)
 
 
-def test_signed_envelope_topic_and_registry_identity():
-    secret = "a"*48
+def test_envelope_topic_and_registry_identity():
     msg = snapshot()
-    raw = encode(msg, secret)
-    assert decode(raw, secret) == msg
-    with pytest.raises(ValueError):
-        decode(raw, "b"*48)
+    raw = encode(msg)
+    assert decode(raw) == msg
+    legacy_raw = json.dumps({"message": msg, "signature": "legacy-signature"})
+    assert decode(legacy_raw) == msg
+    validate(topic("sim-a", "down", "sync"), decode(legacy_raw), "sim-a", "IPCSIM", "down")
     with pytest.raises(ValueError):
         validate(topic("other", "down", "sync"), msg, "sim-a", "IPCSIM", "down")
     with pytest.raises(ValueError):

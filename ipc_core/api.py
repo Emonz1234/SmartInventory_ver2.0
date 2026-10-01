@@ -94,7 +94,19 @@ def health():
     routes = {str(row['data']['id']): (links.get((int(row['data']['rack_code'])-1)//RACKS_PER_GROUP+1).connected
               if (int(row['data']['rack_code'])-1)//RACKS_PER_GROUP+1 in links else False)
               for row in runtime.store.records() if row['kind'] == 'rack'} if links else {}
-    return {"device_id": settings.DEVICE_ID, "device_type": settings.DEVICE_TYPE,
+    local_state = runtime.sync.repo.state()
+    hardware_status = 'ONLINE' if serial_manager.connected else 'OFFLINE'
+    with runtime.store.transaction() as db:
+        fault = db.execute("SELECT 1 FROM local_transactions WHERE operation_status='UNCERTAIN' LIMIT 1").fetchone()
+        initialized = runtime.store.revision(db=db) > 0
+        has_auth = db.execute("SELECT 1 FROM edge_records WHERE key LIKE 'auth:%' LIMIT 1").fetchone() is not None
+    if fault or runtime.hardware_fault:
+        hardware_status = 'FAULT'
+    available = initialized and has_auth and hardware_status == 'ONLINE' and (settings.DEVICE_TYPE != 'IPC' or settings.HARDWARE_ENABLED)
+    return {**local_state, 'hardware_status': hardware_status,
+            'server_connection_status': ('CONNECTED' if runtime.synced else 'SYNCING') if runtime.online else 'DISCONNECTED',
+            'offline_mode': not runtime.online, 'local_operation_available': available,
+            "device_id": settings.DEVICE_ID, "device_type": settings.DEVICE_TYPE,
             "serial_connected": serial_manager.connected, "simulation_online": settings.DEVICE_TYPE == "IPCSIM" and serial_manager.connected,
             "hardware_enabled": settings.DEVICE_TYPE != "IPC" or settings.HARDWARE_ENABLED,
             "database_healthy": True, "server_synced": runtime.synced,
@@ -116,7 +128,7 @@ def device_snapshot():
         events = [dict(r) for r in db.execute("SELECT * FROM edge_runtime ORDER BY rowid DESC LIMIT 100")]
         backlog = db.execute("SELECT count(*) FROM edge_outbox").fetchone()[0]
         history = [dict(r) for r in db.execute('SELECT * FROM edge_operations ORDER BY rowid DESC LIMIT 200')]
-    return {"health": health(), "records": runtime.store.records(), "racks": legacy_racks(),
+    return {"health": health(), "records": runtime.store.public_records(), "racks": legacy_racks(),
             "pending": pending(), "operation_history": history, "events": events, "outbox_count": backlog}
 
 

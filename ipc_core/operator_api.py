@@ -1,10 +1,9 @@
-"""Local React gateway to authenticated central operations; never writes master data."""
+﻿"""Local operator API. All authentication and business operations use local state."""
 import secrets
 import threading
 import time
 from fastapi import APIRouter, HTTPException, Request
 from ipc_core.app.core.config import settings
-from ipc_core.operator_client import OperatorClient
 
 router = APIRouter(prefix='/api/operator', tags=['operator'])
 sessions = {}
@@ -17,27 +16,34 @@ def session(request):
         value = sessions.get(key)
         if not value or value['expires'] < time.monotonic():
             sessions.pop(key, None)
-            raise HTTPException(403, 'Đăng nhập tài khoản Server để thao tác')
-        return value
+            raise HTTPException(403, 'Local session expired; sign in again')
+    try:
+        current = request.app.state.runtime.auth.identity(user_id=value['identity']['id'])
+        if current['version'] != value['version']:
+            raise ValueError('Credentials or permissions changed')
+    except ValueError as exc:
+        with guard:
+            sessions.pop(key, None)
+        raise HTTPException(403, str(exc)) from None
+    return value
 
 
 @router.post('/login')
-def login(data: dict):
-    if not settings.SERVER_URL:
-        raise HTTPException(503, 'Chưa cấu hình SERVER_URL')
-    client = OperatorClient(settings.SERVER_URL)
+def login(request: Request, data: dict):
+    runtime = request.app.state.runtime
     try:
-        identity = client.login(data.get('username', ''), data.get('password', ''))
-    except Exception:
-        raise HTTPException(403, 'Đăng nhập thất bại hoặc Server không truy cập được') from None
+        identity = runtime.auth.login(data.get('username', ''), data.get('password', ''))
+        version = runtime.auth.identity(user_id=identity['id'])['version']
+    except ValueError as exc:
+        raise HTTPException(403, str(exc)) from None
     token = secrets.token_urlsafe(32)
     with guard:
         for key in list(sessions):
             if sessions[key]['expires'] < time.monotonic():
                 del sessions[key]
         if len(sessions) >= 100:
-            raise HTTPException(429, 'Quá nhiều phiên đăng nhập')
-        sessions[token] = {'client': client, 'identity': identity, 'expires': time.monotonic()+8*3600, 'lock': threading.Lock()}
+            raise HTTPException(429, 'Too many local sessions')
+        sessions[token] = {'identity': identity, 'version': version, 'expires': time.monotonic()+8*3600}
     return {'session': token, **identity}
 
 
@@ -50,86 +56,82 @@ def logout(request: Request):
 
 @router.get('/session')
 def current_session(request: Request):
-    key = request.headers.get('X-Operator-Session', '')
-    identity = session(request)
-    try:
-        with identity['lock']:
-            current = identity['client'].request('session')
-    except ValueError:
-        with guard:
-            sessions.pop(key, None)
-        raise HTTPException(403, 'Phiên đăng nhập Server đã hết hạn') from None
-    except Exception:
-        raise HTTPException(503, 'Server không phản hồi để xác minh phiên') from None
-    if not current.get('authenticated'):
-        with guard:
-            sessions.pop(key, None)
-        raise HTTPException(403, 'Phiên đăng nhập Server đã hết hạn')
-    return current
-
-
-def central(request, path, method='GET', body=None):
-    identity = session(request)
-    try:
-        with identity['lock']:
-            return identity['client'].request(path, method, body)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from None
-    except Exception:
-        raise HTTPException(503, 'Server không phản hồi; kiểm tra lịch sử trước khi gửi lại') from None
+    return session(request)['identity']
 
 
 @router.get('/operations')
 def operations(request: Request):
-    from urllib.parse import urlencode
-    rows = central(request, 'operations?' + urlencode({'device_id': settings.DEVICE_ID}))
-    return [row for row in rows if row['device_id'] == settings.DEVICE_ID]
+    session(request)
+    return request.app.state.runtime.transactions.repo.transactions()
+
+
+def local_ready(runtime):
+    if settings.DEVICE_TYPE == 'IPC' and not settings.HARDWARE_ENABLED:
+        raise HTTPException(503, 'Physical hardware integration is disabled')
+    if not runtime.serial.connected:
+        raise HTTPException(503, 'Local Serial is disconnected')
+
+
+def public_operation(row):
+    # Never return the signed authorization credential in API responses.
+    return {k: v for k, v in row.items() if k != 'authorization'} | {
+        'id': row['transaction_id'], 'kind': row['operation_type'], 'state': row['operation_status'].lower()}
 
 
 @router.post('/operations')
 def operate(request: Request, data: dict):
     if data.get('device_id', settings.DEVICE_ID) != settings.DEVICE_ID:
-        raise HTTPException(403, 'Không được điều khiển device khác qua edge này')
+        raise HTTPException(403, 'Device outside local scope')
+    identity = session(request)['identity']
     runtime = request.app.state.runtime
-    if not runtime.synced:
-        raise HTTPException(409, 'Thiết bị phải online và đồng bộ; offline chỉ đọc cache')
-    data = {**data, 'device_id': settings.DEVICE_ID}
-    return central(request, 'operations', 'POST', data)
+    local_ready(runtime)
+    try:
+        with runtime.operation_lock:
+            return public_operation(runtime.transactions.start(identity['id'], data))
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(409, str(exc)) from None
 
 
 @router.post('/device-commands')
 def device_command(request: Request, data: dict):
-    identity = session(request).get('identity', {})
-    if 'inventory.add_operation' not in identity.get('permissions', []):
-        raise HTTPException(403, 'Tài khoản hiện tại không có quyền điều khiển thiết bị')
-    action = str(data.get('kind', '')).upper()
-    if action not in {'OPEN', 'CLOSE', 'VENTILATE', 'LIGHT', 'HOME', 'LIGHT_OFF'}:
-        raise HTTPException(400, 'Unsupported device command')
-    rack_id = data.get('rack_id')
-    if type(rack_id) is not int or rack_id < 1:
-        raise HTTPException(400, 'A valid rack_id is required')
-    request_key = data.get('request_key')
-    if not isinstance(request_key, str) or not request_key or len(request_key) > 128:
-        raise HTTPException(400, 'A valid request_key is required')
-
+    identity = session(request)['identity']
     runtime = request.app.state.runtime
-    if settings.DEVICE_TYPE == 'IPC' and not settings.HARDWARE_ENABLED:
-        raise HTTPException(503, 'Physical hardware integration is disabled on this IPC')
-    if not runtime.serial.connected:
-        raise HTTPException(503, 'Local Serial is disconnected; device command was not sent')
     try:
-        state = runtime.store.execute_local(request_key, rack_id, action, runtime.send_checked)
+        runtime.auth.authorize(identity['id'], 'cabinet.control')
+    except ValueError as exc:
+        raise HTTPException(403, str(exc)) from None
+    action = str(data.get('kind', '')).upper()
+    rack_id, key = data.get('rack_id'), data.get('request_key')
+    if action not in {'OPEN', 'CLOSE', 'VENTILATE', 'LIGHT', 'HOME', 'LIGHT_OFF'} or type(rack_id) is not int or rack_id < 1:
+        raise HTTPException(400, 'Invalid device command')
+    if not isinstance(key, str) or not 1 <= len(key) <= 128:
+        raise HTTPException(400, 'A stable request_key is required')
+    local_ready(runtime)
+    try:
+        with runtime.operation_lock:
+            with runtime.store.transaction() as db:
+                if runtime.transactions.repo.active(db):
+                    raise ValueError('Finish the active PUT/PICK before issuing another hardware command')
+            state = runtime.store.execute_local(key, rack_id, action, runtime.send_checked)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from None
     except Exception:
-        raise HTTPException(503, 'Serial result is uncertain; inspect the rack before retrying') from None
-    return {'id': request_key, 'rack_id': rack_id, 'kind': action, 'state': state}
+        raise HTTPException(503, 'Serial result uncertain; inspect hardware before retrying') from None
+    return {'id': key, 'rack_id': rack_id, 'kind': action, 'state': state}
 
 
 @router.post('/operations/{operation_id}/confirm')
 def confirm(request: Request, operation_id: str, data: dict):
-    # Server authoritative scope check before forwarding confirmation.
-    rows = operations(request)
-    if not any(row['id'] == operation_id for row in rows):
-        raise HTTPException(404, 'Không tìm thấy lệnh trong phạm vi thiết bị')
-    return central(request, f'operations/{operation_id}/confirm', 'POST', data)
+    identity = session(request)['identity']
+    if type(data.get('success', True)) is not bool:
+        raise HTTPException(400, 'success must be boolean')
+    if type(data.get('keep_open', False)) is not bool:
+        raise HTTPException(400, 'keep_open must be boolean')
+    runtime = request.app.state.runtime
+    if data.get('success', True):
+        local_ready(runtime)
+    try:
+        return public_operation(runtime.transactions.confirm(identity['id'], operation_id,
+                                data.get('success', True), data.get('note', ''), data.get('keep_open', False)))
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from None

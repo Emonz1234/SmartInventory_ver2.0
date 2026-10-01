@@ -93,7 +93,7 @@ function App() {
           setOperatorPermissions([])
           setOperatorError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
         } else {
-          setSessionWarning('Chưa xác minh được phiên với Server. Có thể xem cache; thao tác cần Server sẽ chờ kết nối.')
+          setSessionWarning('Chưa xác minh được phiên local. Kiểm tra kết nối tới IPC.')
         }
       })
       .finally(() => { if (!cancelled) setCheckingSession(false) })
@@ -108,7 +108,19 @@ function App() {
       if (!authenticated) {
         const base = (import.meta as any).env.VITE_EDGE_API_URL || '/api'
         const response = await fetch(base + '/system/health', { headers: { Authorization: `Bearer ${token}` } })
-        if (!response.ok) throw new Error('Edge API token không hợp lệ hoặc thiết bị chưa sẵn sàng.')
+        if (!response.ok) {
+          let detail = ''
+          try {
+            detail = (await response.json()).detail || ''
+          } catch {
+          }
+          if (response.status === 401) {
+            localStorage.removeItem('token')
+            setToken('')
+            setAuthenticated(false)
+          }
+          throw new Error(detail || 'Edge API token không hợp lệ hoặc thiết bị chưa sẵn sàng.')
+        }
         localStorage.setItem('token', token)
         setAuthenticated(true)
       }
@@ -123,7 +135,7 @@ function App() {
       setOperatorLogin({ username: operatorLogin.username, password: '' })
       setSessionWarning('')
     } catch (failure: any) {
-      setOperatorError(failure.response?.data?.detail || failure.message || 'Đăng nhập thất bại hoặc Server không truy cập được.')
+      setOperatorError(failure.response?.data?.detail || failure.message || 'Đăng nhập local thất bại; kiểm tra tài khoản đã đồng bộ về IPC.')
     } finally {
       setOperatorBusy(false)
     }

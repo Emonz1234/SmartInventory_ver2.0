@@ -1,6 +1,5 @@
-"""Versioned, signed MQTT envelope. No broker credentials are carried in payloads."""
+"""Versioned MQTT envelope. No broker credentials are carried in payloads."""
 import hashlib
-import hmac
 import json
 import re
 from datetime import datetime, timezone
@@ -51,19 +50,18 @@ def validate(route, message, device_id, device_type, direction):
         raise ValueError("Message channel mismatch")
 
 
-def encode(message, secret):
-    if len(secret) < 32:
-        raise ValueError("DEVICE_SECRET must contain at least 32 characters")
-    signature = hmac.new(secret.encode(), canonical(message).encode(), hashlib.sha256).hexdigest()
-    return canonical({"message": message, "signature": signature})
+def encode(message):
+    return canonical(message)
 
 
-def decode(raw, secret):
-    if len(raw) > 2_000_000 or len(secret) < 32:
-        raise ValueError("Invalid packet size or secret")
-    packet = json.loads(raw)
-    message = packet["message"]
-    expected = hmac.new(secret.encode(), canonical(message).encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(expected, packet.get("signature", "")):
-        raise ValueError("Invalid message signature")
+def decode(raw):
+    if len(raw) > 2_000_000:
+        raise ValueError("Invalid packet size")
+    message = json.loads(raw)
+    # Previous releases wrapped the envelope; unwrap it during rolling upgrades.
+    if (isinstance(message, dict) and set(message) == {"message", "signature"}
+            and isinstance(message["message"], dict) and isinstance(message["signature"], str)):
+        message = message["message"]
+    if not isinstance(message, dict):
+        raise ValueError("Invalid message envelope")
     return message

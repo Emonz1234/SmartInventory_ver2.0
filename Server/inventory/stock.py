@@ -105,6 +105,8 @@ def transact(user, data):
             raise ValueError("Resolve pending device operation at this location first")
         stock, _ = Stock.objects.get_or_create(item=item, bin=location)
         before[str(location.pk)] = stock.quantity
+        if kind == "ADJUST" and "expected_quantity" in data and data["expected_quantity"] != stock.quantity:
+            raise ValueError("Stock changed since review; reload the location before adjusting")
         quantity = qty if kind == "ADJUST" else stock.quantity + delta
         if quantity < 0:
             raise ValueError("Insufficient stock")
@@ -120,7 +122,7 @@ def transact(user, data):
         ):
             raise ValueError("Location reserved or capacity exceeded")
         stock.quantity = quantity
-        stock.save(update_fields=["quantity"])
+        stock.save(update_fields=["quantity", "updated_at"])
         after[str(location.pk)] = quantity
     entry = InventoryTransaction.objects.create(
         **signature, actor=user, note=data["note"], request_key=data["request_key"]

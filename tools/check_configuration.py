@@ -13,14 +13,13 @@ def check(path, network=False):
         return {'configuration_file': False}
     values = dotenv_values(path)
     edge = 'DEVICE_ID' in values
-    required = ['DEVICE_ID', 'DB_PATH', 'EDGE_API_TOKEN', 'DEVICE_SECRET', 'MQTT_PASSWORD'] if edge else [
+    required = ['DEVICE_ID', 'DB_PATH', 'EDGE_API_TOKEN', 'MQTT_PASSWORD'] if edge else [
         'DJANGO_SECRET_KEY', 'DJANGO_ALLOWED_HOSTS', 'POSTGRES_PASSWORD', 'MQTT_PASSWORD']
     result = {key + '_configured': bool(values.get(key)) and not str(values[key]).startswith(('replace-', 'your-')) for key in required}
     host = values.get('MQTT_HOST', '')
     result['mqtt_client_host'] = bool(host and host not in ('0.0.0.0', '::'))
     if edge:
         result['device_type'] = values.get('DEVICE_TYPE') in ('IPC', 'IPCSIM')
-        result['device_secret_length'] = len(values.get('DEVICE_SECRET') or '') >= 32
         result['serial_configured'] = bool(values.get('SERIAL_PORT')) or values.get('SERIAL_GROUP_PORTS', '{}') != '{}' or values.get('DEVICE_TYPE') == 'IPC'
     if network and result['mqtt_client_host']:
         try:

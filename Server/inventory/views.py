@@ -1,5 +1,4 @@
 import json
-import secrets
 from functools import wraps
 from django.contrib.auth import authenticate, login, logout
 from django.db import transaction, IntegrityError
@@ -91,13 +90,12 @@ def devices(request):
     if not valid_id(data["device_id"]) or data["device_id"] == "inventory-server" or data["device_type"] not in {"IPC", "IPCSIM"}:
         raise ValueError("Invalid identity")
     require(request.user, "ipc.manage", source(data["device_type"]))
-    secret = secrets.token_urlsafe(48)
     with transaction.atomic():
-        device = Device.objects.create(device_id=data["device_id"], device_type=data["device_type"], name=data["name"], secret=secret)
+        device = Device.objects.create(device_id=data["device_id"], device_type=data["device_type"], name=data["name"])
         refresh(device, full=True)
         AuditLog.objects.create(actor=request.user, action='create', resource='device', object_id=device.pk,
                                 after={'name': device.name, 'device_type': device.device_type}, source_type=source(device.device_type))
-    return JsonResponse({"device_id": device.pk, "device_secret": secret}, status=201)
+    return JsonResponse({"device_id": device.pk}, status=201)
 
 
 @api()
@@ -117,7 +115,7 @@ RESOURCES = {
     "racks": (Rack, {"cabinet_id", "address", "name"}),
     "shelves": (Shelf, {"rack_id", "code", "level"}),
     "bins": (Bin, {"shelf_id", "code", "capacity"}),
-    "items": (Item, {"code", "name", "unit", "min_qty", "max_qty", "category_id", "description", "is_active"}),
+    "items": (Item, {"code", "barcode", "name", "unit", "min_qty", "max_qty", "category_id", "description", "is_active"}),
     "categories": (Category, {'code', 'name', 'description'}),
 }
 

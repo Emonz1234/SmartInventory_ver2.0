@@ -49,7 +49,7 @@ class BrokerIntegration(TransactionTestCase):
                 user = get_user_model().objects.create_superuser("test", "", "test-password")
                 item = Item.objects.create(code="part",name="part",unit="piece")
                 for i, kind in enumerate(["IPC","IPCSIM","IPCSIM"]):
-                    device = Device.objects.create(device_id=f"edge-{i}",device_type=kind,name=kind,secret="s"*48)
+                    device = Device.objects.create(device_id=f"edge-{i}",device_type=kind,name=kind)
                     cabinet = Cabinet.objects.create(code=f"C{i}",name="cabinet",domain=kind)
                     rack = Rack.objects.create(cabinet=cabinet,address=7+i)
                     shelf = Shelf.objects.create(rack=rack,code="shelf")
@@ -62,7 +62,7 @@ class BrokerIntegration(TransactionTestCase):
                     engine.dispose()
                     writes = []
                     serial = SimpleNamespace(connected=True,send_domain=writes.append)
-                    cfg = SimpleNamespace(DB_PATH=str(path),DEVICE_ID=device.pk,DEVICE_TYPE=kind,DEVICE_SECRET=device.secret,
+                    cfg = SimpleNamespace(DB_PATH=str(path),DEVICE_ID=device.pk,DEVICE_TYPE=kind,
                         MQTT_HOST="127.0.0.1",MQTT_PORT=port,MQTT_PASSWORD="test-broker-password",MQTT_TLS=False)
                     edge = Runtime(cfg,serial)
                     edges.append((edge,device,rack,bin_obj,writes))
@@ -103,6 +103,28 @@ class BrokerIntegration(TransactionTestCase):
                 from Server.inventory.models import RuntimeEvent
                 eventually(lambda:RuntimeEvent.objects.filter(device=device).exists())
                 self.assertEqual(len(writes),1)
+                # Disconnect MQTT, complete local PUT/PICK, restart IPC and replay over real TCP.
+                edge.client.disconnect()
+                eventually(lambda:not edge.connected)
+                for index, (kind, quantity) in enumerate([('PUT', 3), ('PICK', 2)]):
+                    tx = edge.transactions.start(user.pk, dict(kind=kind, quantity=quantity,
+                        item_id=item.pk, bin_id=bin_obj.pk, rack_id=rack.pk, request_key=f'local-offline-{index}'))
+                    for state, position, endpoint in [(1, 1, 0), (-1, 20, 1)]:
+                        edge.transactions.observe({'rack_id':rack.address,'state':state,'displacement':position,'is_endpoint':endpoint})
+                    edge.transactions.confirm(user.pk, tx['transaction_id'], True, 'Physical count verified')
+                    for state, position, endpoint in [(2, 1, 0), (-1, 0, 1)]:
+                        edge.transactions.observe({'rack_id':rack.address,'state':state,'displacement':position,'is_endpoint':endpoint})
+                self.assertEqual(edge.sync.repo.state()['pending_transactions'], 2)
+                edge.stop()
+                replacement = Runtime(edge.settings, edge.serial)
+                edges[1] = (replacement,device,rack,bin_obj,writes)
+                edge = replacement
+                edge.start()
+                eventually(lambda:edge.sync.repo.state()['pending_transactions']==0, seconds=60)
+                eventually(lambda:edge.store.revision()==Device.objects.get(pk=device.pk).revision)
+                self.assertEqual(Stock.objects.get(bin=bin_obj).quantity, 9)
+                with edge.store.transaction() as db:
+                    self.assertEqual(db.execute('SELECT quantity FROM item_locations WHERE item_id=? AND bin_id=?', (item.pk,bin_obj.pk)).fetchone()[0], 9)
                 for edge,*_ in edges:
                     edge.stop()
                 stop.set()
