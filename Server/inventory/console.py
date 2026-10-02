@@ -22,6 +22,7 @@ from .models import (
     RolePermission,
     SystemSetting,
 )
+from .location import location_fields
 from .permissions import require, sources, source, SOURCE_DOMAIN, PERMISSIONS, allowed
 from .services import online, create_operation
 from .stock import transact
@@ -54,6 +55,7 @@ def location_row(b):
         b.stock_set.filter(quantity__gt=0).values("item_id", "item__name", "quantity")
     )
     return dict(
+        **location_fields(b.shelf.rack),
         id=b.pk,
         code=b.code,
         area=c.area,
@@ -74,6 +76,7 @@ def location_row(b):
 def rack_row(r):
     status = getattr(r, "rackstatus", None)
     return dict(
+        **location_fields(r),
         id=r.pk,
         cabinet_id=r.cabinet_id,
         cabinet=r.cabinet.name,
@@ -183,6 +186,7 @@ def console(request, resource, pk=None):
                         id=c.pk,
                         name=c.name,
                         code=c.code,
+                        cabinet_index=c.cabinet_index, device_code=c.device_id, device_type=source(c.domain),
                         area=c.area,
                         ipc_id=c.device_id,
                         source_type=source(c.domain),

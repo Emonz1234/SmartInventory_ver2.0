@@ -54,6 +54,12 @@ class ItemLocationOut(BaseModel):
     cabinet_id: Optional[int] = None
     cabinet_code: Optional[str] = None
     cabinet_name: Optional[str] = None
+    device_code: Optional[str] = None
+    device_type: Optional[str] = None
+    cabinet_index: Optional[int] = None
+    rack_index: Optional[int] = None
+    rack_identity_code: Optional[str] = None
+    serial_address: Optional[int] = None
     location_path: Optional[str] = None
 
     @field_validator('updated_at', mode='before')

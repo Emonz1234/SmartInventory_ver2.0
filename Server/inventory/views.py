@@ -111,8 +111,8 @@ def assignments(request):
 
 
 RESOURCES = {
-    "cabinets": (Cabinet, {"code", "name", "domain", "group", "description", "area"}),
-    "racks": (Rack, {"cabinet_id", "address", "name"}),
+    "cabinets": (Cabinet, {"code", "name", "domain", "group", "cabinet_index", "description", "area"}),
+    "racks": (Rack, {"cabinet_id", "address", "rack_index", "code", "name"}),
     "shelves": (Shelf, {"rack_id", "code", "level"}),
     "bins": (Bin, {"shelf_id", "code", "capacity"}),
     "items": (Item, {"code", "barcode", "name", "unit", "min_qty", "max_qty", "category_id", "description", "is_active"}),
@@ -162,10 +162,10 @@ def resources(request, resource):
         if request.method == "PATCH":
             obj = model.objects.get(pk=data["id"])
             before = model_to_dict(obj)
-            if isinstance(obj, Cabinet) and obj.topology_locked and any(k in values and values[k] != getattr(obj, k) for k in ('code', 'group')):
+            if isinstance(obj, Cabinet) and obj.topology_locked and any(k in values and values[k] != getattr(obj, k) for k in ('code', 'group', 'cabinet_index')):
                 raise ValueError('Cabinet logical ID is locked by bootstrap mapping')
             # Physical topology is immutable once created; assignments have a dedicated service.
-            immutable = {"domain", "cabinet_id", "rack_id", "shelf_id", "address"}
+            immutable = {"domain", "cabinet_id", "rack_id", "shelf_id", "address", "rack_index"}
             if any(k in immutable and getattr(obj, k) != v for k, v in values.items()):
                 raise ValueError("Create a new location for topology changes")
             for k, v in values.items():

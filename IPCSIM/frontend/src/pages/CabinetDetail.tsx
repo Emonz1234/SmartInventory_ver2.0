@@ -219,7 +219,7 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
           <Button size="small" startIcon={<ArrowBack />} onClick={() => navigate('/cabinets')} sx={{ minHeight: 36, px: 1.5, flexShrink: 0, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', borderRadius: 2.5 }}>Tủ & rack</Button>
           <Box sx={{ minWidth: 0 }}>
             <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
-              <Typography variant="h4" sx={{ fontWeight: 750, lineHeight: 1.2, letterSpacing: '-0.035em', fontSize: { xs: 26, md: 32 } }}>Tủ {id}</Typography>
+              <Typography variant="h4" sx={{ fontWeight: 750, lineHeight: 1.2, letterSpacing: '-0.035em', fontSize: { xs: 26, md: 32 } }}>Tủ {racks[0]?.cabinet_index ?? racks[0]?.cabinet_code ?? id}</Typography>
               <Chip size="small" icon={<Storage />} label={`${racks.length} racks`} variant="outlined" />
               {!canOperate && <Chip size="small" label="Operator access required" color="warning" variant="outlined" />}
             </Stack>

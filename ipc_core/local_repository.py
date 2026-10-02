@@ -54,6 +54,18 @@ class LocalRepository:
             for row in db.execute('SELECT * FROM local_transactions ORDER BY sequence DESC LIMIT 200'):
                 item = dict(row)
                 item.pop('authorization')
+                try:
+                    cabinet = self.master(db, 'cabinet', item['cabinet_id'])
+                    rack = self.master(db, 'rack', item['rack_id'])
+                    if rack['cabinet_id'] != cabinet['id']:
+                        raise ValueError('Historical rack mapping changed')
+                    item.update(device_code=self.store.device_id,
+                                device_type='REAL' if self.store.device_type == 'IPC' else 'SIMULATION',
+                                cabinet_code=cabinet.get('cabinet_code'), cabinet_index=cabinet.get('cabinet_index'),
+                                rack_code=rack.get('rack_identity_code'), rack_index=rack.get('rack_index'))
+                except ValueError:
+                    pass  # Preserve historical technical references when master rows were retired.
+
                 item.update(id=item['transaction_id'], kind=item['operation_type'],
                             state={'COMPLETED': 'confirmed', 'FAILED': 'failed', 'CANCELLED': 'cancelled'}.get(item['operation_status'], item['operation_status'].lower()))
                 result.append(item)

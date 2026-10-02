@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '@api/client'
 import { systemAPI } from '@api/system'
 
-type Rack = { id: number; rack_code: string; rack_name?: string }
+type Rack = { rack_index?: number; id: number; rack_code: string; rack_name?: string }
 type Step = { rack: Rack; direction: 'LEFT' | 'RIGHT'; fromGap: number; toGap: number }
 type CommandRequest = { kind: Command['kind']; rack: Rack; targetGap: number; sourceGap: number | null; steps: Step[] }
 type VentilationView = { phase: string; baselineId: number; sentRackIds: number[]; completedRackIds: number[] }
@@ -27,7 +27,7 @@ const STEP_ESTIMATE_MS = 4500
 const TELEMETRY_TIMEOUT_MS = 90000
 
 function rackOrder(rack: Rack) {
-  const address = Number(rack.rack_code)
+  const address = Number(rack.rack_index ?? rack.rack_code)
   return Number.isFinite(address) ? address : Number(rack.id)
 }
 

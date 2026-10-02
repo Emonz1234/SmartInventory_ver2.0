@@ -132,6 +132,7 @@ if ($RenameMqttUser) {
 Invoke-Compose @('run', '--rm', '--no-deps', '-e', 'ALLOW_DEVELOPMENT_DATA_RESET=1', 'server', 'python', 'Server/manage.py', 'reset_development', '--confirm-development-reset')
 Invoke-Compose @('run', '--rm', '--no-deps', 'migrate')
 Invoke-Compose @('run', '--rm', '--no-deps', '-e', 'DJANGO_DEBUG=1', 'server', 'python', 'Server/manage.py', 'seed_demo_data', '--allow-demo', '--queue-sync')
+Invoke-Compose @('run', '--rm', '--no-deps', 'server', 'python', 'Server/manage.py', 'validate_locations', '--demo-topology')
 Invoke-Compose @('restart', 'mqtt')
 Invoke-Compose @('up', '-d', 'server', 'worker', 'web')
 Write-Host 'Development databases reset, baseline migrated, demo seed loaded, and Compose services restarted.'

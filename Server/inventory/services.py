@@ -44,9 +44,11 @@ def records_for(device):
     cabinets = Cabinet.objects.filter(device=device, domain=device.device_type)
     for c in cabinets:
         add("cabinet", c.pk, dict(id=c.pk, cabinet_code=c.code, cabinet_name=c.name,
-            status=c.configuration_status, description=c.description), c.domain)
+            status=c.configuration_status, description=c.description, cabinet_index=c.cabinet_index,
+            device_code=c.device_id, device_type="REAL" if c.domain == "IPC" else "SIMULATION"), c.domain)
     for r in Rack.objects.filter(cabinet__in=cabinets):
-        add("rack", r.pk, dict(id=r.pk, cabinet_id=r.cabinet_id, rack_code=str(r.address), rack_name=r.name), device.device_type)
+        add("rack", r.pk, dict(id=r.pk, cabinet_id=r.cabinet_id, rack_code=str(r.address), rack_name=r.name, rack_index=r.rack_index,
+            rack_identity_code=r.code), device.device_type)
     for s in Shelf.objects.filter(rack__cabinet__in=cabinets):
         add("shelf", s.pk, dict(id=s.pk, rack_id=s.rack_id, shelf_code=s.code, level_no=s.level), device.device_type)
     for b in Bin.objects.filter(shelf__rack__cabinet__in=cabinets):
@@ -94,6 +96,10 @@ def assign(cabinet_id, device_id):
     if Operation.objects.filter(rack__cabinet=cabinet).exclude(state__in=["confirmed", "failed", "cancelled"]).exists():
         raise ValueError("Resolve pending operations before reassignment")
     if target:
+        if Cabinet.objects.filter(device=target, cabinet_index=cabinet.cabinet_index).exclude(pk=cabinet.pk).exists():
+            raise ValueError("Cabinet index already used by target device")
+        if not 1 <= cabinet.cabinet_index <= (1 if target.device_type == "IPC" else 22):
+            raise ValueError("Cabinet index outside target device topology")
         addresses = Rack.objects.filter(cabinet=cabinet).values_list("address", flat=True)
         if Rack.objects.filter(cabinet__device=target, address__in=addresses).exclude(cabinet=cabinet).exists():
             raise ValueError("Serial rack addresses must be unique per device")

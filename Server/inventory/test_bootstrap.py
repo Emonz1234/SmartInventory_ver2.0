@@ -19,7 +19,7 @@ class BootstrapTests(TestCase):
         self.assertEqual(Rack.objects.filter(cabinet__device=ipc).count(), 6)
         self.assertEqual(Rack.objects.filter(cabinet__device=sim).count(), 132)
         for rack in Rack.objects.filter(cabinet__device=sim).select_related('cabinet'):
-            self.assertEqual((rack.address - 1)//6 + 1, int(rack.cabinet.code))
+            self.assertEqual((rack.address - 1)//6 + 1, rack.cabinet.cabinet_index)
         self.assertEqual(Bin.objects.count(), 3)
         self.assertEqual(Item.objects.filter(is_demo=True).count(), 5)
         self.assertEqual(Category.objects.count(), 2)

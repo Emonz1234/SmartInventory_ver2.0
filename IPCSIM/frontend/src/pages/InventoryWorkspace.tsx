@@ -65,6 +65,7 @@ function availableQuantity(item: any, cabinetById?: Map<number, any>) {
 }
 
 function cabinetLabel(cabinet: any) {
+  if (cabinet.cabinet_index) return `Cabinet ${String(cabinet.cabinet_index).padStart(2, '0')}`
   const name = String(cabinet.cabinet_name || '').trim()
   if (name && !/^cabinet$/i.test(name)) return name
   const code = String(cabinet.cabinet_code || '')
@@ -73,6 +74,7 @@ function cabinetLabel(cabinet: any) {
 }
 
 function rackLabel(rack: any) {
+  if (rack.rack_index) return `Rack ${String(rack.rack_index).padStart(2, '0')}`
   return rack.rack_name || `Rack ${rack.rack_code}`
 }
 

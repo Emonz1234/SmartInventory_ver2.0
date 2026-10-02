@@ -16,7 +16,7 @@ from Server.inventory.models import (
 from Server.inventory.permissions import PERMISSIONS
 from Server.inventory.services import refresh
 
-MARKER = 'smart-inventory-demo-v2'
+MARKER = 'smart-inventory-demo-v3'
 DEVICES = (
     ('IPC01', 'IPC', 'Physical IPC', ['REAL-C01']),
     ('IPCSIM01', 'IPCSIM', 'Simulation IPC', [f'SIM-C{i:02d}' for i in range(1, 23)]),
@@ -55,9 +55,9 @@ PRODUCTS = (
 
 # Explicit placements make every simulation cabinet visible without scattering stock randomly.
 PLACEMENTS = (
-    ('BR-A01', 'REAL-R01', 20), ('MCU-ESP32', 'REAL-R02', 8),
-    ('BR-A01', 'REAL-R03', 15), ('BR-A02', 'SIM-C22-R03', 16),
-    ('PSU-24V', 'REAL-R05', 10), ('FUSE-5A', 'REAL-R06', 4),
+    ('BR-A01', 'REAL-C01-R01', 20), ('MCU-ESP32', 'REAL-C01-R02', 8),
+    ('BR-A01', 'REAL-C01-R03', 15), ('BR-A02', 'SIM-C22-R03', 16),
+    ('PSU-24V', 'REAL-C01-R05', 10), ('FUSE-5A', 'REAL-C01-R06', 4),
     ('SNS-DHT22', 'SIM-C01-R01', 12), ('BR-A01', 'SIM-C01-R02', 10),
     ('MOD-RELAY', 'SIM-C01-R03', 18), ('SW-LIMIT', 'SIM-C01-R04', 16),
     ('FUSE-5A', 'SIM-C01-R05', 10), ('SW-LIMIT', 'SIM-C01-R06', 12),
@@ -75,11 +75,11 @@ PLACEMENTS = (
     ('LED-STACK', 'SIM-C22-R06', 60),
 )
 CAPACITIES = {
-    'REAL-R01': 50, 'REAL-R02': 30, 'REAL-R03': 40,
+    'REAL-C01-R01': 50, 'REAL-C01-R02': 30, 'REAL-C01-R03': 40,
     'SIM-C01-R02': 50, 'SIM-C03-R01': 40, 'SIM-C05-R03': 40,
     'SIM-C07-R04': 50, 'SIM-C11-R05': 50, 'SIM-C22-R06': 60,
 }
-FAULT_RACKS = {'REAL-R06', 'SIM-C10-R04', 'SIM-C18-R02'}
+FAULT_RACKS = {'REAL-C01-R06', 'SIM-C10-R04', 'SIM-C18-R02'}
 BUSY_RACKS = {'SIM-C04-R06'}
 
 
@@ -141,15 +141,15 @@ class Command(BaseCommand):
                 cabinet = Cabinet.objects.create(
                     code=cabinet_code,
                     name='Physical Cabinet 01' if cabinet_code == 'REAL-C01' else f'Simulation Cabinet {cabinet_index:02d}',
-                    domain=device_type, device=device, group=str(cabinet_index),
+                    domain=device_type, device=device, group=str(cabinet_index), cabinet_index=cabinet_index,
                     description='Physical IPC for hardware cabinet emulator' if device_type == 'IPC' else f'Demo simulation group {cabinet_index:02d}',
                     configuration_status='demo', topology_locked=True,
                 )
                 for rack_index in range(1, 7):
-                    rack_code = f'REAL-R{rack_index:02d}' if device_type == 'IPC' else f'{cabinet_code}-R{rack_index:02d}'
+                    rack_code = f'REAL-C01-R{rack_index:02d}' if device_type == 'IPC' else f'{cabinet_code}-R{rack_index:02d}'
                     address = rack_index if device_type == 'IPC' else (cabinet_index - 1) * 6 + rack_index
                     capacity = CAPACITIES.get(rack_code, (30, 40, 50, 60)[(rack_index - 1) % 4])
-                    rack = Rack.objects.create(cabinet=cabinet, address=address, name=rack_code)
+                    rack = Rack.objects.create(cabinet=cabinet, address=address, rack_index=rack_index, code=rack_code, name=f'Rack {rack_index:02d}')
                     shelf = Shelf.objects.create(rack=rack, code=f'{rack_code}-S01', level=1)
                     bin_obj = Bin.objects.create(shelf=shelf, code=f'{rack_code}-L01', capacity=capacity)
                     racks_by_code[rack_code] = rack
@@ -192,7 +192,7 @@ class Command(BaseCommand):
             transaction_id=__import__('uuid').uuid4(), device=devices['IPC01'],
             digest=hashlib.sha256(b'demo-pending').hexdigest(), status='PENDING',
             error='DEMO pending sync sample; no stock change was applied.',
-            payload={'product_id': items['MCU-ESP32'].pk, 'location_id': bins_by_code['REAL-R02'].pk,
+            payload={'product_id': items['MCU-ESP32'].pk, 'location_id': bins_by_code['REAL-C01-R02'].pk,
                      'user_id': actor.pk, 'operation_type': 'PUT', 'quantity': 2,
                      'completed_at': (now - timedelta(hours=2)).isoformat()},
             received_at=now - timedelta(hours=2),
@@ -246,9 +246,9 @@ class Command(BaseCommand):
 
     def create_transactions(self, actor, items, bins, racks, devices, now):
         movements = [
-            ('REAL', 'OUTBOUND', 'BR-A01', 'REAL-R01', 5), ('REAL', 'INBOUND', 'MCU-ESP32', 'REAL-R02', 10),
-            ('REAL', 'ADJUST', 'BR-A02', 'REAL-R04', 16), ('REAL', 'OUTBOUND', 'PSU-24V', 'REAL-R05', 2),
-            ('REAL', 'INBOUND', 'FUSE-5A', 'REAL-R06', 6), ('SIMULATION', 'OUTBOUND', 'BR-A01', 'SIM-C01-R02', 2),
+            ('REAL', 'OUTBOUND', 'BR-A01', 'REAL-C01-R01', 5), ('REAL', 'INBOUND', 'MCU-ESP32', 'REAL-C01-R02', 10),
+            ('REAL', 'ADJUST', 'BR-A02', 'REAL-C01-R04', 16), ('REAL', 'OUTBOUND', 'PSU-24V', 'REAL-C01-R05', 2),
+            ('REAL', 'INBOUND', 'FUSE-5A', 'REAL-C01-R06', 6), ('SIMULATION', 'OUTBOUND', 'BR-A01', 'SIM-C01-R02', 2),
             ('SIMULATION', 'INBOUND', 'BR-A02', 'SIM-C02-R01', 5), ('SIMULATION', 'OUTBOUND', 'MCU-ESP32', 'SIM-C03-R01', 3),
             ('SIMULATION', 'ADJUST', 'SNS-MQ2', 'SIM-C04-R02', 12), ('SIMULATION', 'INBOUND', 'SNS-DHT22', 'SIM-C05-R03', 4),
             ('SIMULATION', 'OUTBOUND', 'SW-LIMIT', 'SIM-C06-R03', 2), ('SIMULATION', 'INBOUND', 'BR-A01', 'SIM-C07-R04', 5),
@@ -280,8 +280,8 @@ class Command(BaseCommand):
                 raise CommandError(f'{rack_code} has a device/source mismatch.')
 
         operation_specs = (
-            ('REAL', 'PICK', 'BR-A01', 'REAL-R01', 'failed'),
-            ('REAL', 'PUT', 'MCU-ESP32', 'REAL-R02', 'cancelled'),
+            ('REAL', 'PICK', 'BR-A01', 'REAL-C01-R01', 'failed'),
+            ('REAL', 'PUT', 'MCU-ESP32', 'REAL-C01-R02', 'cancelled'),
             ('SIMULATION', 'PICK', 'SNS-DHT22', 'SIM-C05-R03', 'failed'),
             ('SIMULATION', 'PUT', 'BOLT-M6', 'SIM-C20-R01', 'confirmed'),
             ('SIMULATION', 'PICK', 'BOLT-M6', 'SIM-C20-R01', 'confirmed'),

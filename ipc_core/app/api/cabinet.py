@@ -41,6 +41,7 @@ def list_cabinets(db: Session = Depends(get_db)):
             "id": cabinet.id,
             "cabinet_code": cabinet.cabinet_code,
             "cabinet_name": cabinet.cabinet_name,
+            "cabinet_index": cabinet.cabinet_index, "device_code": cabinet.device_code, "device_type": cabinet.device_type,
             "status": "ACTIVE" if is_active else "INACTIVE",
             "rack_count": rack_count
         })
@@ -131,6 +132,10 @@ def get_cabinet_racks(cabinet_id: int, db: Session = Depends(get_db)):
             "id": rack.id,
             "rack_code": rack.rack_code,
             "rack_name": rack.rack_name,
+            "cabinet_id": cabinet.id, "cabinet_index": cabinet.cabinet_index,
+            "cabinet_code": cabinet.cabinet_code, "device_code": cabinet.device_code, "device_type": cabinet.device_type,
+            "rack_index": rack.rack_index, "rack_identity_code": rack.rack_identity_code,
+            "serial_address": int(rack.rack_code) if rack.rack_code.isdigit() else None,
             "status": status,
             "position": position,
             "last_updated": last_updated

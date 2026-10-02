@@ -35,12 +35,15 @@ class Command(BaseCommand):
                 if device.device_type != kind:
                     raise CommandError(f'{identity} already belongs to another domain')
                 counts[kind] = {'cabinets_added': 0, 'racks_added': 0}
-                if kind == 'IPC' and Cabinet.objects.filter(device=device).exclude(code='1').exists():
+                if kind == 'IPC' and Cabinet.objects.filter(device=device).exclude(cabinet_index=1).exists():
                     raise CommandError('Existing IPC topology has multiple groups; reconcile existing locations before bootstrapping the one-group topology')
                 for number in range(1, total + 1):
-                    cabinet, created = Cabinet.objects.get_or_create(domain=kind, code=str(number), defaults={
+                    code = f'REAL-C{number:02d}' if kind == 'IPC' else f'SIM-C{number:02d}'
+                    existing = Cabinet.objects.filter(device=device, cabinet_index=number).first()
+                    existing = existing or Cabinet.objects.filter(domain=kind, code__in=[code, str(number)]).first()
+                    cabinet, created = (existing, False) if existing else Cabinet.objects.get_or_create(domain=kind, code=code, defaults={
                         'name': f'{identity} - Group {number}',
-                        'device': device, 'group': str(number), 'topology_locked': True,
+                        'device': device, 'group': str(number), 'cabinet_index': number, 'topology_locked': True,
                         'configuration_status': ('serial_mapped' if number <= GROUP_COUNT else 'pending_simulator') if kind == 'IPCSIM' else 'pending_hardware',
                         'description': 'Simulation: 6 racks; compartment layout not defined' if kind == 'IPCSIM' else
                                        'Hardware chưa đặc tả; chưa có rack/address/ô chứa'})
@@ -55,7 +58,7 @@ class Command(BaseCommand):
                             if Rack.objects.filter(cabinet__device=device, address=address).exclude(cabinet=cabinet).exists():
                                 raise CommandError(f'Serial address {address} is already assigned elsewhere')
                             _, added = Rack.objects.get_or_create(cabinet=cabinet, address=address,
-                                defaults={'name': f'Rack {address}'})
+                                defaults={'name': f'Rack {(address - 1) % MAX_RACK_NUMBER + 1:02d}', 'rack_index': (address - 1) % MAX_RACK_NUMBER + 1})
                             counts[kind]['racks_added'] += int(added)
             if options['demo_catalog']:
                 samples = [('A1001', 'Motor Bearing', 'pcs', 'MECHANICAL'),
@@ -69,7 +72,7 @@ class Command(BaseCommand):
                         'description': 'Danh mục mẫu phát triển; không phải tồn kho đã xác nhận', 'is_demo': True})
             if options['demo_locations']:
                 # The retained legacy seed/database defines ONLY rack 1, shelf 1 and these three bins.
-                rack = Rack.objects.get(cabinet__device_id=ids[1], address=1)
+                rack = Rack.objects.get(cabinet__device_id=ids[1], cabinet__cabinet_index=1, rack_index=1)
                 shelf, _ = Shelf.objects.get_or_create(rack=rack, code='A-R01-S01', defaults={'level': 1})
                 for number in range(1, 4):
                     Bin.objects.get_or_create(shelf=shelf, code=f'A-R01-S01-B{number:02d}', defaults={'capacity': 100})

@@ -42,7 +42,9 @@ def ensure_schema():
     inspector = inspect(engine)
     with engine.begin() as conn:
         for table, additions in {
-            'cabinets': {'description': "TEXT NOT NULL DEFAULT ''"},
+            'cabinets': {'description': "TEXT NOT NULL DEFAULT ''", 'cabinet_index': 'INTEGER',
+                         'device_code': 'TEXT', 'device_type': 'TEXT'},
+            'racks': {'rack_index': 'INTEGER', 'rack_identity_code': 'TEXT'},
             'items': {'category': "TEXT NOT NULL DEFAULT ''", 'description': "TEXT NOT NULL DEFAULT ''",
                       'is_active': 'INTEGER NOT NULL DEFAULT 1', 'is_demo': 'INTEGER NOT NULL DEFAULT 0'},
         }.items():
@@ -50,7 +52,9 @@ def ensure_schema():
             for name, declaration in additions.items():
                 if name not in columns:
                     conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{name}" {declaration}'))
-        conn.execute(text('INSERT OR IGNORE INTO core_schema_migrations VALUES(4)'))
+        conn.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS local_cabinet_rack_index ON racks(cabinet_id, rack_index)'))
+        conn.execute(text('CREATE UNIQUE INDEX IF NOT EXISTS local_device_cabinet_index ON cabinets(device_code, cabinet_index)'))
+        conn.execute(text('INSERT OR IGNORE INTO core_schema_migrations VALUES(5)'))
     if "environment_snapshots" in inspector.get_table_names():
         columns = [c["name"] for c in inspector.get_columns("environment_snapshots")]
         with engine.begin() as conn:

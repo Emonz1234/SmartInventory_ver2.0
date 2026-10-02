@@ -89,7 +89,7 @@ class LocationRepository:
             if cabinet and cabinet.cabinet_code:
                 parts.append(cabinet.cabinet_code)
             if rack and rack.rack_code:
-                parts.append(rack.rack_code)
+                parts.append(f"Rack {rack.rack_index:02d}" if rack.rack_index else rack.rack_name or rack.rack_code)
             if shelf and shelf.shelf_code:
                 parts.append(shelf.shelf_code)
             if bin_obj and bin_obj.bin_code:
@@ -107,11 +107,17 @@ class LocationRepository:
             "shelf_code": shelf.shelf_code if shelf else None,
             "shelf_name": shelf.shelf_name if shelf else None,
             "rack_id": rack.id if rack else None,
-            "rack_code": rack.rack_code if rack else None,
+            "rack_code": (rack.rack_identity_code or rack.rack_code) if rack else None,
+            "serial_address": int(rack.rack_code) if rack and rack.rack_code.isdigit() else None,
             "rack_name": rack.rack_name if rack else None,
             "cabinet_id": cabinet.id if cabinet else None,
             "cabinet_code": cabinet.cabinet_code if cabinet else None,
             "cabinet_name": cabinet.cabinet_name if cabinet else None,
+            "device_code": cabinet.device_code if cabinet else None,
+            "device_type": cabinet.device_type if cabinet else None,
+            "cabinet_index": cabinet.cabinet_index if cabinet else None,
+            "rack_index": rack.rack_index if rack else None,
+            "rack_identity_code": rack.rack_identity_code if rack else None,
             "location_path": location_path
         }
 

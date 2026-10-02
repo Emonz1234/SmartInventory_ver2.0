@@ -217,7 +217,16 @@ class Store:
             except (KeyError, TypeError, ValueError):
                 raise ValueError("Rack has no valid local Serial address") from None
 
-            body = {"rack_id": resolved_rack_id, "requested_rack_id": rack_id, "kind": action, "address": address}
+            body = {"rack_id": resolved_rack_id, "requested_rack_id": rack_id, "kind": action, "address": address,
+                    "rack_index": rack_data.get("rack_index"), "rack_identity_code": rack_data.get("rack_identity_code"),
+                    "device_code": self.device_id, "device_type": "REAL" if self.device_type == "IPC" else "SIMULATION"}
+            if rack_data.get("cabinet_id") is not None:
+                parent = db.execute("SELECT body FROM edge_records WHERE dataset=? AND key=?",
+                                    (self.device_id, f"cabinet:{rack_data['cabinet_id']}")).fetchone()
+                if not parent:
+                    raise ValueError("Rack has no assigned parent cabinet")
+                cabinet = json.loads(parent[0])["data"]
+                body.update(cabinet_id=cabinet["id"], cabinet_code=cabinet.get("cabinet_code"), cabinet_index=cabinet.get("cabinet_index"))
             db.execute("INSERT INTO edge_operations(id,body,state,result) VALUES(?,?,?,NULL)",
                        (operation_id, canonical(body), "local_uncertain"))
 

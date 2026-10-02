@@ -17,6 +17,9 @@ class Cabinet(Base):
     id = Column(Integer, primary_key=True)
     cabinet_code = Column(String, unique=True, nullable=False)
     cabinet_name = Column(String, nullable=True)
+    cabinet_index = Column(Integer, nullable=True)
+    device_code = Column(String, nullable=True)
+    device_type = Column(String, nullable=True)
     status = Column(String, default="ACTIVE")
     description = Column(String, default='')
 
@@ -28,6 +31,9 @@ class Rack(Base):
     cabinet_id = Column(Integer, ForeignKey("cabinets.id"), nullable=False)
     rack_code = Column(String, nullable=False)
     rack_name = Column(String, nullable=True)
+    rack_index = Column(Integer, nullable=True)
+    rack_identity_code = Column(String, nullable=True)
+    __table_args__ = (UniqueConstraint("cabinet_id", "rack_index", name="local_cabinet_rack_index"),)
 
 
 class Shelf(Base):

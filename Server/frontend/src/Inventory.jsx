@@ -388,7 +388,7 @@ export default function Inventory({
                   <summary>{cabinet}</summary>
                   {Object.entries(groups(rs, "rack_id")).map(([rack, bins]) => (
                     <details key={rack} open>
-                      <summary>Rack {bins[0].rack}</summary>
+                      <summary>{bins[0].rack_index ? `Rack ${String(bins[0].rack_index).padStart(2, "0")}` : bins[0].rack}</summary>
                       {bins.map((l) => (
                         <div className="inv-location" key={l.id}>
                           <div>

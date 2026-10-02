@@ -25,7 +25,7 @@ class InventoryOverviewTests(TestCase):
         bearing = [p for p in data['products'] if p['sku']=='BR-A01']
         self.assertEqual([(p['source_type'],p['quantity'],len(p['locations'])) for p in bearing], [('REAL',35,2),('SIMULATION',35,2)])
         self.assertEqual(bearing[0]['barcode'],'893000000001')
-        self.assertEqual(bearing[0]['locations'][0]['path'],'IPC01 / Physical Cabinet 01 / REAL-R01')
+        self.assertEqual(bearing[0]['locations'][0]['path'],'IPC01 / Cabinet 01 / Rack 01')
         self.assertEqual({l['status'] for l in data['locations']}, {'AVAILABLE','FULL','FAULT','EMPTY','BUSY'})
         esp = next(p for p in data['products'] if p['sku']=='MCU-ESP32' and p['source_type']=='REAL')
         self.assertEqual((esp['quantity'],esp['stock_status']),(8,'Low Stock'))
@@ -84,7 +84,7 @@ class InventoryOverviewTests(TestCase):
             call_command('seed_demo_data',allow_demo=True,isolated_fixture=True)
 
     def test_adjustment_stale_guard_audit_and_retry(self):
-        stock=Stock.objects.get(item__code='BR-A01',bin__code='REAL-R01-L01')
+        stock=Stock.objects.get(item__code='BR-A01',bin__code='REAL-C01-R01-L01')
         data=dict(kind='ADJUST',item_id=stock.item_id,to_location_id=stock.bin_id,quantity=22,expected_quantity=19,note='Count verified',request_key='test-adjust',source_type='REAL')
         self.assertEqual(self.client.post('/api/inventory-transactions',data,content_type='application/json').status_code,400)
         stock.refresh_from_db()
@@ -113,7 +113,7 @@ class InventoryOverviewTests(TestCase):
         self.assertFalse(any(t['sync_status']=='Failed' for t in self.get_data('REAL')['transactions']))
 
     def test_product_history_is_scoped_and_paginated(self):
-        stock=Stock.objects.get(item__code='MCU-ESP32',bin__code='REAL-R02-L01')
+        stock=Stock.objects.get(item__code='MCU-ESP32',bin__code='REAL-C01-R02-L01')
         initial_count=len(self.client.get('/api/inventory-overview',{'source_type':'REAL','item_id':stock.item_id}).json()['transactions'])
         InventoryTransaction.objects.bulk_create([InventoryTransaction(item=stock.item,source_type='REAL',kind='ADJUST',quantity=8,to_location=stock.bin,actor=self.user,note='History paging fixture',request_key=f'page-{i}') for i in range(105)])
         params={'source_type':'REAL','item_id':stock.item_id}

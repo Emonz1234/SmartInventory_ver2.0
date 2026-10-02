@@ -6,6 +6,7 @@ from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from .models import Bin, Stock, Item, Device, Operation, InventoryTransaction, PhysicalTransaction
+from .location import location_fields
 from .permissions import sources, source, SOURCE_DOMAIN
 from .services import online
 from .views import api
@@ -31,9 +32,9 @@ def projection(scopes):
         quantity = sum(s.quantity for s in stocks[b.pk])
         fault = v.get('fault') or str(v.get('status', '')).upper() == 'FAULT' or any(v.get(k) for k in ['is_obstructed', 'is_skewed', 'is_overload_motor', 'smoke'])
         status = 'FAULT' if fault else 'BUSY' if b.reserved or r.pk in busy or v.get('is_hard_locked') or str(v.get('status', '')).upper() == 'BUSY' else 'FULL' if b.capacity and quantity >= b.capacity else 'EMPTY' if quantity == 0 else 'AVAILABLE'
-        locations.append(dict(id=b.pk, ipc_id=c.device_id, cabinet_id=c.pk, cabinet=c.name, rack_id=r.pk,
+        locations.append(dict(**location_fields(r), id=b.pk, ipc_id=c.device_id, cabinet_id=c.pk, cabinet=c.name, rack_id=r.pk,
             rack=r.name or str(r.address), location_code=b.code, shelf=b.shelf.code,
-            path=f'{c.device_id or "Unassigned"} / {c.name} / {r.name or r.address}',
+            path=f'{c.device_id or "Unassigned"} / Cabinet {c.cabinet_index:02d} / Rack {r.rack_index:02d}',
             source_type=source(c.domain), capacity=b.capacity, quantity=quantity, status=status,
             sync_status='Failed' if str(b.pk) in conflicts else sync_status(c.device), last_updated=max((s.updated_at for s in stocks[b.pk]), default=telemetry.updated_at if telemetry else None),
             goods=[dict(item_id=s.item_id, name=s.item.name, quantity=s.quantity,
@@ -64,12 +65,12 @@ def history(scopes, item_id=None, offset=0, limit=500):
         b = t.to_location or t.from_location
         c = b.shelf.rack.cabinet
         op = t.operation
-        rows.append(dict(_order=(0,t.pk), id=t.request_key, item_id=t.item_id, product=t.item.name, kind={'INBOUND':'PUT', 'OUTBOUND':'PICK', 'ADJUST':'ADJUSTMENT'}.get(t.kind,t.kind),
+        rows.append(dict(**location_fields(b.shelf.rack), _order=(0,t.pk), id=t.request_key, item_id=t.item_id, product=t.item.name, kind={'INBOUND':'PUT', 'OUTBOUND':'PICK', 'ADJUST':'ADJUSTMENT'}.get(t.kind,t.kind),
             quantity=t.quantity, user=t.actor.username, ipc_id=c.device_id, cabinet=c.name, rack=b.shelf.rack.name,
             source_type=t.source_type, operation_status='COMPLETED' if not op or op.state == 'confirmed' else op.state.upper(),
             sync_status=sync_status(c.device), created_at=t.created_at, completed_at=(op.execution_updated_at if op else t.created_at), reason=t.note))
     for op in operations.order_by('-created_at', '-pk')[:offset+limit]:
-        rows.append(dict(_order=(1,op.pk.int), id=op.request_key, item_id=op.item_id, product=op.item.name, kind=op.kind, quantity=op.quantity,
+        rows.append(dict(**location_fields(op.rack), _order=(1,op.pk.int), id=op.request_key, item_id=op.item_id, product=op.item.name, kind=op.kind, quantity=op.quantity,
             user=op.requested_by.username, ipc_id=op.device_id, cabinet=op.rack.cabinet.name, rack=op.rack.name,
             source_type=source(op.device.device_type), operation_status='COMPLETED' if op.state == 'confirmed' else op.state.upper(),
             sync_status=sync_status(op.device), created_at=op.created_at,

@@ -23,6 +23,7 @@ class Cabinet(models.Model):
     name = models.CharField(max_length=120)
     domain = models.CharField(max_length=6, choices=TYPES)
     device = models.ForeignKey(Device, null=True, blank=True, on_delete=models.PROTECT)
+    cabinet_index = models.PositiveIntegerField(blank=True)
     group = models.CharField(max_length=64, blank=True)
     description = models.TextField(blank=True)
     topology_locked = models.BooleanField(default=False)
@@ -30,16 +31,39 @@ class Cabinet(models.Model):
     area = models.CharField(max_length=120, blank=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["domain", "code"], name="cabinet_domain_code")]
+        constraints = [models.UniqueConstraint(fields=["domain", "code"], name="cabinet_domain_code"),
+                       models.UniqueConstraint(fields=["device", "cabinet_index"], name="device_cabinet_index")]
+
+    def save(self, *args, **kwargs):
+        if self.cabinet_index is None:
+            if self.group.isdigit() and int(self.group) > 0:
+                self.cabinet_index = int(self.group)
+            else:
+                indices = Cabinet.objects.filter(device_id=self.device_id, domain=self.domain).exclude(pk=self.pk).values_list("cabinet_index", flat=True)
+                self.cabinet_index = max((i or 0 for i in indices), default=0) + 1
+        super().save(*args, **kwargs)
 
 
 class Rack(models.Model):
     cabinet = models.ForeignKey(Cabinet, on_delete=models.PROTECT)
+    # Serial routing address, never a display index. Simulator transport uses 1..132.
     address = models.PositiveIntegerField()
+    rack_index = models.PositiveIntegerField(blank=True)
+    code = models.CharField(max_length=120, blank=True)
     name = models.CharField(max_length=120, blank=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["cabinet", "address"], name="cabinet_rack_address")]
+        constraints = [models.UniqueConstraint(fields=["cabinet", "address"], name="cabinet_rack_address"),
+                       models.UniqueConstraint(fields=["cabinet", "rack_index"], name="cabinet_rack_index"),
+                       models.CheckConstraint(condition=Q(rack_index__isnull=True) | Q(rack_index__gte=1, rack_index__lte=6), name="rack_local_index_range")]
+
+    def save(self, *args, **kwargs):
+        if self.rack_index is None:
+            indices = Rack.objects.filter(cabinet_id=self.cabinet_id).exclude(pk=self.pk).values_list("rack_index", flat=True)
+            self.rack_index = self.address if 1 <= self.address <= 6 else max((i or 0 for i in indices), default=0) + 1
+        if not self.code:
+            self.code = f"{self.cabinet.code}-R{self.rack_index:02d}"
+        super().save(*args, **kwargs)
 
 
 class Shelf(models.Model):
