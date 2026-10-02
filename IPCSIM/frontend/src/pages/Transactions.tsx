@@ -1,160 +1,52 @@
-import { useState } from 'react'
-import {
-  Box,
-  Card,
-  CardContent,
-  Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  TextField,
-  InputAdornment,
-  Button,
-  Stack,
-  Chip,
-  Grid,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Divider,
-  Skeleton
-  , Alert
-} from '@mui/material'
-import { Search, ReceiptLong, TrendingDown, TrendingUp, Tune } from '@mui/icons-material'
+﻿import { useEffect, useState } from 'react'
+import { Alert, Box, Button, Card, CardContent, Chip, Grid, InputAdornment, MenuItem, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TablePagination, TextField, Typography, Skeleton } from '@mui/material'
+import { Search, Refresh, ArrowDownward, ArrowUpward, ReceiptLongOutlined } from '@mui/icons-material'
 import { useQuery } from '@tanstack/react-query'
+import api from '@api/client'
 import { transactionsAPI } from '@api/transactions'
-import { InventoryTransaction } from '../types'
-import { formatDateTime } from '@utils/date'
-import { Link as RouterLink } from 'react-router-dom'
-
-export const Transactions = () => {
-  const [filterItem, setFilterItem] = useState('')
-  const [filterType, setFilterType] = useState('ALL')
-
-  const q = useQuery({
-    queryKey: ['transactions', filterItem, filterType],
-    queryFn: async () => {
-      const trimmed = filterItem.trim()
-      const itemId = trimmed === '' ? undefined : Number(trimmed)
-      const resp = await transactionsAPI.list(trimmed === '' || Number.isNaN(itemId) ? undefined : itemId)
-      return resp.data
-    }
+import { formatDateTime, parseVietnamDate } from '@utils/date'
+import { PageHeader, EmptyState } from '@components/PageHeader'
+const states: Record<string, string> = { COMPLETED: 'Hoàn tất', FAILED: 'Thất bại', CANCELLED: 'Đã hủy', UNCERTAIN: 'Cần kiểm tra', PREPARED: 'Đã chuẩn bị', EXECUTING: 'Đang thực hiện', AWAITING_CONFIRMATION: 'Chờ xác nhận' }
+export const Transactions = ({ session, onSessionExpired }: { session: string; onSessionExpired: () => void }) => {
+  const [search, setSearch] = useState(''), [type, setType] = useState('ALL'), [page, setPage] = useState(0)
+  const history = useQuery({ queryKey: ['transactions'], queryFn: async () => (await transactionsAPI.list()).data, refetchInterval: 5000 })
+  const local = useQuery({ queryKey: ['local-transactions', session], enabled: !!session, queryFn: async () => (await api.get('/operator/operations', { headers: { 'X-Operator-Session': session } })).data, refetchInterval: 3000, retry: false })
+  const items = useQuery({ queryKey: ['transaction-items'], queryFn: async () => (await api.get('/items')).data })
+  useEffect(() => { if ((local.error as any)?.response?.status === 403) onSessionExpired() }, [local.error, onSessionExpired])
+  const localRows = (local.data || []).filter((row: any) => ['PICK', 'PUT', 'ADJUST'].includes(row.operation_type || row.kind)).map((row: any) => {
+    const item = (items.data || []).find((item: any) => item.id === row.product_id)
+    return { id: row.transaction_id || row.id, item_id: row.product_id, item_code: item?.item_code, item_name: item?.item_name, kind: row.operation_type || row.kind, quantity: row.quantity, rack: row.rack_id, user: row.user_id, time: row.created_at, state: row.operation_status, sync: row.sync_status, reference: row.transaction_id || row.id }
   })
-
-  const transactions: InventoryTransaction[] = q.data ?? []
-  const filteredTransactions = transactions.filter((tx) =>
-    filterType === 'ALL' ? true : tx.transaction_type === filterType
-  )
-
-  const transactionCount = filteredTransactions.length
-  const typeLabel = filterType === 'ALL' ? 'All Types' : filterType
-  const pickCount = filteredTransactions.filter((tx) => tx.transaction_type === 'PICK').length
-  const putCount = filteredTransactions.filter((tx) => tx.transaction_type === 'PUT').length
-
-  return (
-    <Box>
-      <Alert severity="info" sx={{ mb: 2 }}>Lịch sử lưu trữ từ hệ thống trước. Xem các thao tác mới và xác nhận tồn kho tại <Button component={RouterLink} to="/operation">Operation</Button>.</Alert>
-      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ md: 'center' }} spacing={1} sx={{ mb: 3 }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 'bold', letterSpacing: '-0.02em' }}>Transaction Log</Typography>
-          <Typography color="text.secondary" sx={{ mt: 0.5 }}>Review inventory movements and adjustment history.</Typography>
-        </Box>
-        <Chip icon={<ReceiptLong />} label={`${transactionCount} visible records`} color="primary" variant="outlined" />
-      </Stack>
-
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid item xs={12} sm={4}><Card sx={{ borderTop: '3px solid', borderColor: 'primary.main' }}><CardContent><Typography variant="body2" color="text.secondary">All transactions</Typography><Typography variant="h4" sx={{ fontWeight: 'bold', mt: 0.5 }}>{transactions.length}</Typography><Typography variant="caption" color="text.secondary">Loaded from inventory history</Typography></CardContent></Card></Grid>
-        <Grid item xs={12} sm={4}><Card sx={{ borderTop: '3px solid', borderColor: 'warning.main' }}><CardContent><Stack direction="row" justifyContent="space-between"><Box><Typography variant="body2" color="text.secondary">Pick operations</Typography><Typography variant="h4" sx={{ fontWeight: 'bold', mt: 0.5 }}>{pickCount}</Typography></Box><TrendingDown color="warning" sx={{ fontSize: 34 }} /></Stack></CardContent></Card></Grid>
-        <Grid item xs={12} sm={4}><Card sx={{ borderTop: '3px solid', borderColor: 'success.main' }}><CardContent><Stack direction="row" justifyContent="space-between"><Box><Typography variant="body2" color="text.secondary">Put operations</Typography><Typography variant="h4" sx={{ fontWeight: 'bold', mt: 0.5 }}>{putCount}</Typography></Box><TrendingUp color="success" sx={{ fontSize: 34 }} /></Stack></CardContent></Card></Grid>
-      </Grid>
-
-      <Card sx={{ mb: 3 }}>
-        <CardContent sx={{ p: { xs: 2, md: 2.5 } }}>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}><Tune color="action" /><Box><Typography variant="h6" sx={{ fontWeight: 'bold' }}>Filter history</Typography><Typography variant="body2" color="text.secondary">Narrow records by item or operation type.</Typography></Box></Stack>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
-            <TextField
-              label="Filter by Item ID or Code"
-              value={filterItem}
-              onChange={(e) => setFilterItem(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Search />
-                  </InputAdornment>
-                )
-              }}
-              size="small"
-            />
-            <FormControl size="small" sx={{ minWidth: 180 }}>
-              <InputLabel>Transaction Type</InputLabel>
-              <Select
-                value={filterType}
-                label="Transaction Type"
-                onChange={(e) => setFilterType(e.target.value)}
-              >
-                <MenuItem value="ALL">All</MenuItem>
-                <MenuItem value="PICK">Pick</MenuItem>
-                <MenuItem value="PUT">Put</MenuItem>
-                <MenuItem value="ADJUST">Adjust</MenuItem>
-                <MenuItem value="INITIAL">Initial</MenuItem>
-              </Select>
-            </FormControl>
-            <Button variant="outlined" onClick={() => { setFilterItem(''); setFilterType('ALL') }}>
-              Clear
-            </Button>
-          </Stack>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 2 }}>
-            <Chip label={`Transactions: ${transactionCount}`} variant="outlined" />
-            <Chip label={`Type: ${typeLabel}`} variant="outlined" />
-          </Stack>
-        </CardContent>
-      </Card>
-
-      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 620 }}>
-        <Table stickyHeader size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>ID</TableCell>
-              <TableCell>Item</TableCell>
-              <TableCell>Type</TableCell>
-              <TableCell align="right">Quantity</TableCell>
-              <TableCell>Reference</TableCell>
-              <TableCell>User</TableCell>
-              <TableCell>Created At</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {q.isLoading ? (
-              Array.from({ length: 6 }).map((_, index) => <TableRow key={index}><TableCell colSpan={7}><Skeleton /></TableCell></TableRow>)
-            ) : filteredTransactions.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary' }}>
-                  No transactions found.
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredTransactions.map((tx) => (
-                <TableRow key={tx.id} hover>
-                  <TableCell>{tx.id}</TableCell>
-                  <TableCell>
-                    {tx.item_code ? `${tx.item_code} - ${tx.item_name}` : tx.item_id}
-                  </TableCell>
-                  <TableCell><Chip label={tx.transaction_type} size="small" color={tx.transaction_type === 'PICK' ? 'warning' : tx.transaction_type === 'PUT' ? 'success' : 'default'} /></TableCell>
-                  <TableCell align="right">{tx.quantity}</TableCell>
-                  <TableCell>{tx.reference_no ?? '--'}</TableCell>
-                  <TableCell>{tx.user_id ?? '--'}</TableCell>
-                  <TableCell>{formatDateTime(tx.created_at)}</TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    </Box>
-  )
+  const localIds = new Set(localRows.map((row: any) => String(row.id)))
+  const rows = [...localRows, ...(history.data || []).filter((row: any) => !localIds.has(String(row.reference_no))).map((row: any) => ({ id: `history-${row.id}`, item_id: row.item_id, item_code: row.item_code, item_name: row.item_name, kind: row.transaction_type, quantity: row.quantity, rack: null, user: row.user_id, time: row.created_at, state: 'COMPLETED', sync: null, reference: row.reference_no || String(row.id) }))]
+    .sort((a, b) => (parseVietnamDate(b.time)?.getTime() || 0) - (parseVietnamDate(a.time)?.getTime() || 0))
+  const filtered = rows.filter(row => (type === 'ALL' || row.kind === type) && [row.item_id, row.item_code, row.item_name, row.reference].some(value => String(value || '').toLowerCase().includes(search.trim().toLowerCase())))
+  const loading = history.isLoading || local.isLoading
+  return <Box>
+    <PageHeader title="Giao dịch hàng hóa" description="Theo dõi nhập, xuất sản phẩm cùng trạng thái xử lý và đồng bộ. Thực hiện PICK / PUT tại trang Kho hàng." action={<Button startIcon={<Refresh />} variant="outlined" disabled={history.isFetching || local.isFetching} onClick={() => { void history.refetch(); void local.refetch() }}>Làm mới</Button>} />
+    <Grid container spacing={1.5} sx={{ mb: 2 }}>{[
+      { label: 'Tổng giao dịch', value: rows.length, icon: ReceiptLongOutlined, color: '#087c78' },
+      { label: 'Nhập hàng · PUT', value: rows.filter(row => row.kind === 'PUT').length, icon: ArrowDownward, color: '#3274ad' },
+      { label: 'Xuất hàng · PICK', value: rows.filter(row => row.kind === 'PICK').length, icon: ArrowUpward, color: '#bb7837' }
+    ].map(stat => <Grid item xs={12} sm={4} key={stat.label}><Card><CardContent><Stack direction="row" justifyContent="space-between" alignItems="center"><Box><Typography variant="body2" color="text.secondary">{stat.label}</Typography><Typography variant="h4" fontWeight={750} sx={{ mt: 1 }}>{loading ? '—' : stat.value}</Typography></Box><Box sx={{ display: 'flex', p: 1.5, borderRadius: 3, color: stat.color, bgcolor: stat.color + '12' }}><stat.icon /></Box></Stack></CardContent></Card></Grid>)}</Grid>
+    <Card sx={{ mb: 2 }}><CardContent><Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+      <TextField size="small" label="Tìm sản phẩm hoặc mã giao dịch" value={search} onChange={event => { setSearch(event.target.value); setPage(0) }} sx={{ flex: 1 }} InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }} />
+      <TextField select size="small" label="Loại giao dịch" value={type} onChange={event => { setType(event.target.value); setPage(0) }} sx={{ minWidth: 190 }}>{[['ALL', 'Tất cả'], ['PUT', 'Nhập hàng · PUT'], ['PICK', 'Xuất hàng · PICK'], ['ADJUST', 'Điều chỉnh'], ['INITIAL', 'Tồn kho ban đầu']].map(([key, label]) => <MenuItem key={key} value={key}>{label}</MenuItem>)}</TextField>
+      <Button onClick={() => { setSearch(''); setType('ALL'); setPage(0) }}>Xóa bộ lọc</Button>
+    </Stack></CardContent></Card>
+    {history.isError && <Alert severity="error" sx={{ mb: 1.5 }}>Không tải được lịch sử giao dịch. Vui lòng làm mới.</Alert>}
+    {local.isError && <Alert severity="error" sx={{ mb: 1.5 }}>Không tải được giao dịch local. Vui lòng kiểm tra kết nối và phiên đăng nhập.</Alert>}
+    <Card><Stack direction="row" justifyContent="space-between" sx={{ p: 2 }}><Typography variant="h6" fontWeight={700}>Lịch sử giao dịch</Typography><Chip size="small" variant="outlined" label={`${filtered.length} bản ghi`} /></Stack>
+      <TableContainer><Table size="small"><TableHead><TableRow>{['Sản phẩm', 'Loại', 'Số lượng', 'Vị trí', 'Trạng thái', 'Thời gian', 'Mã giao dịch'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
+        {loading ? Array.from({ length: 5 }, (_, index) => <TableRow key={index}><TableCell colSpan={7}><Skeleton height={40} /></TableCell></TableRow>) : filtered.length === 0 ? <TableRow><TableCell colSpan={7}><EmptyState text="Chưa có giao dịch phù hợp" /></TableCell></TableRow> : filtered.slice(Math.min(page, Math.max(0, Math.ceil(filtered.length / 15) - 1)) * 15, (Math.min(page, Math.max(0, Math.ceil(filtered.length / 15) - 1)) + 1) * 15).map(row => <TableRow hover key={row.id}>
+          <TableCell><Typography variant="body2" fontWeight={650}>{row.item_name || `Sản phẩm #${row.item_id}`}</Typography><Typography variant="caption" color="text.secondary">{row.item_code || `ID ${row.item_id}`}</Typography></TableCell>
+          <TableCell><Chip size="small" label={row.kind} color={row.kind === 'PUT' ? 'success' : row.kind === 'PICK' ? 'warning' : 'default'} variant="outlined" /></TableCell>
+          <TableCell align="right" sx={{ fontWeight: 700 }}>{row.quantity}</TableCell><TableCell>{row.rack ? `Rack ${row.rack}` : '—'}</TableCell>
+          <TableCell><Chip size="small" label={states[row.state] || row.state} color={row.state === 'COMPLETED' ? 'success' : row.state === 'FAILED' ? 'error' : 'default'} variant="outlined" />{row.sync && <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>{row.sync === 'SYNCED' ? 'Đã đồng bộ' : row.sync === 'PENDING' ? 'Chờ đồng bộ' : row.sync}</Typography>}</TableCell>
+          <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDateTime(row.time)}</TableCell><TableCell sx={{ maxWidth: 210, overflowWrap: 'anywhere', fontSize: 12 }}>{row.reference}</TableCell>
+        </TableRow>)}
+      </TableBody></Table></TableContainer>
+      <TablePagination component="div" count={filtered.length} rowsPerPage={15} rowsPerPageOptions={[15]} page={Math.min(page, Math.max(0, Math.ceil(filtered.length / 15) - 1))} onPageChange={(_, value) => setPage(value)} labelDisplayedRows={({ from, to, count }) => `${from}–${to} / ${count}`} />
+    </Card>
+  </Box>
 }

@@ -347,12 +347,12 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
   const currentActiveOrder = activeRackId ? racks.findIndex(rack => rack.id === activeRackId) : -1
   const currentOpen = current?.targetGap ?? queue[0]?.targetGap ?? gapRef.current
 
-  return <Stack spacing={1.25}>
-    <Paper variant="outlined" sx={{ p: { xs: 1.25, md: 1.75 }, borderRadius: 1 }}>
+  return <Stack className="rack-operation-panel" spacing={2}>
+    <Paper className="rack-operation-main" variant="outlined" sx={{ p: { xs: 2, md: 2 }, borderRadius: 4 }}>
       <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={1.25} sx={{ mb: 1.25 }}>
         <Box>
-          <Typography variant="h6" fontWeight={800}>Rack operation</Typography>
-          <Typography variant="body2" color="text.secondary">One rack moves at a time · Rack 1 and 2 share the same access GAP.</Typography>
+          <Typography variant="h6" fontWeight={750}>Rack operation</Typography>
+          <Typography variant="body2" color="text.secondary">Mỗi lần di chuyển một rack · Rack 1 và 2 dùng chung lối đi.</Typography>
         </Box>
         <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
           <Chip size="small" label={device?.device_type || 'Mode unknown'} color={isSimulation ? 'info' : 'primary'} variant="outlined" />
@@ -380,13 +380,13 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
         {current.error} Các lệnh đang chờ không được tự gửi tiếp.
       </Alert>}
 
-      <Stack direction={{ xs: 'column', xl: 'row' }} spacing={2}>
-        <Box sx={{ flex: 1.6, minWidth: 0 }}>
+      <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2}>
+        <Box className="rack-operation-map" sx={{ flex: 1.6, minWidth: 0, p: { xs: 1.5, sm: 2 }, borderRadius: 3, bgcolor: '#f7fafb', border: '1px solid', borderColor: 'divider' }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-            <Typography variant="subtitle2" fontWeight={750}>{ventilationMode ? 'VENTILATION · 5 EVEN GAPS' : 'CABINET GAP MAP'}</Typography>
+            <Typography variant="subtitle2" fontWeight={750}>{ventilationMode ? 'Thông gió · 5 khoảng hở' : 'Sơ đồ rack & lối đi'}</Typography>
             <Chip size="small" color={stateColor as any} label={stateLabel} />
           </Stack>
-          <Box aria-label="Six-rack GAP arrangement" sx={{ position: 'relative', width: '100%', height: { xs: 62, sm: 70 }, mb: 1 }}>
+          <Box aria-label="Six-rack GAP arrangement" sx={{ position: 'relative', width: '100%', height: { xs: 90, sm: 116 }, mb: 1.5 }}>
             {racks.map((rack, index) => {
               const isMoving = displayMovingRack?.id === rack.id
               const isActive = activeRackId === rack.id
@@ -402,14 +402,14 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
               const rackLeftPercent = ventilationMode ? index * 6 / 35 * 100 : rackLeft / 13 * 100
               return <Box key={rack.id} title={`Rack ${index + 1}: ${rackState}${isLightOn ? ' · LIGHT ON' : ''}`} sx={{
                 position: 'absolute', left: `${rackLeftPercent}%`, top: 0, width: `${rackWidth}%`, height: '100%',
-                px: { xs: 0.35, sm: 0.7 }, py: { xs: 0.45, sm: 0.65 }, border: '1px solid', borderRadius: 0.75,
+                px: { xs: 0.35, sm: 0.7 }, py: { xs: 0.45, sm: 0.65 }, border: '1px solid', borderRadius: 2,
                 borderColor: isError ? 'error.main' : isMoving ? 'warning.main' : isActive ? 'success.main' : isTarget ? 'primary.main' : 'divider',
-                bgcolor: isError ? 'error.50' : isMoving || isLightOn ? 'warning.50' : isActive || isSpread ? 'success.50' : 'background.paper',
+                bgcolor: isError ? '#fff1f0' : isMoving || isLightOn ? '#fff7e9' : isActive || isSpread ? '#eef8f1' : '#f7fafb',
                 transition: 'left 120ms linear, border-color 160ms ease, background-color 160ms ease',
                 boxShadow: isMoving ? 1 : 0, zIndex: isMoving ? 2 : 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', overflow: 'hidden'
               }}>
                 {isLightOn && <Box aria-label={`Rack ${index + 1} light on`} sx={{ position: 'absolute', top: 4, right: 4, width: 7, height: 7, borderRadius: '50%', bgcolor: 'warning.main', boxShadow: '0 0 0 2px rgba(237, 108, 2, 0.16)' }} />}
-                <Typography variant="subtitle2" fontWeight={850} sx={{ fontSize: { xs: 11, sm: 13 }, lineHeight: 1.1 }}>R{index + 1}</Typography>
+                <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: { xs: 14, sm: 19 }, lineHeight: 1.1 }}>R{index + 1}</Typography>
                 <Typography variant="caption" color={isError ? 'error.main' : isMoving ? 'warning.dark' : isActive ? 'success.dark' : 'text.secondary'} noWrap sx={{ fontSize: { xs: 7, sm: 9 }, lineHeight: 1.1, mt: 0.35 }}>
                   {rackState}
                 </Typography>
@@ -449,32 +449,33 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
           </Box>}
         </Box>
 
-        <Box sx={{ flex: 1, minWidth: { xs: 0, xl: 310 }, borderLeft: { xl: '1px solid' }, borderColor: { xl: 'divider' }, pl: { xl: 2 } }}>
+        <Box className="rack-operation-controls" sx={{ flex: 1, minWidth: { xs: 0, lg: 290 }, borderLeft: { lg: '1px solid' }, borderColor: { lg: 'divider' }, pl: { lg: 2 } }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-            <Typography variant="subtitle2" fontWeight={750}>OPEN RACK</Typography>
+            <Typography variant="subtitle2" fontWeight={750}>Mở rack</Typography>
             <Typography variant="caption" color="text.secondary">Queue {queue.length}</Typography>
           </Stack>
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 0.5 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 0.75 }}>
             {racks.map((rack, index) => {
               const duplicateOpen = hasPendingOpen(rack.id)
               const alreadyActive = isRackAlreadyActive(rack.id)
               const disabled = !ready || !!current?.error || !!confirmation || duplicateOpen || alreadyActive
-              return <Button key={rack.id} size="small" aria-label={`Open R${index + 1}`} title={duplicateOpen ? `Rack ${index + 1} already has an open command pending` : alreadyActive ? `Rack ${index + 1} is already active` : `Open Rack ${index + 1}`} variant={activeRackId === rack.id ? 'contained' : 'outlined'} disabled={disabled} onClick={() => requestCommand('OPEN', rack)} sx={{ minWidth: 0, minHeight: 34, px: 0.25, py: 0, fontSize: 12 }}>
+              return <Button key={rack.id} size="small" aria-label={`Open R${index + 1}`} title={duplicateOpen ? `Rack ${index + 1} already has an open command pending` : alreadyActive ? `Rack ${index + 1} is already active` : `Open Rack ${index + 1}`} variant={activeRackId === rack.id ? 'contained' : 'outlined'} disabled={disabled} onClick={() => requestCommand('OPEN', rack)} sx={{ minWidth: 0, minHeight: 36, px: 0.25, py: 0, fontSize: 14, fontWeight: 700, borderRadius: 2, boxShadow: 'none' }}>
                 R{index + 1}
               </Button>
             })}
           </Box>
-          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.75 }}>
-            <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>Light</Typography>
+          <Stack className="rack-operation-lights" direction="row" spacing={0.5} alignItems="center" sx={{ mt: 1.5 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>Đèn</Typography>
             {racks.map((rack, index) => {
               const lightOn = lightOnRackIds.has(Number(rack.id))
               const action = lightOn ? 'LIGHT_OFF' : 'LIGHT'
-              return <IconButton key={rack.id} size="small" title={`Turn light ${lightOn ? 'off' : 'on'} for Rack ${index + 1}`} aria-label={`Turn light ${lightOn ? 'off' : 'on'} for Rack ${index + 1}`} color={lightOn ? 'warning' : 'default'} disabled={!ready || !!current || queue.length > 0 || lightBusy || !!confirmation} onClick={() => onLightRequest(rack, action)} sx={{ width: 34, height: 34 }}>
+              return <IconButton key={rack.id} size="small" title={`Turn light ${lightOn ? 'off' : 'on'} for Rack ${index + 1}`} aria-label={`Turn light ${lightOn ? 'off' : 'on'} for Rack ${index + 1}`} color={lightOn ? 'warning' : 'default'} disabled={!ready || !!current || queue.length > 0 || lightBusy || !!confirmation} onClick={() => onLightRequest(rack, action)} sx={{ width: 36, height: 46, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
                 <Lightbulb fontSize="small" />
+                <Typography component="span" sx={{ fontSize: 9, fontWeight: 650, color: 'inherit', lineHeight: 1 }}>R{index + 1}</Typography>
               </IconButton>
             })}
           </Stack>
-          <Button fullWidth variant="outlined" color="inherit" startIcon={<Home />} title={isAlreadyHome() ? 'The cabinet is already at HOME' : hasPendingHome() ? 'A HOME command is already pending' : 'Return Home'} disabled={!ready || !!current?.error || !!confirmation || hasPendingHome() || isAlreadyHome()} onClick={() => requestCommand('HOME')} sx={{ mt: 1, minHeight: 42 }}>
+          <Button fullWidth variant="outlined" color="inherit" startIcon={<Home />} title={isAlreadyHome() ? 'The cabinet is already at HOME' : hasPendingHome() ? 'A HOME command is already pending' : 'Return Home'} disabled={!ready || !!current?.error || !!confirmation || hasPendingHome() || isAlreadyHome()} onClick={() => requestCommand('HOME')} sx={{ mt: 1.5, minHeight: 36, borderRadius: 2.5 }}>
             Return Home · GAP right of R6
           </Button>
           {!canOperate && <Typography variant="caption" color="warning.main" display="block" sx={{ mt: 1 }}>Operator permission is required.</Typography>}
@@ -482,7 +483,7 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
       </Stack>
     </Paper>
 
-    <Dialog open={!!confirmation} onClose={() => setConfirmation(null)} maxWidth="xs" fullWidth>
+    <Dialog className="cabinet-operation-dialog" open={!!confirmation} onClose={() => setConfirmation(null)} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ pb: 0.5, fontWeight: 750 }}>Confirm rack movement</DialogTitle>
       <DialogContent>
         <Stack spacing={1.25} sx={{ pt: 0.5 }}>
@@ -509,7 +510,7 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
           ) : <Typography variant="body2" color="text.secondary">No rack movement is expected.</Typography>}
         </Stack>
       </DialogContent>
-      <DialogActions sx={{ px: 2.5, pb: 2 }}>
+      <DialogActions sx={{ px: 2, pb: 2 }}>
         <Button onClick={() => setConfirmation(null)}>Cancel</Button>
         <Button variant="contained" disabled={!ready} onClick={confirmCommand}>
           Confirm {confirmation?.kind === 'HOME' ? 'Return Home' : `Open Rack ${confirmation ? rackNumber(confirmation.rack) : ''}`}
@@ -517,13 +518,13 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
       </DialogActions>
     </Dialog>
 
-    <Dialog open={executionDialogOpen} onClose={() => setExecutionDialogOpen(false)} maxWidth="sm" fullWidth>
+    <Dialog className="cabinet-operation-dialog" open={executionDialogOpen} onClose={() => setExecutionDialogOpen(false)} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ fontWeight: 750 }}>
         {current?.phase === 'ERROR' ? 'Operation needs attention' : current ? current.kind === 'HOME' ? 'Returning GAP to HOME' : `Opening Rack ${rackNumber(current.rack)}` : 'Operation complete'}
       </DialogTitle>
       <DialogContent>
         {current?.phase === 'ERROR' ? <Alert severity="error">{current.error} Check the cabinet before retrying.</Alert> : current ? (
-          <Stack spacing={1.5} sx={{ py: 0.5 }}>
+          <Stack spacing={1.25} sx={{ py: 0.5 }}>
             <Stack direction="row" spacing={1.25} alignItems="center">
               <CircularProgress size={24} />
               <Box>
@@ -565,11 +566,11 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
       </DialogActions>
     </Dialog>
 
-    <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 1.5 }}>
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+    <Paper className="rack-operation-history" variant="outlined" sx={{ p: { xs: 2, md: 2 }, borderRadius: 4 }}>
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
         <Box sx={{ flex: 1 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-            <Typography variant="subtitle2" fontWeight={750}>COMMAND QUEUE</Typography>
+            <Typography variant="subtitle2" fontWeight={750}>Hàng đợi lệnh</Typography>
             <Chip size="small" label={`${queue.length} waiting`} color={queue.length ? 'warning' : 'default'} variant="outlined" />
           </Stack>
           <Stack spacing={0.5} sx={{ maxHeight: 140, overflowY: 'auto' }}>
@@ -585,7 +586,7 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
           </Stack>
         </Box>
         <Box sx={{ flex: 1, borderLeft: { md: '1px solid' }, borderColor: { md: 'divider' }, pl: { md: 2 } }}>
-          <Typography variant="subtitle2" fontWeight={750} sx={{ mb: 1 }}>OPERATION TIMELINE</Typography>
+          <Typography variant="subtitle2" fontWeight={750} sx={{ mb: 1 }}>Nhật ký thao tác</Typography>
           <Box sx={{ maxHeight: 140, overflowY: 'auto', fontFamily: 'monospace' }}>
             {logs.map(entry => <Typography key={entry.id} variant="caption" display="block" color={entry.tone === 'error' ? 'error.main' : entry.tone === 'success' ? 'success.dark' : 'text.secondary'}>
               [{entry.time}] {entry.message}

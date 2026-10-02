@@ -1,198 +1,43 @@
-import { useState } from 'react'
-import {
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Typography,
-  Paper,
-  TextField,
-  Stack,
-  Chip,
-  CircularProgress,
-  Grid,
-  Divider,
-  Skeleton
-} from '@mui/material'
+﻿import { useState } from 'react'
+import { Alert, Box, Button, Card, CardContent, Chip, Grid, MenuItem, Skeleton, Stack, Tab, Tabs, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
+import { Refresh, ReportProblemOutlined, CheckCircleOutline, StorageOutlined } from '@mui/icons-material'
 import { useQuery } from '@tanstack/react-query'
 import { systemAPI } from '@api/system'
-import { formatDateTime } from '@utils/date'
-import { ErrorOutline, ReportProblem, CheckCircle, Tune, Build } from '@mui/icons-material'
-
+import { formatDateTime, parseVietnamDate } from '@utils/date'
+import { PageHeader, EmptyState } from '@components/PageHeader'
+const errorsOf = (row: any): string[] => [row.is_obstructed && 'Vật cản', row.is_skewed && 'Lệch rack', row.is_overload_motor && 'Quá tải động cơ'].filter(Boolean) as string[]
 export const Breakdown = () => {
-  const [filterRack, setFilterRack] = useState('')
-
-  const breakdownQuery = useQuery({
-    queryKey: ['breakdownData'],
-    queryFn: async () => {
-      const resp = await systemAPI.getBreakdownData(100)
-      return resp.data.data
-    },
-    refetchInterval: 5000
-  })
-
-  const isLoading = breakdownQuery.isLoading
-  const breakdownLogs: any[] = breakdownQuery.data ?? []
-
-  const latestByRack = new Map<number, any>()
-  for (const log of breakdownLogs) {
-    const rackId = Number(log.rack_id)
-    if (!latestByRack.has(rackId)) latestByRack.set(rackId, log)
-  }
-
-  const currentRackStatuses = Array.from(latestByRack.values())
-  const getErrorNames = (log: any) => [
-    log.is_obstructed && 'Obstructed',
-    log.is_skewed && 'Skewed',
-    log.is_overload_motor && 'Motor overload'
-  ].filter(Boolean) as string[]
-
-  const filteredLogs = currentRackStatuses.filter((log) =>
-    filterRack.trim() === '' ? true : String(log.rack_id) === filterRack.trim()
-  )
-  const activeErrors = currentRackStatuses.filter((log) => getErrorNames(log).length > 0).length
-  const fixedRacks = currentRackStatuses.filter((log) => getErrorNames(log).length === 0).length
-  const affectedRacks = activeErrors
-
-  return (
-    <Box>
-      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ md: 'center' }} spacing={1} sx={{ mb: 3 }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 'bold', letterSpacing: '-0.02em' }}>Breakdown Events</Typography>
-          <Typography color="text.secondary" sx={{ mt: 0.5 }}>Monitor rack faults and maintenance signals.</Typography>
-        </Box>
-        <Chip icon={<ErrorOutline />} label={activeErrors ? `${activeErrors} alerts detected` : 'System clear'} color={activeErrors ? 'error' : 'success'} variant="outlined" />
-      </Stack>
-
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid item xs={12} sm={4}><Card sx={{ borderTop: '3px solid', borderColor: 'error.main' }}><CardContent><Stack direction="row" justifyContent="space-between"><Box><Typography variant="body2" color="text.secondary">Fault events</Typography><Typography variant="h4" sx={{ fontWeight: 'bold', mt: 0.5 }}>{activeErrors}</Typography><Typography variant="caption" color="text.secondary">Events with one or more flags</Typography></Box><ReportProblem color="error" sx={{ fontSize: 34 }} /></Stack></CardContent></Card></Grid>
-        <Grid item xs={12} sm={4}><Card sx={{ borderTop: '3px solid', borderColor: 'warning.main' }}><CardContent><Stack direction="row" justifyContent="space-between"><Box><Typography variant="body2" color="text.secondary">Affected racks</Typography><Typography variant="h4" sx={{ fontWeight: 'bold', mt: 0.5 }}>{affectedRacks}</Typography><Typography variant="caption" color="text.secondary">Unique racks requiring attention</Typography></Box><Build color="warning" sx={{ fontSize: 34 }} /></Stack></CardContent></Card></Grid>
-        <Grid item xs={12} sm={4}><Card sx={{ borderTop: '3px solid', borderColor: 'success.main' }}><CardContent><Stack direction="row" justifyContent="space-between"><Box><Typography variant="body2" color="text.secondary">Fixed racks</Typography><Typography variant="h4" sx={{ fontWeight: 'bold', mt: 0.5 }}>{fixedRacks}</Typography><Typography variant="caption" color="text.secondary">Latest report has no fault</Typography></Box><CheckCircle color="success" sx={{ fontSize: 34 }} /></Stack></CardContent></Card></Grid>
-      </Grid>
-
-      <Card sx={{ mb: 3 }}>
-        <CardContent sx={{ p: { xs: 2, md: 2.5 } }}>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}><Tune color="action" /><Box><Typography variant="h6" sx={{ fontWeight: 'bold' }}>Breakdown filter</Typography><Typography variant="body2" color="text.secondary">Filter alerts by rack ID.</Typography></Box></Stack>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
-            <TextField
-              label="Filter by Rack ID"
-              value={filterRack}
-              onChange={(e) => setFilterRack(e.target.value)}
-              size="small"
-              type="number"
-              sx={{ minWidth: 200 }}
-            />
-            <Button variant="outlined" onClick={() => setFilterRack('')}>
-              Clear
-            </Button>
-            <Chip label={`Racks tracked: ${currentRackStatuses.length}`} />
-            <Chip label={`Shown: ${filteredLogs.length}`} color="primary" />
-          </Stack>
-        </CardContent>
-      </Card>
-
-      {isLoading ? (
-        <TableContainer component={Paper} variant="outlined"><Table><TableBody>{Array.from({ length: 6 }).map((_, index) => <TableRow key={index}><TableCell colSpan={6}><Skeleton /></TableCell></TableRow>)}</TableBody></Table></TableContainer>
-      ) : (
-        <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 620 }}>
-          <Table stickyHeader size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Timestamp</TableCell>
-                <TableCell>Rack ID</TableCell>
-                <TableCell>Error type</TableCell>
-                <TableCell>Status</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filteredLogs.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} align="center" sx={{ py: 4, color: 'text.secondary' }}>
-                    No breakdown status found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredLogs.map((log) => {
-                  const errorNames = getErrorNames(log)
-                  const hasError = errorNames.length > 0
-                  return (
-                    <TableRow key={log.id}>
-                      <TableCell>{formatDateTime(log.created_at)}</TableCell>
-                      <TableCell>{log.rack_id ?? '--'}</TableCell>
-                      <TableCell>
-                        {hasError ? (
-                          <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
-                            {errorNames.map((name) => <Chip key={name} label={name} size="small" color="error" />)}
-                          </Stack>
-                        ) : <Typography variant="body2" color="success.main">No active error</Typography>}
-                      </TableCell>
-                      <TableCell><Chip label={hasError ? 'ERROR' : 'FIXED'} size="small" color={hasError ? 'error' : 'success'} /></TableCell>
-                    </TableRow>
-                  )
-                })
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
-
-      <Card sx={{ mt: 3 }}>
-        <CardContent sx={{ p: { xs: 2, md: 2.5 } }}>
-          <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1} sx={{ mb: 2 }}>
-            <Box>
-              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Breakdown history</Typography>
-              <Typography variant="body2" color="text.secondary">All recorded fault and recovery reports, including repeated reports from the simulator.</Typography>
-            </Box>
-            <Chip label={`${breakdownLogs.filter((log) => filterRack.trim() === '' || String(log.rack_id) === filterRack.trim()).length} records`} size="small" variant="outlined" />
-          </Stack>
-          <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 500 }}>
-            <Table stickyHeader size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Reported at</TableCell>
-                  <TableCell>Rack ID</TableCell>
-                  <TableCell>Error type</TableCell>
-                  <TableCell>Status at report</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {breakdownLogs.filter((log) => filterRack.trim() === '' || String(log.rack_id) === filterRack.trim()).length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
-                      <Typography color="text.secondary">No breakdown history found.</Typography>
-                    </TableCell>
-                  </TableRow>
-                ) : breakdownLogs
-                  .filter((log) => filterRack.trim() === '' || String(log.rack_id) === filterRack.trim())
-                  .map((log) => {
-                    const errorNames = getErrorNames(log)
-                    const hasError = errorNames.length > 0
-                    return (
-                      <TableRow key={`history-${log.id}`} hover>
-                        <TableCell>{formatDateTime(log.created_at)}</TableCell>
-                        <TableCell>{log.rack_id ?? '--'}</TableCell>
-                        <TableCell>
-                          {hasError ? (
-                            <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
-                              {errorNames.map((name) => <Chip key={`${log.id}-${name}`} label={name} size="small" color="error" variant="outlined" />)}
-                            </Stack>
-                          ) : <Typography variant="body2" color="success.main">No active error</Typography>}
-                        </TableCell>
-                        <TableCell><Chip label={hasError ? 'ERROR' : 'FIXED'} size="small" color={hasError ? 'error' : 'success'} /></TableCell>
-                      </TableRow>
-                    )
-                  })}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </CardContent>
-      </Card>
-    </Box>
-  )
+  const [rack, setRack] = useState(''), [status, setStatus] = useState('ALL'), [tab, setTab] = useState(0)
+  const query = useQuery({ queryKey: ['breakdownData'], queryFn: async () => (await systemAPI.getBreakdownData(200)).data.data, refetchInterval: 5000 })
+  const history: any[] = [...(query.data || [])].sort((a, b) => (parseVietnamDate(b.created_at)?.getTime() || 0) - (parseVietnamDate(a.created_at)?.getTime() || 0) || b.id - a.id)
+  const latest = new Map<number, any>()
+  history.forEach(row => { if (!latest.has(Number(row.rack_id))) latest.set(Number(row.rack_id), row) })
+  const current = Array.from(latest.values())
+  const active = current.filter(row => errorsOf(row).length > 0).length
+  const rows = (tab === 0 ? current : history).filter(row => (!rack || String(row.rack_id) === rack) && (status === 'ALL' || (errorsOf(row).length > 0 ? 'ERROR' : 'CLEAR') === status))
+  return <Box>
+    <PageHeader title="Sự cố & phục hồi" description="Nhận biết rack cần kiểm tra và xem lại các lần báo lỗi, hết lỗi từ thiết bị." action={<Button variant="outlined" startIcon={<Refresh />} disabled={query.isFetching} onClick={() => void query.refetch()}>Làm mới</Button>} />
+    <Grid container spacing={1.5} sx={{ mb: 2 }}>{[
+      { label: 'Rack cần kiểm tra', value: active, icon: ReportProblemOutlined, color: '#c35454' },
+      { label: 'Rack không báo lỗi', value: current.length - active, icon: CheckCircleOutline, color: '#087c78' },
+      { label: 'Rack có dữ liệu', value: current.length, icon: StorageOutlined, color: '#3274ad' }
+    ].map(stat => <Grid item xs={12} sm={4} key={stat.label}><Card><CardContent><Stack direction="row" justifyContent="space-between" alignItems="center"><Box><Typography variant="body2" color="text.secondary">{stat.label}</Typography><Typography variant="h4" fontWeight={750} sx={{ mt: 1 }}>{query.isLoading || query.isError ? '—' : stat.value}</Typography></Box><Box sx={{ display: 'flex', p: 1.5, borderRadius: 3, bgcolor: stat.color + '12', color: stat.color }}><stat.icon /></Box></Stack></CardContent></Card></Grid>)}</Grid>
+    {query.isError && <Alert severity="error" sx={{ mb: 2 }}>Không tải được dữ liệu sự cố. Vui lòng làm mới.</Alert>}
+    {!query.isLoading && !query.isError && active > 0 && <Alert severity="warning" sx={{ mb: 2 }}>Có {active} rack báo lỗi trong dữ liệu gần nhất. Kiểm tra vật cản, độ lệch và tải động cơ trước khi tiếp tục thao tác.</Alert>}
+    <Card sx={{ mb: 2 }}><CardContent><Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+      <TextField size="small" type="number" label="Rack ID" value={rack} onChange={event => setRack(event.target.value)} />
+      <TextField select size="small" label="Trạng thái" value={status} onChange={event => setStatus(event.target.value)} sx={{ minWidth: 200 }}><MenuItem value="ALL">Tất cả trạng thái</MenuItem><MenuItem value="ERROR">Có lỗi</MenuItem><MenuItem value="CLEAR">Không báo lỗi</MenuItem></TextField>
+      <Button onClick={() => { setRack(''); setStatus('ALL') }}>Xóa bộ lọc</Button>
+    </Stack></CardContent></Card>
+    <Card><Box sx={{ px: 2, pt: 1 }}><Tabs value={tab} onChange={(_, value) => setTab(value)} aria-label="Chế độ xem sự cố"><Tab label="Trạng thái gần nhất" /><Tab label="Lịch sử báo cáo" /></Tabs></Box>
+      <Stack direction="row" justifyContent="space-between" spacing={1.5} sx={{ p: 2 }}><Typography variant="body2" color="text.secondary">{tab === 0 ? 'Báo cáo mới nhất của từng rack trong dữ liệu đã tải.' : 'Các báo cáo sự cố và hết lỗi, mới nhất trước.'}</Typography><Chip size="small" label={`${rows.length} bản ghi`} variant="outlined" /></Stack>
+      <TableContainer sx={{ maxHeight: 620 }}><Table stickyHeader size="small"><TableHead><TableRow>{['Rack', 'Trạng thái', 'Chi tiết lỗi', 'Thời gian báo cáo'].map(label => <TableCell key={label}>{label}</TableCell>)}</TableRow></TableHead><TableBody>
+        {query.isLoading ? Array.from({ length: 5 }, (_, index) => <TableRow key={index}><TableCell colSpan={4}><Skeleton height={40} /></TableCell></TableRow>) : rows.length === 0 ? <TableRow><TableCell colSpan={4}><EmptyState text="Chưa có báo cáo phù hợp" /></TableCell></TableRow> : rows.map(row => {
+          const errors = errorsOf(row)
+          return <TableRow hover key={row.id}><TableCell sx={{ fontWeight: 650 }}>Rack {row.rack_id}</TableCell><TableCell><Chip size="small" label={errors.length ? 'Cần kiểm tra' : 'Không báo lỗi'} color={errors.length ? 'error' : 'success'} variant="outlined" /></TableCell><TableCell>{errors.length ? <Stack direction="row" flexWrap="wrap" gap={0.75}>{errors.map(error => <Chip key={error} label={error} size="small" color="error" />)}</Stack> : <Typography variant="body2" color="text.secondary">Không phát hiện lỗi trong báo cáo</Typography>}</TableCell><TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDateTime(row.created_at)}</TableCell></TableRow>
+        })}
+      </TableBody></Table></TableContainer>
+    </Card>
+    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>Dữ liệu cập nhật mỗi 5 giây · tối đa 200 báo cáo gần nhất. Rack chưa có báo cáo chưa được đánh giá trạng thái.</Typography>
+  </Box>
 }

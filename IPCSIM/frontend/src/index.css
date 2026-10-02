@@ -261,7 +261,7 @@ code {
 }
 
 .inventory-workspace .MuiTableBody-root .MuiTableRow-root {
-  height: 58px;
+  height: auto;
 }
 
 .inventory-workspace .inventory-product-name,
@@ -344,7 +344,7 @@ code {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 18px;
+  padding: 14px;
   color: var(--inventory-muted);
   text-align: center;
 }
@@ -398,7 +398,7 @@ code {
   min-height: 0;
   flex: 1;
   overflow: auto;
-  padding: 16px 20px;
+  padding: 12px 16px;
 }
 
 .inventory-detail-identifiers,
@@ -886,4 +886,138 @@ code {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #555;
+}
+
+/* Inventory: align with the monitoring pages while preserving responsive cards. */
+.inventory-workspace .MuiPaper-root { border-radius: 16px; border-color: #e0e8eb; }
+.inventory-workspace .inventory-toolbar { padding: 16px; border-radius: 16px; }
+.inventory-workspace .inventory-toolbar-heading { grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; }
+.inventory-workspace .inventory-search { grid-column: auto; }
+.inventory-workspace .inventory-view-toggle { grid-column: auto; grid-row: auto; }
+.inventory-workspace .inventory-filter-toggle { display: inline-flex; grid-column: auto; grid-row: auto; }
+.inventory-workspace .inventory-filters { margin-top: 20px; gap: 16px; }
+.inventory-workspace .MuiOutlinedInput-root { min-height: 42px; border-radius: 10px; font-size: 14px; }
+.inventory-workspace .MuiButton-root { min-height: 36px; padding: 6px 12px; border-radius: 10px; font-size: 13px; }
+.inventory-workspace .inventory-view-toggle { background: #f4f8f9; border-radius: 10px; padding: 4px; }
+.inventory-workspace .inventory-view-toggle .MuiToggleButton-root { min-height: 34px; border: 0; border-radius: 8px; padding: 7px 14px; font-weight: 650; }
+.inventory-workspace .inventory-view-toggle .Mui-selected { background: #e3f1ef; color: #087c78; }
+.inventory-workspace .inventory-summary { border: 0; gap: 16px; }
+.inventory-workspace .inventory-summary-item,
+.inventory-workspace .inventory-summary-item:first-child,
+.inventory-workspace .inventory-summary-item:last-child { padding: 16px; border: 1px solid #e0e8eb; display: flex; align-items: center; background: #fff; border-radius: 16px; }
+.inventory-workspace .inventory-summary-item .MuiTypography-caption { color: #647a80; font-size: 13px; }
+.inventory-workspace .inventory-summary-value { font-size: 30px; line-height: 1.3; margin-top: 8px; }
+.inventory-workspace .inventory-summary-icon { display: flex; padding: 12px; background: #eaf4f3; color: #087c78; border-radius: 12px; }
+.inventory-workspace .inventory-summary-item:nth-child(3) .inventory-summary-icon { color: #bb7837; background: #fbf4ed; }
+.inventory-workspace .inventory-summary-item:nth-child(2) .inventory-summary-icon { color: #3274ad; background: #edf4fa; }
+.inventory-workspace .MuiTableCell-root { padding: 10px 14px; font-size: 14px; }
+.inventory-workspace .MuiTableHead-root .MuiTableCell-root { background: #f7fafb; font-size: 12px; }
+.inventory-workspace .inventory-product-name { font-size: 14px; }
+.inventory-workspace .inventory-product-cell .MuiTypography-caption,
+.inventory-workspace .inventory-product-location .MuiTypography-caption { font-size: 12px; margin-top: 4px; }
+.inventory-workspace .MuiChip-root { border-radius: 8px; font-size: 12px; height: 26px; }
+.inventory-workspace .inventory-cabinet-heading { padding: 14px; background: #fff; }
+.inventory-workspace .inventory-table-wrap { overflow: auto; }
+.inventory-detail-heading { padding: 18px 16px 14px; background: #f7fafb; }
+.inventory-detail-scroll { padding: 16px; }
+.inventory-detail-quantities { border-radius: 12px; padding: 14px; margin-top: 18px; background: #eff7f6; }
+.inventory-detail-value { font-size: 26px; margin-top: 6px; }
+.inventory-detail-drawer .inventory-location-card { padding: 14px; border-radius: 12px; }
+.inventory-detail-actions { padding: 14px 16px; gap: 12px; }
+.inventory-detail-actions .MuiButton-root { min-height: 36px; border-radius: 10px; }
+.inventory-operation-dialog .MuiDialog-paper { border-radius: 18px; }
+.inventory-operation-dialog .MuiDialogTitle-root { padding: 16px 18px; background: #f7fafb; }
+.inventory-operation-dialog .MuiDialogContent-root { padding: 16px 18px; }
+.inventory-operation-dialog .MuiDialogActions-root { padding: 12px 16px; }
+.inventory-operation-dialog .MuiDialogActions-root .MuiButton-root { min-height: 42px; }
+.inventory-operation-product, .inventory-operation-available, .inventory-operation-target, .inventory-operation-plan { border-radius: 10px; padding: 14px; }
+@media (max-width: 1200px) {
+  .inventory-workspace .inventory-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 850px) {
+  .inventory-workspace .inventory-toolbar-heading { grid-template-columns: minmax(0, 1fr) auto; }
+  .inventory-workspace .inventory-search { grid-column: 1 / -1; }
+  .inventory-workspace .inventory-view-toggle { grid-column: 1; grid-row: auto; }
+  .inventory-workspace .inventory-filter-toggle { grid-column: 2; grid-row: auto; }
+  .inventory-workspace .inventory-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inventory-workspace .inventory-table-wrap .MuiTableRow-root { border-radius: 12px; height: auto; }
+  .inventory-workspace .inventory-table-wrap .MuiTableBody-root { padding: 12px; gap: 12px; }
+  .inventory-workspace .inventory-table-wrap .MuiTableCell-root { padding: 12px; }
+  .inventory-workspace .inventory-table-wrap .inventory-product-location { flex-direction: column; gap: 3px; }
+}
+@media (max-width: 600px) {
+  .inventory-workspace .inventory-toolbar { padding: 16px; }
+  .inventory-workspace .inventory-summary { gap: 12px; }
+  .inventory-workspace .inventory-summary-item,
+  .inventory-workspace .inventory-summary-item:first-child,
+  .inventory-workspace .inventory-summary-item:last-child { padding: 16px; align-items: flex-start; gap: 8px; }
+  .inventory-workspace .inventory-summary-item .MuiTypography-caption { font-size: 12px; }
+  .inventory-workspace .inventory-summary-value { font-size: 26px; }
+  .inventory-workspace .inventory-summary-icon { padding: 8px; }
+  .inventory-workspace .inventory-summary-icon svg { font-size: 18px; }
+  .inventory-workspace .inventory-table-wrap .MuiTableCell-root[data-label] { flex-wrap: wrap; }
+  .inventory-workspace .inventory-table-wrap .MuiTableCell-root[data-label]::before { font-size: 11px; }
+  .inventory-detail-scroll { padding: 16px; }
+  .inventory-detail-heading { padding: 20px 16px; }
+  .inventory-detail-actions { padding: 16px; }
+}
+.inventory-detail-drawer .inventory-detail-name { font-size: 24px; font-weight: 750; }
+.inventory-detail-drawer .inventory-detail-value { font-size: 26px; font-weight: 750; }
+.inventory-detail-drawer .inventory-location-path { font-size: 14px; font-weight: 650; }
+.inventory-detail-drawer .inventory-location-card { border-color: #e0e8eb; }
+.inventory-operation-dialog .inventory-dialog-title h2 { font-size: 22px; font-weight: 750; }
+@media (max-width: 850px) {
+  .inventory-workspace .inventory-table-wrap .MuiTableCell-root[data-label="Tổng số lượng"],
+  .inventory-workspace .inventory-table-wrap .MuiTableCell-root[data-label="Có thể xuất"] { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .inventory-workspace .inventory-table-wrap .MuiTableCell-root:last-child::before { display: none; }
+}
+
+/* Cabinet presentation: no changes to motion, queue or command state. */
+.cabinet-detail .rack-operation-main { box-shadow: 0 4px 24px rgba(23, 52, 58, 0.025); }
+.rack-operation-panel .MuiChip-root { border-radius: 8px; }
+.rack-operation-panel .rack-operation-main > .MuiStack-root:first-child { margin-bottom: 16px; }
+.rack-operation-panel .rack-operation-lights { padding: 6px 8px; border: 1px solid #e0e8eb; background: #f7fafb; border-radius: 12px; justify-content: space-between; }
+.rack-operation-panel .rack-operation-lights .MuiIconButton-root { border-radius: 10px; }
+.rack-operation-panel .rack-operation-lights .MuiIconButton-colorWarning { background: #fff0d6; }
+.rack-operation-panel .rack-operation-history .MuiTypography-subtitle2 { color: #17343a; }
+.rack-operation-panel .rack-operation-history .MuiTypography-caption { line-height: 1.6; }
+.cabinet-operation-dialog .MuiDialog-paper { border-radius: 18px; }
+.cabinet-operation-dialog .MuiDialogTitle-root { background: #f7fafb; padding: 16px 18px 18px; font-size: 21px; }
+.cabinet-operation-dialog .MuiDialogContent-root { padding: 16px 18px; }
+.cabinet-operation-dialog .MuiDialogActions-root { padding: 12px 18px 16px; gap: 8px; }
+.cabinet-operation-dialog .MuiDialogActions-root .MuiButton-root { min-height: 36px; border-radius: 10px; }
+.cabinet-operation-dialog .MuiAlert-root { border-radius: 10px; }
+@media (max-width: 600px) {
+  .cabinet-detail-heading > .MuiStack-root > .MuiStack-root { align-items: flex-start; }
+  .cabinet-detail-heading > .MuiStack-root > .MuiStack-root > .MuiButton-root { min-width: 40px; padding: 8px; }
+  .cabinet-operation-dialog .MuiDialogTitle-root { font-size: 19px; padding: 20px 18px 16px; }
+  .cabinet-operation-dialog .MuiDialogContent-root { padding: 20px 18px; }
+  .cabinet-operation-dialog .MuiDialogActions-root { padding: 14px 18px 18px; }
+  .rack-operation-panel .rack-operation-lights { padding: 8px 4px; }
+  .rack-operation-panel .rack-operation-controls { padding-top: 4px; }
+}
+
+/* Dense presentation retains typography and mobile touch targets. */
+@media (min-width: 900px) {
+  .inventory-workspace .inventory-summary-item > .MuiBox-root:first-child { display: flex; flex: 1; align-items: center; justify-content: space-between; gap: 12px; }
+  .inventory-workspace .inventory-summary-value { margin-top: 0; font-size: 28px; }
+  .inventory-workspace .inventory-summary-icon { padding: 8px; margin-left: 12px; }
+  .inventory-detail-identifiers > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+}
+.inventory-workspace .inventory-summary { gap: 12px; }
+.inventory-workspace .inventory-summary-item,
+.inventory-workspace .inventory-summary-item:first-child,
+.inventory-workspace .inventory-summary-item:last-child { padding: 16px; }
+.inventory-workspace .inventory-quantity-value { font-size: 14px; }
+.inventory-workspace .MuiTableBody-root .MuiTableRow-root { min-height: 0; }
+.inventory-detail-quantities { margin-top: 12px; margin-bottom: 12px; padding: 12px; }
+.inventory-detail-drawer .inventory-location-card { padding: 12px; }
+.cabinet-operation-dialog .MuiDialogActions-root .MuiButton-root,
+.inventory-operation-dialog .MuiDialogActions-root .MuiButton-root { min-height: 36px; }
+@media (max-width: 600px) {
+  main .MuiButton-root,
+  .cabinet-operation-dialog .MuiDialogActions-root .MuiButton-root,
+  .inventory-operation-dialog .MuiDialogActions-root .MuiButton-root,
+  .inventory-detail-actions .MuiButton-root { min-height: 44px; }
+  .inventory-workspace .inventory-table-wrap .MuiTableCell-root { padding: 10px 12px; }
 }

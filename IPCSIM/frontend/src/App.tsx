@@ -1,12 +1,12 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
-import { Alert, Box, Button, CircularProgress, CssBaseline, Stack, TextField, ThemeProvider, Typography, createTheme } from '@mui/material'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { Alert, Box, CircularProgress, CssBaseline, Stack, ThemeProvider, Typography, createTheme } from '@mui/material'
 import { FormEvent, useEffect, useState } from 'react'
-import { EdgeWorkspace } from './pages/EdgeWorkspace'
 import { InventoryWorkspace } from './pages/InventoryWorkspace'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Layout } from '@components/Layout/Layout'
-import { Dashboard, Cabinets, CabinetDetail, Transactions, Breakdown, Environment, Logs, Operation, System, Maintenance } from '@pages/index'
+import { Dashboard, Cabinets, CabinetDetail, Transactions, Breakdown, Environment, Operation, System } from '@pages/index'
 import api from '@api/client'
+import { OperatorLogin } from '@components/OperatorLogin'
 
 const OPERATOR_SESSION_KEY = 'edgeOperatorSession'
 const OPERATOR_PERMISSIONS_KEY = 'edgeOperatorPermissions'
@@ -32,23 +32,32 @@ const queryClient = new QueryClient()
 const theme = createTheme({
   palette: {
     mode: 'light',
-    primary: { main: '#0077a3' },
+    primary: { main: '#087c78' },
     secondary: { main: '#ff4081' },
-    background: { default: '#f1f8f7', paper: '#ffffff' }
+    background: { default: '#f4f7f9', paper: '#ffffff' },
+    text: { primary: '#17343a', secondary: '#647a80' },
+    divider: '#e0e8eb'
   },
   typography: {
-    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+    fontFamily: '"Segoe UI", "Roboto", "Arial", sans-serif',
     fontSize: 14
   },
   components: {
+    MuiCardContent: { styleOverrides: { root: { padding: 16, '&:last-child': { paddingBottom: 16 } } } },
+    MuiTablePagination: { styleOverrides: { toolbar: { minHeight: 44 } } },
+    MuiCard: { defaultProps: { elevation: 0 }, styleOverrides: { root: { borderRadius: 16, border: '1px solid #e0e8eb' } } },
+    MuiPaper: { styleOverrides: { rounded: { borderRadius: 12 } } },
+    MuiTableCell: { styleOverrides: { root: { borderBottom: '1px solid #edf1f3', padding: '9px 14px' }, head: { backgroundColor: '#f7fafb', color: '#647a80', fontWeight: 700, whiteSpace: 'nowrap', fontSize: 12 } } },
+    MuiChip: { styleOverrides: { root: { borderRadius: 8, fontWeight: 600 } } },
+    MuiOutlinedInput: { styleOverrides: { root: { borderRadius: 10 } } },
     MuiButton: {
       styleOverrides: {
         root: {
           textTransform: 'none',
-          minHeight: 64,
+          minHeight: 36,
           borderRadius: 8,
-          paddingLeft: 20,
-          paddingRight: 20
+          paddingLeft: 14,
+          paddingRight: 14
         }
       }
     }
@@ -162,21 +171,11 @@ function App() {
     setOperatorPermissions([])
     setOperatorError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
   }
-  if (checkingSession) return <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}><Stack alignItems="center" spacing={2}><CircularProgress /><Typography>Đang xác minh phiên đăng nhập</Typography></Stack></Box>
+  if (checkingSession) return <ThemeProvider theme={theme}><CssBaseline /><Box sx={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', p: 2 }}><Stack alignItems="center" spacing={2}><CircularProgress /><Typography>Đang xác minh phiên đăng nhập</Typography></Stack></Box></ThemeProvider>
 
-  if (!authenticated || !operatorSession) return <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', px: 2 }}>
-    <Box component="form" onSubmit={submitOperatorLogin} sx={{ width: '100%', maxWidth: 400 }}>
-      <Typography variant="h4" sx={{ mb: 1 }}>Đăng nhập vận hành</Typography>
-      <Typography color="text.secondary" sx={{ mb: 3 }}>Đăng nhập bằng tài khoản Server để tiếp tục vào IPC/IPCSIM.</Typography>
-      {operatorError && <Alert severity="error" sx={{ mb: 2 }}>{operatorError}</Alert>}
-      <Stack spacing={2}>
-        {!authenticated && <TextField label="Edge API token" type="password" autoComplete="off" value={token} onChange={event => setToken(event.target.value)} required />}
-        <TextField label="Tên đăng nhập" autoComplete="username" value={operatorLogin.username} onChange={event => setOperatorLogin({ ...operatorLogin, username: event.target.value })} required autoFocus />
-        <TextField label="Mật khẩu" type="password" autoComplete="current-password" value={operatorLogin.password} onChange={event => setOperatorLogin({ ...operatorLogin, password: event.target.value })} required />
-        <Button type="submit" variant="contained" disabled={operatorBusy}>{operatorBusy ? 'Đang đăng nhập…' : 'Đăng nhập'}</Button>
-      </Stack>
-    </Box>
-  </Box>
+  if (!authenticated || !operatorSession) return <ThemeProvider theme={theme}><CssBaseline />
+    <OperatorLogin authenticated={authenticated} token={token} onTokenChange={setToken} login={operatorLogin} onLoginChange={setOperatorLogin} error={operatorError} busy={operatorBusy} onSubmit={submitOperatorLogin} />
+  </ThemeProvider>
 
   return (
     <ThemeProvider theme={theme}>
@@ -190,11 +189,11 @@ function App() {
               <Route path="/inventory" element={<InventoryWorkspace session={operatorSession} permissions={operatorPermissions} onSessionExpired={expireOperatorSession} />} />
               <Route path="/cabinets" element={<Cabinets />} />
               <Route path="/cabinets/:id" element={<CabinetDetail session={operatorSession} permissions={operatorPermissions} onSessionExpired={expireOperatorSession} />} />
-              <Route path="/transactions" element={<Transactions />} />
+              <Route path="/transactions" element={<Transactions session={operatorSession} onSessionExpired={expireOperatorSession} />} />
               <Route path="/breakdown" element={<Breakdown />} />
               <Route path="/environment" element={<Environment />} />
-              <Route path="/operation" element={<EdgeWorkspace session={operatorSession} permissions={operatorPermissions} onSessionExpired={expireOperatorSession} />} />
-              <Route path="/logs" element={<Logs />} />
+              <Route path="/operation" element={<Operation />} />
+              <Route path="/logs" element={<Navigate to="/breakdown" replace />} />
               <Route path="/system" element={<System />} />
               <Route path="/maintenance" element={<System />} />
             </Routes>

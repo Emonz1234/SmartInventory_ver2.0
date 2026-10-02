@@ -1,37 +1,18 @@
-import { Box, Alert, Link } from '@mui/material'
+﻿import { useState } from 'react'
+import { Box, Link, Typography } from '@mui/material'
 import { Header } from './Header'
-import { Sidebar, DRAWER_WIDTH } from './Sidebar'
-
-interface LayoutProps {
-  children: React.ReactNode
-  operatorName: string
-  onLogout: () => void
-}
-
+import { Sidebar } from './Sidebar'
+interface LayoutProps { children: React.ReactNode; operatorName: string; onLogout: () => void }
 export const Layout = ({ children, operatorName, onLogout }: LayoutProps) => {
-  return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      <Header operatorName={operatorName} onLogout={onLogout} />
-      <Box sx={{ display: 'flex', width: '100%', mt: '64px' }}>
-        <Sidebar />
-        <Box
-          component="main"
-          sx={{
-            flexGrow: 1,
-            p: 3,
-            width: { xs: '100%', sm: `calc(100% - ${DRAWER_WIDTH}px)` },
-            backgroundColor: '#f1f8f7',
-            overflowY: 'auto',
-            height: `calc(100vh - 64px)`
-          }}
-        >
-          <Alert severity="info" sx={{ mb: 2 }}>
-            Dữ liệu cục bộ đồng bộ từ Server. Quản trị danh mục tại Server.
-            {(import.meta as any).env.VITE_SERVER_UI_URL && <Link sx={{ ml: 1 }} href={(import.meta as any).env.VITE_SERVER_UI_URL}>Mở Control Center</Link>}
-          </Alert>
-          {children}
-        </Box>
-      </Box>
+  const [mobileOpen, setMobileOpen] = useState(false)
+  return <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+    <Header operatorName={operatorName} onLogout={onLogout} onMenu={() => setMobileOpen(true)} />
+    <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
+    <Box component="main" sx={{ flex: 1, minWidth: 0, mt: '64px', p: { xs: 1.5, sm: 2, xl: 2.5 } }}>
+      <Box sx={{ maxWidth: 1600, mx: 'auto' }}>{children}</Box>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>Smart Inventory · IPCSIM
+        {(import.meta as any).env.VITE_SERVER_UI_URL && <Link sx={{ ml: 2 }} href={(import.meta as any).env.VITE_SERVER_UI_URL}>Mở Control Center</Link>}
+      </Typography>
     </Box>
-  )
+  </Box>
 }

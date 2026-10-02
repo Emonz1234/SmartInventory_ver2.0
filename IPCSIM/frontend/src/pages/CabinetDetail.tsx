@@ -7,6 +7,7 @@ import { Air, ArrowBack, CheckCircle, ErrorOutline, Lightbulb, Lock, LockOpen, S
 import api from '@api/client'
 import { systemAPI } from '@api/system'
 import { RackOperationPanel } from '@components/RackOperationPanel'
+import { alpha } from '@mui/material/styles'
 
 type CabinetOperation = {
   kind: 'OPEN' | 'CLOSE' | 'VENTILATE' | 'LIGHT'
@@ -211,18 +212,18 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
     : undefined
   const ventilationMovingRack = ventilationMovingEvent && racks.find(rack => Number(rack.id) === Number(ventilationMovingEvent.rack_id))
 
-  return <Stack spacing={1.25}>
-    <Box sx={{ pb: 1.25, borderBottom: '1px solid', borderColor: 'divider' }}>
+  return <Stack className="cabinet-detail" spacing={2}>
+    <Box className="cabinet-detail-heading" sx={{ pb: 0.5 }}>
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1.25}>
         <Stack direction="row" alignItems="center" spacing={1} minWidth={0}>
-          <Button size="small" startIcon={<ArrowBack />} onClick={() => navigate('/cabinets')} sx={{ minHeight: 34, px: 1, flexShrink: 0 }}>Cabinets</Button>
+          <Button size="small" startIcon={<ArrowBack />} onClick={() => navigate('/cabinets')} sx={{ minHeight: 36, px: 1.5, flexShrink: 0, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', borderRadius: 2.5 }}>Tủ & rack</Button>
           <Box sx={{ minWidth: 0 }}>
             <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
-              <Typography variant="h5" sx={{ fontWeight: 760, lineHeight: 1.15 }}>Cabinet {id}</Typography>
+              <Typography variant="h4" sx={{ fontWeight: 750, lineHeight: 1.2, letterSpacing: '-0.035em', fontSize: { xs: 26, md: 32 } }}>Tủ {id}</Typography>
               <Chip size="small" icon={<Storage />} label={`${racks.length} racks`} variant="outlined" />
               {!canOperate && <Chip size="small" label="Operator access required" color="warning" variant="outlined" />}
             </Stack>
-            <Typography variant="caption" color="text.secondary">Rack operation and cabinet ventilation</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>Mở lối đi, điều khiển đèn và thông gió trong nhóm tủ.</Typography>
           </Box>
         </Stack>
         <Button
@@ -232,7 +233,8 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
           startIcon={<Air />}
           disabled={!canOperate || operationBusy || !!operation || rackPanelBusy || cabinetVentilated || !racks.length}
           onClick={() => requestOperation('VENTILATE', racks)}
-          sx={{ minHeight: 38, px: 1.75, alignSelf: { xs: 'stretch', sm: 'center' }, flexShrink: 0 }}
+          title="Thông gió toàn bộ tủ"
+          sx={{ minHeight: 36, px: 2, borderRadius: 2.5, boxShadow: 'none', alignSelf: { xs: 'stretch', sm: 'center' }, flexShrink: 0 }}
         >
           Ventilate cabinet
         </Button>
@@ -244,13 +246,13 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
     <Snackbar open={!!lightFeedback} autoHideDuration={3500} onClose={() => setLightFeedback(null)} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
       {lightFeedback ? <Alert severity={lightFeedback.severity} variant="filled" onClose={() => setLightFeedback(null)}>{lightFeedback.message}</Alert> : <span />}
     </Snackbar>
-    <Dialog open={!!operation} onClose={closeOperationDialog} maxWidth="sm" fullWidth disableEscapeKeyDown={operationPhase === 'sending' || operationPhase === 'waiting'} PaperProps={{ sx: { borderRadius: 2, overflow: 'hidden' } }}>
+    <Dialog className="cabinet-operation-dialog" open={!!operation} onClose={closeOperationDialog} maxWidth="sm" fullWidth disableEscapeKeyDown={operationPhase === 'sending' || operationPhase === 'waiting'} PaperProps={{ sx: { borderRadius: 4, overflow: 'hidden' } }}>
       <Box sx={{ height: 5, bgcolor: operationPhase === 'success' ? 'success.main' : operationPhase === 'uncertain' ? 'warning.main' : 'info.main' }} />
       <DialogTitle sx={{ pb: 1, fontWeight: 750 }}>{dialogTitle}</DialogTitle>
       <DialogContent sx={{ pt: 1.5 }}>
         {operationPhase === 'success' ? (
-          <Stack alignItems="center" spacing={1.5} sx={{ py: 3, textAlign: 'center' }}>
-            <Avatar sx={{ width: 64, height: 64, bgcolor: 'success.50', color: 'success.main' }}><CheckCircle sx={{ fontSize: 42 }} /></Avatar>
+          <Stack alignItems="center" spacing={1.25} sx={{ py: 2, textAlign: 'center' }}>
+            <Avatar sx={{ width: 64, height: 64, bgcolor: theme => alpha(theme.palette.success.main, 0.08), color: 'success.main' }}><CheckCircle sx={{ fontSize: 42 }} /></Avatar>
             <Typography variant="h6" fontWeight={750}>{operation?.kind === 'VENTILATE' ? 'Cabinet ventilation complete' : `${operation?.kind === 'OPEN' ? 'Rack opened' : 'Rack closed'} successfully`}</Typography>
             <Typography color="text.secondary">
               {operation?.kind === 'VENTILATE'
@@ -259,8 +261,8 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
             </Typography>
           </Stack>
         ) : operationPhase === 'waiting' || operationPhase === 'sending' ? (
-          <Stack spacing={2} sx={{ py: 1 }}>
-            <Stack direction="row" spacing={1.5} alignItems="center">
+          <Stack spacing={1.5} sx={{ py: 1 }}>
+            <Stack direction="row" spacing={1.25} alignItems="center">
               <CircularProgress size={26} />
               <Box>
                 <Typography fontWeight={700}>{operationPhase === 'sending' ? 'Sending local commands' : 'Waiting for simulation'}</Typography>
@@ -292,16 +294,16 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
             {operationTelemetry.isError && <Alert severity="warning">Local telemetry is temporarily unavailable; the popup will keep waiting.</Alert>}
           </Stack>
         ) : operationPhase === 'uncertain' ? (
-          <Stack spacing={1.5}>
+          <Stack spacing={1.25}>
             <Alert severity="warning" icon={<ErrorOutline />}>Some commands could not be confirmed, or a rack did not reach its endpoint within 60 seconds. Check the cabinet before retrying.</Alert>
             {failedRacks.map(({ rack, message }) => <Typography key={rack.id} variant="body2" color="error">{rack.rack_name || `Rack ${rack.rack_code}`}: {message}</Typography>)}
           </Stack>
         ) : operationPhase === 'sent' ? (
           <Alert severity="info">The {operation?.kind} command was sent through the local Serial link.</Alert>
         ) : (
-          <Stack spacing={2}>
-            <Stack direction="row" spacing={1.5} alignItems="center">
-              <Avatar variant="rounded" sx={{ bgcolor: operation?.kind === 'VENTILATE' ? 'info.50' : 'primary.50', color: operation?.kind === 'VENTILATE' ? 'info.main' : 'primary.main' }}>
+          <Stack spacing={1.5}>
+            <Stack direction="row" spacing={1.25} alignItems="center">
+              <Avatar variant="rounded" sx={{ bgcolor: theme => alpha(operation?.kind === 'VENTILATE' ? theme.palette.info.main : theme.palette.primary.main, 0.08), color: operation?.kind === 'VENTILATE' ? 'info.main' : 'primary.main', borderRadius: 3 }}>
                 {operation?.kind === 'VENTILATE' ? <Air /> : operation?.kind === 'OPEN' ? <LockOpen /> : operation?.kind === 'CLOSE' ? <Lock /> : <Lightbulb />}
               </Avatar>
               <Box>
@@ -317,11 +319,11 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
       </DialogContent>
       <DialogActions>
         {operationPhase === 'success' || operationPhase === 'sent' || operationPhase === 'uncertain' ? (
-          <Button onClick={closeOperationDialog} variant="contained" sx={{ minHeight: 40, px: 2 }}>Done</Button>
+          <Button onClick={closeOperationDialog} variant="contained" sx={{ minHeight: 36, px: 2 }}>Done</Button>
         ) : (
           <>
-            {operationPhase === 'confirm' && <Button onClick={closeOperationDialog} disabled={operationBusy} sx={{ minHeight: 40 }}>Cancel</Button>}
-            <Button onClick={() => void confirmOperation()} variant="contained" disabled={operationBusy || operationPhase !== 'confirm'} sx={{ minHeight: 40, px: 2 }}>
+            {operationPhase === 'confirm' && <Button onClick={closeOperationDialog} disabled={operationBusy} sx={{ minHeight: 36 }}>Cancel</Button>}
+            <Button onClick={() => void confirmOperation()} variant="contained" disabled={operationBusy || operationPhase !== 'confirm'} sx={{ minHeight: 36, px: 2 }}>
               {operationBusy ? <CircularProgress size={20} color="inherit" /> : operation?.kind === 'VENTILATE' ? 'Ventilate cabinet' : 'Confirm command'}
             </Button>
           </>

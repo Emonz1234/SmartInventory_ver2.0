@@ -1,211 +1,51 @@
-import { useState } from 'react'
-import {
-  Box,
-  Card,
-  CardContent,
-  Grid,
-  Typography,
-  Button,
-  Stack,
-  Chip,
-  Divider,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Skeleton,
-  Alert
-} from '@mui/material'
-import { Home, Air, ArrowForward, Storage, Tune } from '@mui/icons-material'
-import { useAuthStore } from '@store/authStore'
+﻿import { useState } from 'react'
+import { Box, Card, CardContent, Grid, Typography, Button, Stack, Chip, Divider, FormControl, InputLabel, Select, MenuItem, Skeleton, Alert } from '@mui/material'
+import { ArrowForward, StorageOutlined, Tune, CheckCircleOutline, ViewModuleOutlined, Refresh } from '@mui/icons-material'
+import { alpha } from '@mui/material/styles'
 import { Link as RouterLink } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { cabinetAPI } from '@api/cabinet'
+import { PageHeader, EmptyState } from '@components/PageHeader'
 
 export const Cabinets = () => {
-  const [actionLoading, setActionLoading] = useState<number | null>(null)
   const [selectedCabinetId, setSelectedCabinetId] = useState('all')
-  const canAccess = useAuthStore((s) => s.canAccess)
-
-  const isMaintenanceMode = canAccess('MAINTENANCE')
-
-  const handleVentilate = async (cabinet: any) => {
-    if (String(cabinet.status || '').toLowerCase() !== 'active') return
-
-    const cabinetId = cabinet.id
-    setActionLoading(cabinetId)
-    try {
-      await cabinetAPI.ventilateCabinet(cabinetId)
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setActionLoading(null)
-    }
-  }
-
   const q = useQuery({
     queryKey: ['cabinets', 'list'],
-    queryFn: async () => {
-      const resp = await cabinetAPI.list()
-      return resp.data
-    },
+    queryFn: async () => (await cabinetAPI.list()).data,
     refetchInterval: 2000
   })
-
   const cabinets: any[] = q.data ?? []
-  const visibleCabinets = cabinets.filter((cabinet) => (
-    selectedCabinetId === 'all' || String(cabinet.id) === selectedCabinetId
-  ))
+  const visibleCabinets = cabinets.filter(cabinet => selectedCabinetId === 'all' || String(cabinet.id) === selectedCabinetId)
   const totalRacks = cabinets.reduce((total, cabinet) => total + (cabinet.rack_count || 0), 0)
-  const onlineCabinets = cabinets.filter((cabinet) => String(cabinet.status || '').toLowerCase() === 'active').length
-
-  return (
-    <Box>
-      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ md: 'center' }} spacing={2} sx={{ mb: 3 }}>
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 'bold', letterSpacing: '-0.02em' }}>
-            Cabinet Control
-          </Typography>
-          <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            Monitor cabinet groups and control rack ventilation.
-          </Typography>
-        </Box>
-        {cabinets.length > 0 && (
-          <FormControl size="small" sx={{ minWidth: { xs: '100%', md: 260 } }}>
-            <InputLabel id="cabinet-group-filter-label">Cabinet group</InputLabel>
-            <Select
-              labelId="cabinet-group-filter-label"
-              value={selectedCabinetId}
-              label="Cabinet group"
-              onChange={(event) => setSelectedCabinetId(event.target.value)}
-              startAdornment={<Tune color="action" sx={{ mr: 1 }} />}
-            >
-              <MenuItem value="all">All cabinet groups</MenuItem>
-              {cabinets.map((cabinet) => (
-                <MenuItem key={cabinet.id} value={String(cabinet.id)}>
-                  {cabinet.cabinet_name || cabinet.cabinet_code || `Cabinet ${cabinet.id}`}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        )}
+  const onlineCabinets = cabinets.filter(cabinet => String(cabinet.status || '').toLowerCase() === 'active').length
+  return <Box>
+    <PageHeader title="Tủ & rack" description="Theo dõi các nhóm tủ và mở chi tiết để thao tác rack, điều khiển đèn hoặc thông gió." action={<Button variant="outlined" startIcon={<Refresh />} disabled={q.isFetching} onClick={() => void q.refetch()}>Làm mới</Button>} />
+    <Grid container spacing={1.5} sx={{ mb: 2 }}>{[
+      { label: 'Nhóm tủ', value: cabinets.length, icon: StorageOutlined, color: '#087c78' },
+      { label: 'Tổng số rack', value: totalRacks, icon: ViewModuleOutlined, color: '#3274ad' },
+      { label: 'Nhóm tủ hoạt động', value: onlineCabinets, icon: CheckCircleOutline, color: '#16846b' }
+    ].map(metric => <Grid item xs={12} sm={4} key={metric.label}><Card><CardContent sx={{ p: 2 }}><Stack direction="row" justifyContent="space-between" alignItems="center"><Box><Typography variant="body2" color="text.secondary">{metric.label}</Typography><Typography variant="h4" fontWeight={750} sx={{ mt: 1 }}>{q.isLoading || q.isError ? '—' : metric.value}</Typography></Box><Box sx={{ display: 'flex', p: 1.5, borderRadius: 3, color: metric.color, bgcolor: metric.color + '12' }}><metric.icon /></Box></Stack></CardContent></Card></Grid>)}</Grid>
+    <Card sx={{ mb: 2 }}><CardContent sx={{ p: 2 }}><Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }} justifyContent="space-between">
+      <Stack direction="row" spacing={1.25} alignItems="center"><Tune color="action" /><Box><Typography fontWeight={650}>Chọn nhóm tủ</Typography><Typography variant="body2" color="text.secondary">Xem tất cả hoặc tập trung vào một nhóm.</Typography></Box></Stack>
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+        <FormControl size="small" sx={{ minWidth: { sm: 260 } }}><InputLabel id="cabinet-group-filter-label">Nhóm tủ</InputLabel><Select labelId="cabinet-group-filter-label" value={selectedCabinetId} label="Nhóm tủ" onChange={event => setSelectedCabinetId(event.target.value)}><MenuItem value="all">Tất cả nhóm tủ</MenuItem>{cabinets.map(cabinet => <MenuItem key={cabinet.id} value={String(cabinet.id)}>{cabinet.cabinet_name || cabinet.cabinet_code || `Tủ ${cabinet.id}`}</MenuItem>)}</Select></FormControl>
+        <Button onClick={() => setSelectedCabinetId('all')} disabled={selectedCabinetId === 'all'} sx={{ minHeight: 36 }}>Xóa bộ lọc</Button>
       </Stack>
-
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={4}>
-          <Card sx={{ bgcolor: 'primary.main', color: 'primary.contrastText' }}>
-            <CardContent>
-              <Stack direction="row" justifyContent="space-between" alignItems="center">
-                <Box>
-                  <Typography variant="body2" sx={{ opacity: 0.8 }}>Cabinet groups</Typography>
-                  <Typography variant="h4" sx={{ fontWeight: 'bold', mt: 0.5 }}>{cabinets.length}</Typography>
-                </Box>
-                <Storage sx={{ fontSize: 40, opacity: 0.75 }} />
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <Card>
-            <CardContent>
-              <Typography variant="body2" color="text.secondary">Total racks</Typography>
-              <Typography variant="h4" sx={{ fontWeight: 'bold', mt: 0.5 }}>{totalRacks}</Typography>
-              <Typography variant="caption" color="text.secondary">Across all groups</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <Card>
-            <CardContent>
-              <Typography variant="body2" color="text.secondary">Active groups</Typography>
-              <Typography variant="h4" sx={{ fontWeight: 'bold', mt: 0.5 }}>{onlineCabinets}</Typography>
-              <Typography variant="caption" color="text.secondary">Based on current status</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {q.isLoading ? (
-        <Grid container spacing={2}>
-          {Array.from({ length: 4 }).map((_, index) => (
-            <Grid item xs={12} sm={6} lg={4} key={index}>
-              <Skeleton variant="rounded" height={300} />
-            </Grid>
-          ))}
-        </Grid>
-      ) : q.isError ? (
-        <Alert severity="error">Unable to load cabinet groups. Please try again.</Alert>
-      ) : visibleCabinets.length === 0 ? (
-        <Alert severity="info">No cabinet group matches the selected filter.</Alert>
-      ) : (
-        <Grid container spacing={2}>
-          {visibleCabinets.map((cabinet: any) => {
-            const name = cabinet.cabinet_name || cabinet.cabinet_code || `Cabinet ${cabinet.id}`
-            const code = cabinet.cabinet_code || cabinet.code || `CB-${cabinet.id}`
-            const status = cabinet.status || 'Unknown'
-            const isActive = String(status).toLowerCase() === 'active'
-            const statusColor = isActive ? 'success' : 'default'
-
-            return (
-              <Grid item xs={12} sm={6} lg={4} key={cabinet.id}>
-                <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', borderTop: '4px solid', borderColor: 'primary.main' }}>
-                  <CardContent sx={{ flexGrow: 1 }}>
-                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2}>
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography variant="h6" noWrap title={name}>{name}</Typography>
-                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{code}</Typography>
-                      </Box>
-                      <Chip label={isActive ? 'Active' : 'Inactive'} color={statusColor} size="small" />
-                    </Stack>
-
-                    <Divider sx={{ my: 2 }} />
-
-                    <Stack direction="row" alignItems="center" spacing={1.5}>
-                      <Box sx={{ p: 1.25, borderRadius: 2, bgcolor: 'primary.50', color: 'primary.main', display: 'flex' }}>
-                        <Storage />
-                      </Box>
-                      <Box>
-                        <Typography variant="h5" sx={{ fontWeight: 'bold', lineHeight: 1 }}>{cabinet.rack_count || 0}</Typography>
-                        <Typography variant="caption" color="text.secondary">Racks in this group</Typography>
-                      </Box>
-                    </Stack>
-                  </CardContent>
-                  <CardContent sx={{ pt: 0 }}>
-                    <Stack direction="row" spacing={1}>
-                      <Button
-                        component={RouterLink}
-                        to={`/cabinets/${cabinet.id}`}
-                        variant="contained"
-                        size="small"
-                        endIcon={<ArrowForward />}
-                        sx={{ flex: 1, minHeight: 42 }}
-                      >
-                        View racks
-                      </Button>
-                      {isMaintenanceMode && (
-                        <Button variant="outlined" size="small" startIcon={<Home />} sx={{ minHeight: 42, minWidth: 42, px: 1.5 }}>
-                          Home
-                        </Button>
-                      )}
-                    </Stack>
-                    <Button
-                      variant="outlined"
-                      color="info"
-                      fullWidth
-                      startIcon={<Air />}
-                      component={RouterLink}
-                      to={`/operation?cabinet=${cabinet.id}`}
-                      sx={{ mt: 1, minHeight: 42 }}
-                    >
-                      Operator workspace
-                    </Button>
-                  </CardContent>
-                </Card>
-              </Grid>
-            )
-          })}
-        </Grid>
-      )}
-    </Box>
-  )
+    </Stack></CardContent></Card>
+    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}><Typography variant="h6" fontWeight={700}>Danh sách nhóm tủ</Typography>{!q.isLoading && !q.isError && <Chip size="small" label={`${visibleCabinets.length} / ${cabinets.length} nhóm tủ`} variant="outlined" />}</Stack>
+    {q.isLoading ? <Grid container spacing={1.5}>{Array.from({ length: 6 }, (_, index) => <Grid item xs={12} sm={6} lg={4} key={index}><Skeleton variant="rounded" height={290} /></Grid>)}</Grid> : q.isError ? <Alert severity="error">Không tải được danh sách tủ. Vui lòng thử làm mới.</Alert> : visibleCabinets.length === 0 ? <Card><EmptyState text="Chưa có nhóm tủ phù hợp" /></Card> : <Grid container spacing={1.75}>{visibleCabinets.map(cabinet => {
+      const name = cabinet.cabinet_name || cabinet.cabinet_code || `Tủ ${cabinet.id}`
+      const code = cabinet.cabinet_code || cabinet.code || `CB-${cabinet.id}`
+      const status = String(cabinet.status || '').toLowerCase()
+      const isActive = status === 'active'
+      const statusLabel = isActive ? 'Hoạt động' : ['inactive', 'offline'].includes(status) ? 'Chưa hoạt động' : cabinet.status || 'Chưa xác định'
+      return <Grid item xs={12} sm={6} lg={4} key={cabinet.id}><Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', transition: 'border-color 180ms ease, box-shadow 180ms ease', '&:hover': { borderColor: 'primary.main', boxShadow: '0 8px 24px rgba(8,124,120,0.08)' } }}>
+        <CardContent sx={{ p: 2, flex: 1 }}><Stack direction="row" justifyContent="space-between" spacing={1} alignItems="center" sx={{ mb: 1.75 }}><Box sx={{ display: 'flex', p: 1.5, borderRadius: 3, bgcolor: theme => alpha(theme.palette.primary.main, 0.08), color: 'primary.main' }}><StorageOutlined /></Box><Chip size="small" variant="outlined" color={isActive ? 'success' : 'default'} label={statusLabel} /></Stack>
+          <Typography variant="h6" fontWeight={750} sx={{ overflowWrap: 'anywhere' }}>{name}</Typography><Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{code}</Typography><Divider sx={{ my: 1.75 }} />
+          <Stack direction="row" justifyContent="space-between" alignItems="center"><Box><Typography variant="h5" fontWeight={750}>{cabinet.rack_count || 0} <Box component="span" sx={{ fontSize: 13, color: 'text.secondary', fontWeight: 400 }}>rack</Box></Typography><Typography variant="caption" color="text.secondary">Trong nhóm tủ</Typography></Box><Box aria-hidden="true" sx={{ display: 'flex', gap: 0.5 }}>{Array.from({ length: Math.min(6, Math.max(0, Number(cabinet.rack_count) || 0)) }, (_, index) => <Box key={index} sx={{ width: 12, height: 34, borderRadius: 0.75, bgcolor: theme => alpha(theme.palette.primary.main, 0.12), border: '1px solid', borderColor: theme => alpha(theme.palette.primary.main, 0.2) }} />)}</Box></Stack>
+        </CardContent><Box sx={{ px: 2, pb: 2 }}><Button component={RouterLink} to={`/cabinets/${cabinet.id}`} fullWidth variant="outlined" endIcon={<ArrowForward />} sx={{ minHeight: 36 }}>Mở chi tiết tủ</Button></Box>
+      </Card></Grid>
+    })}</Grid>}
+    <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 2 }}>Trạng thái cập nhật mỗi 2 giây. Các thao tác thiết bị thực hiện trong chi tiết tủ.</Typography>
+  </Box>
 }
