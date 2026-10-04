@@ -21,7 +21,7 @@ class SerialManager:
 
     def send_domain(self, command):
         if settings.DEVICE_TYPE == "IPC" and not settings.HARDWARE_ENABLED:
-            raise NotImplementedError("Hardware is not implemented; physical command execution is disabled")
+            raise NotImplementedError("Hardware integration is disabled")
         self.send(self.adapter.encode(command))
 
     def connect(self):
@@ -49,6 +49,9 @@ class SerialManager:
             self.serial.close()
 
     def send(self, message: str):
+
+        if not self.adapter.supports_commands:
+            raise NotImplementedError("Current ESP32 firmware is telemetry-only")
 
         if not self.serial or not self.serial.is_open:
             raise ConnectionError("Serial connection not open")

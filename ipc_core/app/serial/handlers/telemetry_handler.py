@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from ipc_core.app.database.database import SessionLocal
 from ipc_core.app.database.models.environment import EnvironmentSnapshot
 from ipc_core.app.serial.protocol.parser import normalize_smoke_value
+from ipc_core.app.serial.location import describe_location
 import traceback
 
 
@@ -9,7 +10,7 @@ class TelemetryHandler:
 
     async def handle(self, payload):
 
-        print("TELEMETRY:", payload)
+        print(f"TELEMETRY (DB): {describe_location(payload)}")
 
         db = SessionLocal()
         try:
@@ -49,7 +50,7 @@ class TelemetryHandler:
             )
             db.add(snapshot)
             db.commit()
-            print(f"[DB] Saved environment snapshot: id={snapshot.id} rack={snapshot.rack_id}")
+            print(f"[DB] Saved environment snapshot: id={snapshot.id} {describe_location(payload)}")
         except Exception as e:
             print(f"[ERROR] Failed to save telemetry: {e}")
             traceback.print_exc()

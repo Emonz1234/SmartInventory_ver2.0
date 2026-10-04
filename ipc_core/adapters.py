@@ -1,8 +1,10 @@
 """Existing wire formats, normalized to the same SerialMessage domain."""
 import json
+import math
 
 
 class SimulationAdapter:
+    supports_commands = True
     def encode(self, command):
         action = {"OPEN": 1, "CLOSE": 2, "VENTILATE": 3, "LIGHT": 0, "HOME": 4, "LIGHT_OFF": 5}[command["action"]]
         return f"0|{int(command['address'])}|{action}"
@@ -13,17 +15,36 @@ class SimulationAdapter:
 
 
 class HardwareAdapter:
+    """USB Serial telemetry emitted by esp32_master_serial/src/main.cpp."""
+    supports_commands = False
+
     def encode(self, command):
-        return json.dumps({"rack_id": int(command["address"]), "action": command["action"].lower()})
+        raise NotImplementedError("Current ESP32 firmware only emits telemetry; it has no command receiver or ACK")
 
     def parse(self, raw):
         from ipc_core.app.serial.protocol.parser import ProtocolParser
         from ipc_core.app.serial.protocol.message import SerialMessage
+        raw = raw.strip()
+        if raw in {"START SYSTEM", "DHT ERROR"}:
+            return SerialMessage(msg_type="diagnostic", payload={"raw": raw})
         data = json.loads(raw)
         if not isinstance(data, dict):
             raise ValueError("Hardware message must be an object")
-        if "type" in data:
-            return ProtocolParser.parse(raw)
+        if data.get("type", "telemetry") != "telemetry":
+            raise ValueError("Current ESP32 firmware supports telemetry only")
+        address = data.get("rack_id")
+        if isinstance(address, bool) or not isinstance(address, int) or address < 1:
+            raise ValueError("ESP32 rack_id must be a positive integer Serial address")
+        for key in ("temperature", "humidity", "gas"):
+            if key in data and (isinstance(data[key], bool) or not isinstance(data[key], (int, float)) or not math.isfinite(data[key])):
+                raise ValueError(f"ESP32 {key} must be a finite number")
+        if "gas" in data and not 0 <= data["gas"] <= 4095:
+            raise ValueError("ESP32 gas must be a raw 12-bit ADC value (0..4095)")
+        if "gas_alert" in data:
+            if not isinstance(data["gas_alert"], bool):
+                raise ValueError("ESP32 gas_alert must be a boolean")
+            # Use the firmware alarm decision, not truthiness of the ADC reading.
+            data["smoke"] = int(data["gas_alert"])
         return ProtocolParser.parse(json.dumps({"type": "telemetry", **data}))
 
 

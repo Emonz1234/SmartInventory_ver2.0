@@ -60,37 +60,41 @@ class SerialListener:
                 from Simulation.topology import RACKS_PER_GROUP
                 if (int(message.payload['rack_id']) - 1) // RACKS_PER_GROUP + 1 != group:
                     raise ValueError('Serial frame outside configured group')
+            print(f"PARSED (Serial) msg_type={message.msg_type} payload={message.payload}")
             if serial_manager.observer:
                 serial_manager.observer(message)
+            payload = dict(message.payload)
             # Serial address is distinct from Server database rack ID.
-            if "rack_id" in message.payload:
+            if "rack_id" in payload:
                 from ipc_core.app.database.database import SessionLocal
-                from ipc_core.app.database.models.inventory import Rack
+                from ipc_core.app.database.models.inventory import Cabinet, Rack
                 with SessionLocal() as db:
-                    rack = db.query(Rack).filter(Rack.rack_code == str(message.payload["rack_id"])).first()
+                    rack = db.query(Rack).filter(Rack.rack_code == str(payload["rack_id"])).one_or_none()
                     if rack is None:
+                        print(f"[MAP] Unassigned Serial address={payload['rack_id']}; snapshot skipped")
                         return
-                    message.payload["rack_id"] = rack.id
+                    cabinet = db.get(Cabinet, rack.cabinet_id)
+                    if cabinet is None:
+                        raise ValueError('Rack has no parent cabinet')
+                    payload.update(serial_address=payload['rack_id'], rack_id=rack.id,
+                                   rack_index=rack.rack_index, cabinet_index=cabinet.cabinet_index,
+                                   device_code=cabinet.device_code)
+                    from ipc_core.app.serial.location import describe_location
+                    print(f"[MAP] {describe_location(payload)}")
         except Exception as e:
             print(f"[PARSE ERROR] raw={raw} error={e}")
             traceback.print_exc()
             return
 
-        # Log parsed message for debugging
-        try:
-            print(f"PARSED msg_type={message.msg_type} payload={message.payload}")
-        except Exception:
-            print("PARSED: unable to stringify message")
-
         try:
             if message.msg_type == "telemetry":
-                await self.telemetry_handler.handle(message.payload)
+                await self.telemetry_handler.handle(payload)
 
             elif message.msg_type == "event":
-                await self.event_handler.handle(message.payload)
+                await self.event_handler.handle(payload)
 
             elif message.msg_type == "ack":
-                await self.ack_handler.handle(message.payload)
+                await self.ack_handler.handle(payload)
             else:
                 # unknown message types are ignored but logged
                 print(f"Unhandled message type: {message.msg_type}")

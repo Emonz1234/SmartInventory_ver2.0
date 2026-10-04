@@ -383,9 +383,9 @@ export default function Inventory({
               <summary>
                 {ipc} <Chip value={ls[0].source_type} />
               </summary>
-              {Object.entries(groups(ls, "cabinet")).map(([cabinet, rs]) => (
+              {Object.entries(groups(ls, "cabinet_id")).map(([cabinet, rs]) => (
                 <details key={cabinet} open>
-                  <summary>{cabinet}</summary>
+                  <summary>{rs[0].cabinet || `Cabinet ${String(rs[0].cabinet_index).padStart(2, "0")}`}</summary>
                   {Object.entries(groups(rs, "rack_id")).map(([rack, bins]) => (
                     <details key={rack} open>
                       <summary>{bins[0].rack_index ? `Rack ${String(bins[0].rack_index).padStart(2, "0")}` : bins[0].rack}</summary>

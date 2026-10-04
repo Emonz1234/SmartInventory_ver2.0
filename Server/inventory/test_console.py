@@ -166,6 +166,21 @@ class ConsoleTests(TestCase):
         self.grant("inventory.move")
         self.assertEqual(self.tx("INBOUND", 2, target=a).status_code, 403)
 
+    def test_physical_esp32_sample_preserves_gas_and_alarm(self):
+        from ipc_core.adapters import HardwareAdapter
+        d, r, _, _ = self.targets["IPC"]
+        payload = HardwareAdapter().parse('{"rack_id":1,"temperature":28.5,"humidity":65,"gas":2100,"gas_alert":true}').payload
+        ingest(d, payload, timezone.now().isoformat())
+        values = RackStatus.objects.get(rack=r).values
+        self.assertEqual(values['gas'], 2100)
+        self.assertEqual(values['gas_alert'], True)
+        self.assertEqual(values['smoke'], 1)
+        self.assertTrue(Alarm.objects.get(rack=r, code='smoke').active)
+        self.assertEqual(EnvironmentStatus.objects.get(rack=r).values['gas'], 2100)
+        payload = HardwareAdapter().parse('{"rack_id":1,"temperature":28.5,"humidity":65,"gas":2000,"gas_alert":false}').payload
+        ingest(d, payload, timezone.now().isoformat())
+        self.assertFalse(Alarm.objects.get(rack=r, code='smoke').active)
+
     def test_signed_telemetry_alarm_lifecycle_dedup_and_stale_sample(self):
         d, r, _, _ = self.targets["IPCSIM"]
         msg = envelope(

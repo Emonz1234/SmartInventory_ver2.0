@@ -1,13 +1,14 @@
 from sqlalchemy.orm import Session
 from ipc_core.app.database.database import SessionLocal
 from ipc_core.app.database.models.runtime import OperationSnapshot, BreakdownSnapshot
+from ipc_core.app.serial.location import describe_location
 
 
 class EventHandler:
 
     async def handle(self, payload):
 
-        print("EVENT:", payload)
+        print(f"EVENT (DB): {describe_location(payload)}")
         
         db = SessionLocal()
         try:
@@ -22,7 +23,7 @@ class EventHandler:
                 )
                 db.add(snapshot)
                 db.commit()
-                print(f"[DB] Saved operation snapshot: rack {payload.get('rack_id')}")
+                print(f"[DB] Saved operation snapshot: {describe_location(payload)}")
             
             elif "is_obstructed" in payload:
                 snapshot = BreakdownSnapshot(
@@ -33,7 +34,7 @@ class EventHandler:
                 )
                 db.add(snapshot)
                 db.commit()
-                print(f"[DB] Saved breakdown snapshot: rack {payload.get('rack_id')}")
+                print(f"[DB] Saved breakdown snapshot: {describe_location(payload)}")
         except Exception as e:
             print(f"[ERROR] Failed to save event: {e}")
             db.rollback()

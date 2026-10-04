@@ -32,7 +32,8 @@ class Cabinet(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["domain", "code"], name="cabinet_domain_code"),
-                       models.UniqueConstraint(fields=["device", "cabinet_index"], name="device_cabinet_index")]
+                       models.UniqueConstraint(fields=["device", "cabinet_index"], name="device_cabinet_index"),
+                       models.CheckConstraint(condition=Q(device__isnull=True) | Q(domain="IPC", cabinet_index=1) | Q(domain="IPCSIM", cabinet_index__gte=1, cabinet_index__lte=22), name="assigned_cabinet_index_range")]
 
     def save(self, *args, **kwargs):
         if self.cabinet_index is None:

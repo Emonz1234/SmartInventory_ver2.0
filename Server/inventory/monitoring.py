@@ -10,6 +10,8 @@ FIELDS = {
     "humidity",
     "weight",
     "smoke",
+    "gas",
+    "gas_alert",
     "state",
     "speed",
     "movement_speed",
@@ -39,7 +41,7 @@ def ingest(device, payload, timestamp):
     current, _ = RackStatus.objects.get_or_create(
         rack=rack, defaults={"updated_at": at}
     )
-    if any(k in values for k in ("temperature", "humidity", "weight", "smoke")):
+    if any(k in values for k in ("temperature", "humidity", "weight", "smoke", "gas", "gas_alert")):
         EnvironmentStatus.objects.create(
             rack=rack,
             device=device,

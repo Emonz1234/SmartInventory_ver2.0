@@ -35,7 +35,7 @@ Code vị trí: `REAL-C01-R01` và `SIM-C01-R01` … `SIM-C22-R06`. PK cabinet/r
 
 Simulator hiện dùng Serial address 1–132 để định tuyến đến 22 cổng/nhóm. Địa chỉ 7 là **SIM Cabinet 02 / Rack 01**, không phải local Rack 07. Protocol MQTT giữ `device_type=IPC/IPCSIM`; API vị trí trả `device_type=REAL/SIMULATION`.
 
-Các constraint mới: `unique(device_id, cabinet_index)`, `unique(cabinet_id, rack_index)`, `rack_index` bắt buộc 1–6. Migration `0002_local_location_indices` backfill chỉ số theo parent và giữ nguyên FK, stock, lịch sử, địa chỉ Serial; không xóa dữ liệu vận hành. Snapshot mới mang cả metadata và ID kỹ thuật. Trường `rack_code` trong snapshot/rack API edge được giữ dạng Serial address để tương thích; dùng `rack_identity_code` cho code vị trí và `rack_index` cho hiển thị. Inventory API trả `rack_code` là code vị trí, kèm `serial_address` riêng.
+Các constraint mới: `unique(device_id, cabinet_index)`, `unique(cabinet_id, rack_index)`, `rack_index` bắt buộc 1–6; cabinet đã gán vào IPC chỉ có index 1, IPCSIM có index 1–22. Cabinet unassigned của công cụ import legacy vẫn được giữ để đối soát, không được đưa vào cây runtime. Migration `0002_local_location_indices` backfill chỉ số theo parent và giữ nguyên FK, stock, lịch sử, địa chỉ Serial; không xóa dữ liệu vận hành. Snapshot mới mang cả metadata và ID kỹ thuật. Trường `rack_code` trong snapshot/rack API edge được giữ dạng Serial address để tương thích; dùng `rack_identity_code` cho code vị trí và `rack_index` cho hiển thị. Inventory API trả `rack_code` là code vị trí, kèm `serial_address` riêng.
 
 Sau reset, script tự chạy validation. Có thể kiểm tra lại:
 
@@ -66,5 +66,5 @@ Ví dụ metadata vị trí trong Inventory API:
 
 Hiển thị: `IPCSIM01 / Cabinet 02 / Rack 01`.
 
- IPCSIM01 Online/Synced sau khi khởi động và nhận snapshot theo [hướng dẫn](startup.md). IPC01 chỉ Online khi edge IPC01 thực sự gửi heartbeat; seed không giả trạng thái thiết bị.
+IPCSIM01 Online/Synced sau khi khởi động và nhận snapshot theo [hướng dẫn](startup.md). IPC01 chỉ Online khi edge IPC01 thực sự gửi heartbeat; seed không giả trạng thái thiết bị.
 Seed tạo `demo-admin`, `demo-supervisor` và `demo-operator`, đồng thời in mật khẩu ngẫu nhiên một lần trong output reset; hãy lưu lại khi chạy lệnh.

@@ -37,4 +37,4 @@ class LocalIndexMigrationTests(TransactionTestCase):
                 first = Rack.objects.get(cabinet__device_id=d, cabinet__cabinet_index=1, rack_index=1)
                 self.assertEqual(first.rack_index, 1)
         finally:
-            MigrationExecutor(connection).migrate([('inventory', '0002_local_location_indices')])
+            MigrationExecutor(connection).migrate([('inventory', '0003_assigned_cabinet_bounds')])

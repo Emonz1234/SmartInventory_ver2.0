@@ -44,6 +44,9 @@ class LocationIdentityTests(TestCase):
         sim = Cabinet.objects.get(device_id='IPCSIM01', cabinet_index=2)
         with self.assertRaises(IntegrityError), transaction.atomic():
             Cabinet.objects.create(device=sim.device, domain='IPCSIM', code='duplicate', cabinet_index=2)
+        for identity, domain, index in [("IPC01", "IPC", 2), ("IPCSIM01", "IPCSIM", 23)]:
+            with self.assertRaises(IntegrityError), transaction.atomic():
+                Cabinet.objects.create(device_id=identity, domain=domain, code="out-of-range", cabinet_index=index)
         for index in [1, 7]:
             with self.assertRaises(IntegrityError), transaction.atomic():
                 Rack.objects.create(cabinet=sim, address=999, rack_index=index)
