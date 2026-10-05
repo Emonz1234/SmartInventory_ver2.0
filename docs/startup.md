@@ -1,5 +1,7 @@
 # Khởi chạy
 
+Luồng điều khiển và cách kiểm tra lỗi đóng/mở từ Server: [Điều khiển tủ/rack](server-cabinet-control.md).
+
 Chạy PowerShell tại thư mục dự án. Docker Desktop phải đang hoạt động.
 
 ## Bật

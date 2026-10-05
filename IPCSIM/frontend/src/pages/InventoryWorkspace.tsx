@@ -1,3 +1,4 @@
+import { t as uiText, errorText, statusText, useLanguage, LanguageSelector } from '../i18n';
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions,
@@ -29,7 +30,7 @@ function makeKey() {
 }
 
 function statusLabel(status: string) {
-  return ({ READY: 'Sẵn sàng', AVAILABLE: 'Sẵn sàng', FULL: 'Đầy', EMPTY: 'Trống', ACTIVE: 'Hoạt động', CLOSED: 'Đã đóng', OPEN: 'Đã mở', BUSY: 'Đang bận', MOVING: 'Đang di chuyển', OFFLINE: 'Mất kết nối', FAULT: 'Có lỗi', ERROR: 'Có lỗi', BREAKDOWN: 'Có lỗi', SYNCED: 'Đã đồng bộ', PENDING: 'Đang chờ', 'LOW STOCK': 'Sắp hết hàng', 'OUT OF STOCK': 'Hết hàng' } as Record<string, string>)[status] || status || 'Chưa xác định'
+  return statusText(status || 'UNKNOWN')
 }
 
 function statusColor(status: string): 'success' | 'warning' | 'error' | 'default' {
@@ -41,8 +42,9 @@ function statusColor(status: string): 'success' | 'warning' | 'error' | 'default
 }
 
 function LocationStatus({ status }: { status: string }) {
+  useLanguage();
   const label = ({ READY: 'Sẵn sàng', AVAILABLE: 'Sẵn sàng', FULL: 'Đầy', EMPTY: 'Trống', BUSY: 'Đang bận', MOVING: 'Đang di chuyển', OFFLINE: 'Mất kết nối', FAULT: 'Có lỗi', ERROR: 'Có lỗi', BREAKDOWN: 'Có lỗi' } as Record<string, string>)[status] || statusLabel(status)
-  return <Chip className="inventory-status-chip" size="small" label={label} color={statusColor(status)} variant="outlined" />
+  return <Chip className="inventory-status-chip" size="small" label={uiText(label)} color={statusColor(status)} variant="outlined" />
 }
 
 function stockStatus(quantity: number, minimum: number) {
@@ -70,7 +72,7 @@ function cabinetLabel(cabinet: any) {
   if (name && !/^cabinet$/i.test(name)) return name
   const code = String(cabinet.cabinet_code || '')
   const number = code.match(/(?:SIM[-_ ]?)?C(\d+)$/i)?.[1]
-  return number ? `Cabinet ${number}` : `Cabinet ${code || cabinet.id}`
+  return uiText('Cabinet {0}', number || code || cabinet.id)
 }
 
 function rackLabel(rack: any) {
@@ -83,6 +85,7 @@ function cabinetRackLabel(location: any) {
 }
 
 export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: InventoryWorkspaceProps) => {
+  useLanguage();
   const queryClient = useQueryClient()
   const canOperate = permissions.includes('inventory.move')
   const headers = { 'X-Operator-Session': session }
@@ -104,7 +107,7 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
   const [activeOperationId, setActiveOperationId] = useState('')
   const [operationPhase, setOperationPhase] = useState<'preview' | 'sending' | 'awaiting' | 'closing' | 'done' | 'failed'>('preview')
   const [operationNote, setOperationNote] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useState<any>('')
   const [notice, setNotice] = useState('')
 
   const inventoryQuery = useQuery({
@@ -222,7 +225,7 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
       setActiveOperationId(String(response.data.id))
     } catch (failure: any) {
       if (failure.response?.status === 403) onSessionExpired()
-      setError(failure.response?.data?.detail || failure.message || 'Không tạo được operation.')
+      setError(failure || 'Không tạo được operation.')
       setOperationPhase('failed')
     }
   }
@@ -261,7 +264,7 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
       setOperationPhase('closing')
     } catch (failure: any) {
       if (failure.response?.status === 403) onSessionExpired()
-      setError(failure.response?.data?.detail || failure.message || 'Không xác nhận được operation.')
+      setError(failure || 'Không xác nhận được operation.')
     }
   }
   const closeOperation = () => { if (!['sending', 'awaiting', 'closing'].includes(operationPhase)) { setOperationItem(null); setOperationPlan([]); setActiveOperationId('') } }
@@ -273,47 +276,47 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
   const canKeepOpen = !nextPlanStep || Number(currentPlanStep?.location.rack.id) === Number(nextPlanStep.location.rack.id)
 
   return <Stack className="inventory-workspace" spacing={2}>
-    <PageHeader title="Kho hàng" description="Tìm sản phẩm, kiểm tra tồn kho và vị trí lưu trữ. Mở chi tiết sản phẩm để nhập hoặc xuất hàng." action={<Button variant="outlined" startIcon={<Refresh />} disabled={inventoryQuery.isFetching} onClick={() => void inventoryQuery.refetch()}>Làm mới</Button>} />
-    <Box className="inventory-summary" aria-label="Tổng quan kho hàng">
-      <SummaryMetric label="Loại sản phẩm" value={inventoryQuery.isLoading || inventoryQuery.isError ? '—' : itemRows.length} icon={<Inventory2 />} />
-      <SummaryMetric label="Tổng số lượng" value={inventoryQuery.isLoading || inventoryQuery.isError ? '—' : totalQuantity} icon={<ScaleOutlined />} />
-      <SummaryMetric label="Sản phẩm sắp hết" value={inventoryQuery.isLoading || inventoryQuery.isError ? '—' : lowStockCount} icon={<WarningAmberOutlined />} />
-      <SummaryMetric label="Vị trí lưu trữ" value={inventoryQuery.isLoading || inventoryQuery.isError ? '—' : locations.length} icon={<LocationOn />} />
+    <PageHeader title={uiText("Kho hàng")} description={uiText("Tìm sản phẩm, kiểm tra tồn kho và vị trí lưu trữ. Mở chi tiết sản phẩm để nhập hoặc xuất hàng.")} action={<Button variant="outlined" startIcon={<Refresh />} disabled={inventoryQuery.isFetching} onClick={() => void inventoryQuery.refetch()}>{uiText("Làm mới")}</Button>} />
+    <Box className="inventory-summary" aria-label={uiText("Tổng quan kho hàng")}>
+      <SummaryMetric label={uiText("Loại sản phẩm")} value={inventoryQuery.isLoading || inventoryQuery.isError ? '—' : itemRows.length} icon={<Inventory2 />} />
+      <SummaryMetric label={uiText("Tổng số lượng")} value={inventoryQuery.isLoading || inventoryQuery.isError ? '—' : totalQuantity} icon={<ScaleOutlined />} />
+      <SummaryMetric label={uiText("Sản phẩm sắp hết")} value={inventoryQuery.isLoading || inventoryQuery.isError ? '—' : lowStockCount} icon={<WarningAmberOutlined />} />
+      <SummaryMetric label={uiText("Vị trí lưu trữ")} value={inventoryQuery.isLoading || inventoryQuery.isError ? '—' : locations.length} icon={<LocationOn />} />
     </Box>
     <Paper className="inventory-toolbar" variant="outlined">
       <Box className="inventory-toolbar-heading">
         <TextField
           className="inventory-search"
           size="small"
-          label={view === 'product' ? 'Tìm sản phẩm / SKU / mã vạch' : 'Tìm tủ / rack / ô chứa'}
+          label={view === 'product' ? uiText('Tìm sản phẩm / SKU / mã vạch') : uiText('Tìm tủ / rack / ô chứa')}
           value={search}
           onChange={event => setSearch(event.target.value)}
           InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }}
         />
-        <ToggleButtonGroup className="inventory-view-toggle" exclusive value={view} onChange={(_, value: ViewMode | null) => { if (value && value !== view) { setView(value); setSearch('') } }} size="small" aria-label="Chế độ xem kho">
-          <ToggleButton value="product">Sản phẩm</ToggleButton>
-          <ToggleButton value="location">Vị trí</ToggleButton>
+        <ToggleButtonGroup className="inventory-view-toggle" exclusive value={view} onChange={(_, value: ViewMode | null) => { if (value && value !== view) { setView(value); setSearch('') } }} size="small" aria-label={uiText("Chế độ xem kho")}>
+          <ToggleButton value="product">{uiText("Sản phẩm")}</ToggleButton>
+          <ToggleButton value="location">{uiText("Vị trí")}</ToggleButton>
         </ToggleButtonGroup>
-        <Button className="inventory-filter-toggle" size="small" variant="outlined" startIcon={<Tune />} aria-expanded={filtersOpen} onClick={() => setFiltersOpen(value => !value)}>Bộ lọc</Button>
+        <Button className="inventory-filter-toggle" size="small" variant="outlined" startIcon={<Tune />} aria-expanded={filtersOpen} onClick={() => setFiltersOpen(value => !value)}>{uiText("Bộ lọc")}</Button>
       </Box>
       {filtersOpen && <Box className="inventory-filters">
-        <FormControl size="small"><InputLabel>Nhóm tủ</InputLabel><Select value={cabinetFilter} label="Nhóm tủ" onChange={event => { setCabinetFilter(event.target.value); setRackFilter('all') }}><MenuItem value="all">Tất cả tủ</MenuItem>{cabinets.map((cabinet: any) => <MenuItem key={cabinet.id} value={String(cabinet.id)}>{cabinetLabel(cabinet)}</MenuItem>)}</Select></FormControl>
-        <FormControl size="small"><InputLabel>Rack</InputLabel><Select value={rackFilter} label="Rack" onChange={event => setRackFilter(event.target.value)}><MenuItem value="all">Tất cả rack</MenuItem>{racks.filter((rack: any) => cabinetFilter === 'all' || String(rack.cabinet_id) === cabinetFilter).map((rack: any) => <MenuItem key={rack.id} value={String(rack.id)}>{rackLabel(rack)}</MenuItem>)}</Select></FormControl>
-        <FormControl size="small" disabled={view === 'location'}><InputLabel>Danh mục</InputLabel><Select value={categoryFilter} label="Danh mục" onChange={event => setCategoryFilter(event.target.value)}><MenuItem value="all">Tất cả danh mục</MenuItem>{categories.map(category => <MenuItem key={category} value={category}>{category}</MenuItem>)}</Select></FormControl>
-        <FormControl size="small" disabled={view === 'location'}><InputLabel>Tồn kho</InputLabel><Select value={stockFilter} label="Tồn kho" onChange={event => setStockFilter(event.target.value)}><MenuItem value="all">Tất cả trạng thái</MenuItem><MenuItem value="Available">Còn hàng</MenuItem><MenuItem value="Low stock">Sắp hết hàng</MenuItem><MenuItem value="Out of stock">Hết hàng</MenuItem></Select></FormControl>
+        <FormControl size="small"><InputLabel>{uiText("Nhóm tủ")}</InputLabel><Select value={cabinetFilter} label={uiText("Nhóm tủ")} onChange={event => { setCabinetFilter(event.target.value); setRackFilter('all') }}><MenuItem value="all">{uiText("Tất cả tủ")}</MenuItem>{cabinets.map((cabinet: any) => <MenuItem key={cabinet.id} value={String(cabinet.id)}>{cabinetLabel(cabinet)}</MenuItem>)}</Select></FormControl>
+        <FormControl size="small"><InputLabel>Rack</InputLabel><Select value={rackFilter} label="Rack" onChange={event => setRackFilter(event.target.value)}><MenuItem value="all">{uiText("Tất cả rack")}</MenuItem>{racks.filter((rack: any) => cabinetFilter === 'all' || String(rack.cabinet_id) === cabinetFilter).map((rack: any) => <MenuItem key={rack.id} value={String(rack.id)}>{rackLabel(rack)}</MenuItem>)}</Select></FormControl>
+        <FormControl size="small" disabled={view === 'location'}><InputLabel>{uiText("Danh mục")}</InputLabel><Select value={categoryFilter} label={uiText("Danh mục")} onChange={event => setCategoryFilter(event.target.value)}><MenuItem value="all">{uiText("Tất cả danh mục")}</MenuItem>{categories.map(category => <MenuItem key={category} value={category}>{category}</MenuItem>)}</Select></FormControl>
+        <FormControl size="small" disabled={view === 'location'}><InputLabel>{uiText("Tồn kho")}</InputLabel><Select value={stockFilter} label={uiText("Tồn kho")} onChange={event => setStockFilter(event.target.value)}><MenuItem value="all">{uiText("Tất cả trạng thái")}</MenuItem><MenuItem value="Available">{uiText("Còn hàng")}</MenuItem><MenuItem value="Low stock">{uiText("Sắp hết hàng")}</MenuItem><MenuItem value="Out of stock">{uiText("Hết hàng")}</MenuItem></Select></FormControl>
       </Box>}
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1} sx={{ mt: 1.5 }}>
-        <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap"><Chip size="small" label={inventoryQuery.isLoading || inventoryQuery.isError ? 'Kết nối: chưa xác định' : health.server_online ? 'Server online' : 'Server offline'} color={health.server_online ? 'success' : 'default'} variant="outlined" /><Chip size="small" label={pendingTransactions ? `${pendingTransactions} giao dịch chờ` : 'Không có giao dịch chờ'} color={pendingTransactions ? 'warning' : 'default'} variant="outlined" /></Stack>
-        <Button size="small" onClick={() => { setSearch(''); setCabinetFilter('all'); setRackFilter('all'); setCategoryFilter('all'); setStockFilter('all') }}>Xóa bộ lọc</Button>
+        <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap"><Chip size="small" label={inventoryQuery.isLoading || inventoryQuery.isError ? uiText('Kết nối: chưa xác định') : health.server_online ? uiText('Server online') : uiText('Server offline')} color={health.server_online ? 'success' : 'default'} variant="outlined" /><Chip size="small" label={pendingTransactions ? uiText("{0} giao dịch chờ", pendingTransactions) : uiText('Không có giao dịch chờ')} color={pendingTransactions ? 'warning' : 'default'} variant="outlined" /></Stack>
+        <Button size="small" onClick={() => { setSearch(''); setCabinetFilter('all'); setRackFilter('all'); setCategoryFilter('all'); setStockFilter('all') }}>{uiText("Xóa bộ lọc")}</Button>
       </Stack>
     </Paper>
 
-    {!health.server_online && <Alert className="inventory-alert" severity="info">Server offline · Vận hành local {health.local_operation_available ? 'available' : 'unavailable'} · {pendingTransactions} giao dịch chờ đồng bộ</Alert>}
-    {error && <Alert className="inventory-alert" severity="error" onClose={() => setError('')}>{error}</Alert>}
-    {notice && <Alert className="inventory-alert" severity="success" onClose={() => setNotice('')}>{notice}</Alert>}
-    {inventoryQuery.isError && <Alert className="inventory-alert" severity="error" action={<Button color="inherit" size="small" onClick={() => void inventoryQuery.refetch()}>Thử lại</Button>}>Không tải được dữ liệu kho hàng hoặc cấu trúc tủ. Vui lòng thử lại.</Alert>}
+    {!health.server_online && <Alert className="inventory-alert" severity="info">{uiText("Server offline · Vận hành local")} {health.local_operation_available ? uiText('available') : uiText('unavailable')} · {pendingTransactions} {uiText("giao dịch chờ đồng bộ")}</Alert>}
+    {error && <Alert className="inventory-alert" severity="error" onClose={() => setError('')}>{errorText(error)}</Alert>}
+    {notice && <Alert className="inventory-alert" severity="success" onClose={() => setNotice('')}>{uiText(notice)}</Alert>}
+    {inventoryQuery.isError && <Alert className="inventory-alert" severity="error" action={<Button color="inherit" size="small" onClick={() => void inventoryQuery.refetch()}>{uiText("Thử lại")}</Button>}>{uiText("Không tải được dữ liệu kho hàng hoặc cấu trúc tủ. Vui lòng thử lại.")}</Alert>}
 
-    <Stack direction="row" justifyContent="space-between" alignItems="center"><Typography variant="h6" fontWeight={700}>{view === 'product' ? 'Danh sách sản phẩm' : 'Vị trí trong kho'}</Typography><Chip size="small" variant="outlined" label={view === 'product' ? `${visibleItems.length} sản phẩm` : `${visibleLocations.length} vị trí`} /></Stack>
+    <Stack direction="row" justifyContent="space-between" alignItems="center"><Typography variant="h6" fontWeight={700}>{view === 'product' ? uiText('Danh sách sản phẩm') : uiText('Vị trí trong kho')}</Typography><Chip size="small" variant="outlined" label={view === 'product' ? uiText("{0} sản phẩm", visibleItems.length) : uiText("{0} vị trí", visibleLocations.length)} /></Stack>
     {inventoryQuery.isLoading
       ? <Skeleton className="inventory-loading" variant="rounded" height={280} />
       : view === 'product'
@@ -325,27 +328,27 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
 
     <Drawer anchor="right" sx={{ zIndex: theme => theme.zIndex.drawer + 2 }} open={!!selectedItem} onClose={() => setSelectedItem(null)} PaperProps={{ className: 'inventory-detail-drawer' }}>
       {selectedItem && <Box className="inventory-detail-shell">
-        <Box className="inventory-detail-heading">
+        <Box className="inventory-detail-heading"><LanguageSelector />
           <Box className="inventory-detail-title">
-            <Typography variant="overline">Chi tiết sản phẩm</Typography>
+            <Typography variant="overline">{uiText("Chi tiết sản phẩm")}</Typography>
             <Typography component="h2" className="inventory-detail-name">{selectedItem.item_name}</Typography>
             <Typography className="inventory-detail-sku">SKU {selectedItem.item_code}</Typography>
           </Box>
-          <IconButton aria-label="Đóng chi tiết sản phẩm" onClick={() => setSelectedItem(null)}><Close /></IconButton>
+          <IconButton aria-label={uiText("Đóng chi tiết sản phẩm")} onClick={() => setSelectedItem(null)}><Close /></IconButton>
         </Box>
         <Box className="inventory-detail-scroll">
           <Box className="inventory-detail-identifiers">
-            <Box><Typography variant="caption">Mã vạch</Typography><Typography>{selectedItem.barcode || selectedItem.item_barcode || '—'}</Typography></Box>
-            <Box><Typography variant="caption">Danh mục</Typography><Typography>{selectedItem.category || 'Chưa phân loại'}</Typography></Box>
+            <Box><Typography variant="caption">{uiText("Mã vạch")}</Typography><Typography>{((selectedItem.barcode || selectedItem.item_barcode) || '—')}</Typography></Box>
+            <Box><Typography variant="caption">{uiText("Danh mục")}</Typography><Typography>{(selectedItem.category || uiText('Chưa phân loại'))}</Typography></Box>
           </Box>
           <Box className="inventory-detail-quantities">
-            <Box><Typography variant="caption">Tổng số lượng</Typography><Typography className="inventory-detail-value">{selectedItem.total} <small>{selectedItem.unit || ''}</small></Typography></Box>
-            <Box><Typography variant="caption">Có thể xuất</Typography><Typography className="inventory-detail-value">{availableQuantity(selectedItem, cabinetById)} <small>{selectedItem.unit || ''}</small></Typography></Box>
+            <Box><Typography variant="caption">{uiText("Tổng số lượng")}</Typography><Typography className="inventory-detail-value">{selectedItem.total} <small>{(selectedItem.unit || '')}</small></Typography></Box>
+            <Box><Typography variant="caption">{uiText("Có thể xuất")}</Typography><Typography className="inventory-detail-value">{availableQuantity(selectedItem, cabinetById)} <small>{(selectedItem.unit || '')}</small></Typography></Box>
             <LocationStatus status={selectedItem.stock.label.toUpperCase()} />
           </Box>
           <Divider />
           <Box className="inventory-detail-locations-heading">
-            <Box><Typography component="h3">Vị trí lưu trữ</Typography><Typography variant="caption">{selectedItem.locations.length} vị trí lưu trữ</Typography></Box>
+            <Box><Typography component="h3">{uiText("Vị trí lưu trữ")}</Typography><Typography variant="caption">{selectedItem.locations.length} {uiText("vị trí lưu trữ")}</Typography></Box>
             <LocationOn fontSize="small" />
           </Box>
           {selectedItem.locations.length
@@ -359,17 +362,17 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
                   <Stack spacing={0.5} alignItems="flex-end"><LocationStatus status={location.status} /><LocationStatus status={isCabinetActive(cabinetById.get(Number(location.cabinet.id)) || location.cabinet) ? 'ACTIVE' : 'OFFLINE'} /></Stack>
                 </Stack>
                 <Box className="inventory-location-facts">
-                  <Box><Typography variant="caption">Số lượng</Typography><Typography>{location.quantity} {selectedItem.unit || ''}</Typography></Box>
-                  <Box><Typography variant="caption">Sức chứa ô</Typography><Typography>{Number(location.bin.capacity || 0) || 'Chưa cấu hình'}</Typography></Box>
+                  <Box><Typography variant="caption">{uiText("Số lượng")}</Typography><Typography>{location.quantity} {(selectedItem.unit || '')}</Typography></Box>
+                  <Box><Typography variant="caption">{uiText("Sức chứa ô")}</Typography><Typography>{(Number(location.bin.capacity || 0) || uiText('Chưa cấu hình'))}</Typography></Box>
                 </Box>
               </Paper>)}
             </Stack>
-            : <Alert severity="info">Sản phẩm chưa có tồn kho tại vị trí nào.</Alert>}
+            : <Alert severity="info">{uiText("Sản phẩm chưa có tồn kho tại vị trí nào.")}</Alert>}
         </Box>
         <Box className="inventory-detail-actions">
-          {!canOperate && <Typography variant="caption" color="text.secondary">Tài khoản không có quyền inventory.move.</Typography>}
-          <Button variant="contained" startIcon={<Remove />} disabled={!canOperate || !availableQuantity(selectedItem, cabinetById)} onClick={() => openOperation(selectedItem, 'PICK')}>Xuất hàng · PICK</Button>
-          <Button variant="outlined" startIcon={<Add />} disabled={!canOperate || !hasActivePutLocation} onClick={() => openOperation(selectedItem, 'PUT')}>Nhập hàng · PUT</Button>
+          {!canOperate && <Typography variant="caption" color="text.secondary">{uiText("Tài khoản không có quyền inventory.move.")}</Typography>}
+          <Button variant="contained" startIcon={<Remove />} disabled={!canOperate || !availableQuantity(selectedItem, cabinetById)} onClick={() => openOperation(selectedItem, 'PICK')}>{uiText("Xuất hàng · PICK")}</Button>
+          <Button variant="outlined" startIcon={<Add />} disabled={!canOperate || !hasActivePutLocation} onClick={() => openOperation(selectedItem, 'PUT')}>{uiText("Nhập hàng · PUT")}</Button>
         </Box>
       </Box>}
     </Drawer>
@@ -409,37 +412,39 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
 }
 
 function SummaryMetric({ label, value, icon }: { label: string; value: number | string; icon: React.ReactNode }) {
-  return <Paper variant="outlined" className="inventory-summary-item"><Box><Typography variant="caption">{label}</Typography><Typography className="inventory-summary-value">{value}</Typography></Box><Box className="inventory-summary-icon">{icon}</Box></Paper>
+  useLanguage();
+  return <Paper variant="outlined" className="inventory-summary-item"><Box><Typography variant="caption">{uiText(label)}</Typography><Typography className="inventory-summary-value">{value}</Typography></Box><Box className="inventory-summary-icon">{icon}</Box></Paper>
 }
 
 function ProductView({ items, onSelect }: { items: any[]; onSelect: (item: any) => void }) {
+  useLanguage();
   return <TableContainer component={Paper} variant="outlined" className="inventory-table-wrap">
-    <Table size="small" stickyHeader aria-label="Inventory products">
+    <Table size="small" stickyHeader aria-label={uiText("Inventory products")}>
       <TableHead><TableRow>
-        <TableCell>Sản phẩm</TableCell><TableCell align="right">Tổng số lượng</TableCell><TableCell align="right">Có thể xuất</TableCell>
-        <TableCell>Tủ / rack</TableCell><TableCell>Trạng thái</TableCell><TableCell align="right">Chi tiết</TableCell>
+        <TableCell>{uiText("Sản phẩm")}</TableCell><TableCell align="right">{uiText("Tổng số lượng")}</TableCell><TableCell align="right">{uiText("Có thể xuất")}</TableCell>
+        <TableCell>{uiText("Tủ / rack")}</TableCell><TableCell>{uiText("Trạng thái")}</TableCell><TableCell align="right">{uiText("Chi tiết")}</TableCell>
       </TableRow></TableHead>
       <TableBody>
         {items.map(item => {
           const firstLocation = item.locations[0]
           return <TableRow hover key={item.id}>
-            <TableCell data-label="Sản phẩm" className="inventory-product-cell">
+            <TableCell data-label={uiText("Sản phẩm")} className="inventory-product-cell">
               <Typography className="inventory-product-name">{item.item_name}</Typography>
-              <Typography variant="caption">SKU {item.item_code}{item.barcode || item.item_barcode ? ` · Mã vạch ${item.barcode || item.item_barcode}` : ''}</Typography>
+              <Typography variant="caption">SKU {item.item_code}{item.barcode || item.item_barcode ? uiText(" · Mã vạch {0}", (item.barcode || item.item_barcode)) : ''}</Typography>
             </TableCell>
-            <TableCell data-label="Tổng số lượng" align="right"><Typography className="inventory-quantity-value">{item.total} <small>{item.unit || ''}</small></Typography></TableCell>
-            <TableCell data-label="Có thể xuất" align="right"><Typography className="inventory-quantity-value">{item.available} <small>{item.unit || ''}</small></Typography></TableCell>
-            <TableCell data-label="Tủ / rack" className="inventory-product-location">
+            <TableCell data-label={uiText("Tổng số lượng")} align="right"><Typography className="inventory-quantity-value">{item.total} <small>{(item.unit || '')}</small></Typography></TableCell>
+            <TableCell data-label={uiText("Có thể xuất")} align="right"><Typography className="inventory-quantity-value">{item.available} <small>{(item.unit || '')}</small></Typography></TableCell>
+            <TableCell data-label={uiText("Tủ / rack")} className="inventory-product-location">
               {firstLocation
-                ? <><Typography className="inventory-location-path">{cabinetRackLabel(firstLocation)}</Typography><Typography variant="caption">{item.locations.length} vị trí</Typography></>
-                : <Typography variant="body2">Chưa có vị trí</Typography>}
+                ? <><Typography className="inventory-location-path">{cabinetRackLabel(firstLocation)}</Typography><Typography variant="caption">{item.locations.length} {uiText("vị trí")}</Typography></>
+                : <Typography variant="body2">{uiText("Chưa có vị trí")}</Typography>}
             </TableCell>
-            <TableCell data-label="Trạng thái"><LocationStatus status={item.stock.label.toUpperCase()} /></TableCell>
-            <TableCell data-label="Chi tiết" align="right"><Button size="small" aria-label={`Xem ${item.item_name}`} onClick={() => onSelect(item)} startIcon={<InfoOutlined fontSize="small" />}>Chi tiết</Button></TableCell>
+            <TableCell data-label={uiText("Trạng thái")}><LocationStatus status={item.stock.label.toUpperCase()} /></TableCell>
+            <TableCell data-label={uiText("Chi tiết")} align="right"><Button size="small" aria-label={uiText("Xem {0}", item.item_name)} onClick={() => onSelect(item)} startIcon={<InfoOutlined fontSize="small" />}>{uiText("Chi tiết")}</Button></TableCell>
           </TableRow>
         })}
         {!items.length && <TableRow><TableCell colSpan={6}>
-          <Box className="inventory-empty"><Inventory2 color="disabled" /><Typography fontWeight={600}>Không có sản phẩm phù hợp</Typography><Typography variant="body2">Thử tìm kiếm khác hoặc xóa bộ lọc.</Typography></Box>
+          <Box className="inventory-empty"><Inventory2 color="disabled" /><Typography fontWeight={600}>{uiText("Không có sản phẩm phù hợp")}</Typography><Typography variant="body2">{uiText("Thử tìm kiếm khác hoặc xóa bộ lọc.")}</Typography></Box>
         </TableCell></TableRow>}
       </TableBody>
     </Table>
@@ -447,6 +452,7 @@ function ProductView({ items, onSelect }: { items: any[]; onSelect: (item: any) 
 }
 
 function LocationView({ locations, stockByItemBin, items, locationName, onSelect }: { locations: any[]; stockByItemBin: Map<string, number>; items: any[]; locationName: (location: any) => string; onSelect: (location: any) => void }) {
+  useLanguage();
   const grouped = locations.reduce((result: Record<string, any[]>, location) => {
     const key = location.cabinet.id
     ;(result[key] ||= []).push(location)
@@ -465,12 +471,12 @@ function LocationView({ locations, stockByItemBin, items, locationName, onSelect
 
       return <Paper variant="outlined" className="inventory-cabinet" key={cabinetId}>
         <Box className="inventory-cabinet-heading">
-          <Box><Typography className="inventory-location-path">{cabinetLabel(cabinet)}</Typography><Typography variant="caption">{cabinetLocations.length} ô chứa</Typography></Box>
-          <Stack direction="row" spacing={0.75} alignItems="center"><LocationStatus status={isCabinetActive(cabinet) ? 'ACTIVE' : 'OFFLINE'} /><Chip size="small" label={`${cabinetQuantity} units`} variant="outlined" /></Stack>
+          <Box><Typography className="inventory-location-path">{cabinetLabel(cabinet)}</Typography><Typography variant="caption">{cabinetLocations.length} {uiText("ô chứa")}</Typography></Box>
+          <Stack direction="row" spacing={0.75} alignItems="center"><LocationStatus status={isCabinetActive(cabinet) ? 'ACTIVE' : 'OFFLINE'} /><Chip size="small" label={uiText("{0} units", cabinetQuantity)} variant="outlined" /></Stack>
         </Box>
         <TableContainer>
-          <Table size="small" aria-label={`${cabinetLabel(cabinet)} locations`}>
-            <TableHead><TableRow><TableCell>Tủ / rack</TableCell><TableCell>Trạng thái</TableCell><TableCell>Hàng lưu trữ</TableCell><TableCell align="right">Sức chứa</TableCell><TableCell align="right">Chi tiết</TableCell></TableRow></TableHead>
+          <Table size="small" aria-label={uiText("{0} locations", cabinetLabel(cabinet))}>
+            <TableHead><TableRow><TableCell>{uiText("Tủ / rack")}</TableCell><TableCell>{uiText("Trạng thái")}</TableCell><TableCell>{uiText("Hàng lưu trữ")}</TableCell><TableCell align="right">{uiText("Sức chứa")}</TableCell><TableCell align="right">{uiText("Chi tiết")}</TableCell></TableRow></TableHead>
             <TableBody>
               {Object.entries(groupedRacks).map(([rackId, rackLocations]) => rackLocations.map(location => {
                 const stockedItems = items.map(item => ({ item, quantity: stockByItemBin.get(`${item.id}:${location.bin.id}`) || 0 })).filter(row => row.quantity > 0)
@@ -478,13 +484,13 @@ function LocationView({ locations, stockByItemBin, items, locationName, onSelect
                 const capacity = Number(location.bin.capacity || 0)
                 const usage = capacity ? Math.min(100, quantity / capacity * 100) : 0
                 return <TableRow hover key={`${rackId}-${location.bin.id}`}>
-                  <TableCell data-label="Tủ / rack" className="inventory-location-table-cell"><Typography className="inventory-location-path">{cabinetRackLabel(location)}</Typography><Typography variant="caption">{location.bin.bin_code}</Typography></TableCell>
-                  <TableCell data-label="Trạng thái"><LocationStatus status={location.status} /></TableCell>
-                  <TableCell data-label="Hàng lưu trữ" className="inventory-location-contents">
-                    {stockedItems.length ? <Stack spacing={0.25}>{stockedItems.slice(0, 2).map(({ item, quantity: itemQuantity }) => <Typography variant="body2" key={item.id}>{item.item_name} <b>× {itemQuantity}</b></Typography>)}{stockedItems.length > 2 && <Typography variant="caption">+{stockedItems.length - 2} more</Typography>}</Stack> : <Typography variant="body2">Trống</Typography>}
+                  <TableCell data-label={uiText("Tủ / rack")} className="inventory-location-table-cell"><Typography className="inventory-location-path">{cabinetRackLabel(location)}</Typography><Typography variant="caption">{location.bin.bin_code}</Typography></TableCell>
+                  <TableCell data-label={uiText("Trạng thái")}><LocationStatus status={location.status} /></TableCell>
+                  <TableCell data-label={uiText("Hàng lưu trữ")} className="inventory-location-contents">
+                    {stockedItems.length ? <Stack spacing={0.25}>{stockedItems.slice(0, 2).map(({ item, quantity: itemQuantity }) => <Typography variant="body2" key={item.id}>{item.item_name} <b>× {itemQuantity}</b></Typography>)}{stockedItems.length > 2 && <Typography variant="caption">+{stockedItems.length - 2} {uiText("more")}</Typography>}</Stack> : <Typography variant="body2">{uiText("Trống")}</Typography>}
                   </TableCell>
-                  <TableCell data-label="Sức chứa" align="right"><Typography variant="body2" fontWeight={600}>{quantity} / {capacity || '—'}</Typography><LinearProgress variant="determinate" value={usage} color={usage >= 100 ? 'warning' : 'primary'} sx={{ mt: 0.5, height: 4, borderRadius: 2 }} /></TableCell>
-                  <TableCell data-label="Chi tiết" align="right"><Tooltip title={stockedItems.length ? 'Xem sản phẩm tại vị trí' : 'Vị trí chưa có hàng'}><span><IconButton size="small" aria-label={`View ${locationName(location)}`} disabled={!stockedItems.length} onClick={() => onSelect(location)}><InfoOutlined fontSize="small" /></IconButton></span></Tooltip></TableCell>
+                  <TableCell data-label={uiText("Sức chứa")} align="right"><Typography variant="body2" fontWeight={600}>{quantity} / {(capacity || '—')}</Typography><LinearProgress variant="determinate" value={usage} color={usage >= 100 ? 'warning' : 'primary'} sx={{ mt: 0.5, height: 4, borderRadius: 2 }} /></TableCell>
+                  <TableCell data-label={uiText("Chi tiết")} align="right"><Tooltip title={stockedItems.length ? uiText('Xem sản phẩm tại vị trí') : uiText('Vị trí chưa có hàng')}><span><IconButton size="small" aria-label={uiText("View {0}", locationName(location))} disabled={!stockedItems.length} onClick={() => onSelect(location)}><InfoOutlined fontSize="small" /></IconButton></span></Tooltip></TableCell>
                 </TableRow>
               }))}
             </TableBody>
@@ -492,11 +498,12 @@ function LocationView({ locations, stockByItemBin, items, locationName, onSelect
         </TableContainer>
       </Paper>
     })}
-    {!locations.length && <Box className="inventory-empty"><Inventory2 color="disabled" /><Typography fontWeight={600}>Không có vị trí phù hợp</Typography><Typography variant="body2">Thử đổi tủ, rack hoặc từ khóa.</Typography></Box>}
+    {!locations.length && <Box className="inventory-empty"><Inventory2 color="disabled" /><Typography fontWeight={600}>{uiText("Không có vị trí phù hợp")}</Typography><Typography variant="body2">{uiText("Thử đổi tủ, rack hoặc từ khóa.")}</Typography></Box>}
   </Stack>
 }
 
 function OperationDialog({ canOperate, open, item, available, kind, quantity, setQuantity, locations, location, setLocation, plan, planIndex, phase, note, setNote, error, onClose, onPrepare, onStart, onConfirm, onFail, locationName, cabinetRackLabel }: any) {
+  useLanguage();
   const step = plan[planIndex]
   const selectedLocation = locations.find((candidate: any) => location !== 'auto' && String(candidate.bin.id) === String(location))
   const selectedCurrent = selectedLocation?.quantityFor ? selectedLocation.quantityFor(item?.id) : 0
@@ -504,54 +511,54 @@ function OperationDialog({ canOperate, open, item, available, kind, quantity, se
   const target = step?.location || selectedLocation
 
   return <Dialog className="inventory-operation-dialog" open={open} onClose={onClose} fullWidth maxWidth="sm">
-    <DialogTitle className="inventory-dialog-title">
-      <Box><Typography variant="overline">{kind === 'PICK' ? 'Xuất hàng · PICK' : 'Nhập hàng · PUT'}</Typography><Typography component="h2">{item?.item_name}</Typography></Box>
-      <IconButton aria-label="Đóng thao tác" onClick={onClose} disabled={['sending', 'awaiting'].includes(phase)}><Close /></IconButton>
+    <DialogTitle className="inventory-dialog-title"><LanguageSelector />
+      <Box><Typography variant="overline">{kind === 'PICK' ? uiText('Xuất hàng · PICK') : uiText('Nhập hàng · PUT')}</Typography><Typography component="h2">{item?.item_name}</Typography></Box>
+      <IconButton aria-label={uiText("Đóng thao tác")} onClick={onClose} disabled={['sending', 'awaiting'].includes(phase)}><Close /></IconButton>
     </DialogTitle>
     <DialogContent dividers>
-      {error && <Alert severity="error" sx={{ mb: 1.5 }}>{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 1.5 }}>{errorText(error)}</Alert>}
       {phase === 'preview' && <Stack className="inventory-operation-form" spacing={1.25}>
-        <Box className="inventory-operation-product"><Typography variant="caption">Sản phẩm / SKU</Typography><Typography fontWeight={600}>{item?.item_name} · {item?.item_code}</Typography></Box>
-        <Box className="inventory-operation-available"><Typography variant="caption">Có thể xuất</Typography><Typography className="inventory-operation-available-value">{available} <small>{item?.unit || ''}</small></Typography></Box>
+        <Box className="inventory-operation-product"><Typography variant="caption">{uiText("Sản phẩm / SKU")}</Typography><Typography fontWeight={600}>{item?.item_name} · {item?.item_code}</Typography></Box>
+        <Box className="inventory-operation-available"><Typography variant="caption">{uiText("Có thể xuất")}</Typography><Typography className="inventory-operation-available-value">{available} <small>{(item?.unit || '')}</small></Typography></Box>
         <Box>
-          <Typography className="inventory-field-label">Số lượng</Typography>
+          <Typography className="inventory-field-label">{uiText("Số lượng")}</Typography>
           <Box className="inventory-quantity-stepper">
-            <IconButton aria-label="Giảm số lượng" onClick={() => setQuantity(Math.max(1, quantity - 1))} disabled={quantity <= 1}><Remove /></IconButton>
-            <TextField size="small" type="number" value={quantity} onChange={event => setQuantity(Number(event.target.value))} inputProps={{ min: 1, step: 1, 'aria-label': 'Số lượng thao tác' }} />
-            <IconButton aria-label="Tổng số lượng" onClick={() => setQuantity(quantity + 1)}><Add /></IconButton>
+            <IconButton aria-label={uiText("Giảm số lượng")} onClick={() => setQuantity(Math.max(1, quantity - 1))} disabled={quantity <= 1}><Remove /></IconButton>
+            <TextField size="small" type="number" value={quantity} onChange={event => setQuantity(Number(event.target.value))} inputProps={{ min: 1, step: 1, 'aria-label': uiText('Số lượng thao tác') }} />
+            <IconButton aria-label={uiText("Tổng số lượng")} onClick={() => setQuantity(quantity + 1)}><Add /></IconButton>
           </Box>
         </Box>
         <FormControl size="small" fullWidth>
-          <InputLabel>Vị trí thao tác</InputLabel>
-          <Select value={location} label="Vị trí thao tác" disabled={!canOperate} onChange={event => setLocation(event.target.value)}>
-            <MenuItem value="auto">Tự động đề xuất</MenuItem>
-            {locations.map((candidate: any) => <MenuItem key={candidate.bin.id} value={String(candidate.bin.id)}>{locationName(candidate)} · {statusLabel(candidate.status)}</MenuItem>)}
+          <InputLabel>{uiText("Vị trí thao tác")}</InputLabel>
+          <Select value={location} label={uiText("Vị trí thao tác")} disabled={!canOperate} onChange={event => setLocation(event.target.value)}>
+            <MenuItem value="auto">{uiText("Tự động đề xuất")}</MenuItem>
+            {locations.map((candidate: any) => <MenuItem key={candidate.bin.id} value={String(candidate.bin.id)}>{locationName(candidate)} · {statusText(candidate.status)}</MenuItem>)}
           </Select>
         </FormControl>
-        {selectedLocation && <Typography className="inventory-selected-capacity">Hiện có {selectedCurrent} · Sức chứa ô {selectedCapacity || 'Chưa cấu hình'} · Sau {kind}: {selectedCurrent + (kind === 'PUT' ? quantity : -quantity)}</Typography>}
-        {target && <Box className="inventory-operation-target"><Typography variant="caption">{plan.length ? 'Vị trí đề xuất' : 'Vị trí đã chọn'}</Typography><Typography className="inventory-location-path">{cabinetRackLabel(target)}</Typography></Box>}
+        {selectedLocation && <Typography className="inventory-selected-capacity">{uiText("Hiện có")} {selectedCurrent} {uiText("· Sức chứa ô")} {(selectedCapacity || uiText('Chưa cấu hình'))} {uiText("· Sau")} {uiText(kind)}: {selectedCurrent + (kind === 'PUT' ? quantity : -quantity)}</Typography>}
+        {target && <Box className="inventory-operation-target"><Typography variant="caption">{plan.length ? uiText('Vị trí đề xuất') : uiText('Vị trí đã chọn')}</Typography><Typography className="inventory-location-path">{cabinetRackLabel(target)}</Typography></Box>}
         {plan.length > 0 && <Box className="inventory-operation-plan">
-          <Typography className="inventory-field-label">Kế hoạch thao tác</Typography>
+          <Typography className="inventory-field-label">{uiText("Kế hoạch thao tác")}</Typography>
           {plan.map((entry: any, index: number) => <Box className="inventory-operation-plan-row" key={entry.location.bin.id}>
             <Box><Typography className="inventory-location-path">{cabinetRackLabel(entry.location)}</Typography><Typography variant="caption">{entry.location.bin.bin_code}</Typography></Box>
-            <Typography fontWeight={700}>{entry.quantity} · còn lại {entry.after}</Typography>
+            <Typography fontWeight={700}>{entry.quantity} {uiText("· còn lại")} {entry.after}</Typography>
           </Box>)}
         </Box>}
-        {!plan.length && <Button variant="outlined" onClick={onPrepare} disabled={quantity < 1}>Xem vị trí đề xuất</Button>}
+        {!plan.length && <Button variant="outlined" onClick={onPrepare} disabled={quantity < 1}>{uiText("Xem vị trí đề xuất")}</Button>}
       </Stack>}
-      {phase === 'sending' && <Stack spacing={1.25} alignItems="center" sx={{ py: 2 }}><CircularProgress size={28} /><Typography>Đang gửi tới cabinet workflow…</Typography>{step && <Typography color="text.secondary">{locationName(step.location)} · {step.quantity}</Typography>}</Stack>}
+      {phase === 'sending' && <Stack spacing={1.25} alignItems="center" sx={{ py: 2 }}><CircularProgress size={28} /><Typography>{uiText("Đang gửi tới cabinet workflow…")}</Typography>{step && <Typography color="text.secondary">{locationName(step.location)} · {step.quantity}</Typography>}</Stack>}
       {phase === 'awaiting' && <Stack spacing={1.25}>
-        <Alert severity="info">Cabinet đã mở. Hoàn tất thao tác thực tế rồi xác nhận để workflow đóng rack và cập nhật tồn kho cục bộ.</Alert>
-        <Box className="inventory-operation-target inventory-operation-confirm-target"><Typography variant="caption">Confirm target</Typography><Typography className="inventory-location-path">{step && cabinetRackLabel(step.location)}</Typography><Typography>Quantity: <b>{step?.quantity}</b></Typography></Box>
-        <TextField label="Ghi chú xác nhận" value={note} onChange={event => setNote(event.target.value)} required multiline minRows={2} />
+        <Alert severity="info">{uiText("Cabinet đã mở. Hoàn tất thao tác thực tế rồi xác nhận để workflow đóng rack và cập nhật tồn kho cục bộ.")}</Alert>
+        <Box className="inventory-operation-target inventory-operation-confirm-target"><Typography variant="caption">{uiText("Confirm target")}</Typography><Typography className="inventory-location-path">{step && cabinetRackLabel(step.location)}</Typography><Typography>{uiText("Quantity:")} <b>{step?.quantity}</b></Typography></Box>
+        <TextField label={uiText("Ghi chú xác nhận")} value={note} onChange={event => setNote(event.target.value)} required multiline minRows={2} />
       </Stack>}
-      {phase === 'done' && <Alert severity="success">Operation completed. Inventory đã cập nhật sau khi cabinet đóng thành công.</Alert>}
-      {phase === 'failed' && <Alert severity="warning">Operation failed/cancelled. Inventory không thay đổi.</Alert>}
+      {phase === 'done' && <Alert severity="success">{uiText("Operation completed. Inventory đã cập nhật sau khi cabinet đóng thành công.")}</Alert>}
+      {phase === 'failed' && <Alert severity="warning">{uiText("Operation failed/cancelled. Inventory không thay đổi.")}</Alert>}
     </DialogContent>
     <DialogActions>
-      {phase === 'preview' && <><Button onClick={onClose}>Hủy</Button><Button onClick={onPrepare} disabled={quantity < 1}>Xem kế hoạch</Button><Button variant="contained" onClick={onStart} disabled={!plan.length}>Bắt đầu {kind}</Button></>}
-      {phase === 'awaiting' && <><Button color="error" onClick={onFail} disabled={!note.trim()}>Thất bại / Hủy</Button><Button variant="contained" onClick={onConfirm} disabled={!note.trim()}>Xác nhận · đóng rack</Button></>}
-      {['done', 'failed'].includes(phase) && <Button onClick={onClose}>Đóng</Button>}
+      {phase === 'preview' && <><Button onClick={onClose}>{uiText("Hủy")}</Button><Button onClick={onPrepare} disabled={quantity < 1}>{uiText("Xem kế hoạch")}</Button><Button variant="contained" onClick={onStart} disabled={!plan.length}>{uiText("Bắt đầu")} {uiText(kind)}</Button></>}
+      {phase === 'awaiting' && <><Button color="error" onClick={onFail} disabled={!note.trim()}>{uiText("Thất bại / Hủy")}</Button><Button variant="contained" onClick={onConfirm} disabled={!note.trim()}>{uiText("Xác nhận · đóng rack")}</Button></>}
+      {['done', 'failed'].includes(phase) && <Button onClick={onClose}>{uiText("Đóng")}</Button>}
     </DialogActions>
   </Dialog>
 }

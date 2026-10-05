@@ -8,6 +8,12 @@ from ipc_core.store import Store, RevisionGap
 from ipc_core.projection import project
 
 log = logging.getLogger(__name__)
+if not log.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s %(message)s'))
+    log.addHandler(handler)
+log.setLevel(logging.INFO)
+log.propagate = False
 
 
 class Runtime:
@@ -133,6 +139,8 @@ class Runtime:
                 ack = envelope(cfg.DEVICE_ID, cfg.DEVICE_TYPE, "ack.command", {}, correlation_id=message["message_id"])
                 self.store.enqueue(db, "ack", ack)
         elif kind == "command.execute":
+            log.info('command.receive device=%s command=%s rack=%s address=%s action=%s', cfg.DEVICE_ID,
+                     message['command_id'], message['payload'].get('rack_id'), message['payload'].get('address'), message['payload'].get('action'))
             with self.store.transaction() as db:
                 if self.transactions.repo.active(db):
                     raise ValueError('Local physical transaction is active')
@@ -160,7 +168,11 @@ class Runtime:
                     if not row:
                         raise
                     state = row[0]
-            self.store.emit("events", "events.command_result", {"state": state}, command_id=message["command_id"])
+            with self.store.transaction() as db:
+                saved = db.execute('SELECT result FROM edge_operations WHERE id=?', (message['command_id'],)).fetchone()
+            result = json.loads(saved[0]) if saved and saved[0] else {"state": state}
+            log.info('command.result device=%s command=%s state=%s', cfg.DEVICE_ID, message['command_id'], state)
+            self.store.emit("events", "events.command_result", result, command_id=message["command_id"])
         else:
             raise ValueError("Unsupported downlink")
 
@@ -174,6 +186,8 @@ class Runtime:
                     raise
                 if accepted:
                     state = next((s for s in self.recovery.states() if s['cabinet_index'] == message.payload['cabinet_index']), None)
+                    if state:
+                        self.report_simulation_command(state)
                     if state and state['system_state'] in {'IDLE', 'OPEN'} and not state.get('active_command_id') and not state.get('fault_context') and state.get('sensors', {}).get('position_trusted') is True and not any(state.get('sensors', {}).get('faults', {}).values()):
                         with self.store.transaction() as db:
                             row = db.execute("SELECT * FROM local_transactions WHERE transaction_id=? AND operation_status='UNCERTAIN'", (state.get('last_command_id'),)).fetchone()
@@ -206,6 +220,49 @@ class Runtime:
                            for r in (json.loads(row[0]) for row in db.execute("SELECT body FROM edge_records")))
             if assigned:
                 self.store.enqueue(db, channel, outgoing)
+
+    def report_simulation_command(self, snapshot):
+        """Bridge reconciled Simulation evidence to the existing MQTT command result."""
+        command_id = snapshot.get('active_command_id') or snapshot.get('last_command_id')
+        if not command_id:
+            return
+        with self.store.transaction() as db:
+            row = db.execute('SELECT * FROM edge_operations WHERE id=?', (command_id,)).fetchone()
+            if not row or row['state'] != 'sent':
+                return
+            if row['result'] and json.loads(row['result']).get('execution_state') == 'completed':
+                return
+            body = json.loads(row['body'])
+            address, action = body['address'], body['action']
+            if snapshot['cabinet_index'] != (int(address)-1)//6+1:
+                return
+            sensors = snapshot.get('sensors', {})
+            fault = snapshot.get('fault_context')
+            execution = None
+            if fault or snapshot['system_state'] in {'ERROR', 'RECOVERING', 'STOPPED', 'COMMUNICATION_LOST'}:
+                execution = 'fault'
+            elif snapshot.get('active_command_id') == command_id:
+                execution = 'moving'
+            elif (snapshot.get('last_command_id') == command_id and not snapshot.get('active_command_id')
+                  and not snapshot.get('pending_commands') and sensors.get('position_trusted') is True
+                  and not any(sensors.get('faults', {}).values())
+                  and all(not r.get('is_moving') for r in snapshot.get('racks', {}).values())):
+                if (action == 'OPEN' and snapshot['system_state'] == 'OPEN' and snapshot.get('active_rack') == address
+                    or action == 'CLOSE' and snapshot['system_state'] == 'IDLE' and snapshot.get('active_rack') is None
+                    or action == 'VENTILATE' and snapshot['system_state'] == 'VENTILATED'):
+                    execution = 'completed'
+            if not execution:
+                return
+            result = dict(state='sent', execution_state=execution, address=address, action=action,
+                          cabinet_index=snapshot['cabinet_index'])
+            if fault:
+                result['error'] = fault.get('error_code', 'Simulation fault')
+            if row['result'] == canonical(result):
+                return
+            db.execute('UPDATE edge_operations SET result=? WHERE id=?', (canonical(result), command_id))
+            outgoing = envelope(self.settings.DEVICE_ID, self.settings.DEVICE_TYPE, 'events.command_result', result, command_id=command_id)
+            self.store.enqueue(db, 'events', outgoing)
+        log.info('command.execution device=%s command=%s execution=%s address=%s', self.settings.DEVICE_ID, command_id, execution, address)
 
     def start(self):
         if not self.settings.MQTT_HOST:

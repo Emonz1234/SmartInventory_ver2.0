@@ -1,0 +1,4498 @@
+{
+  "Smart Inventory · Control Center": [
+    "Smart Inventory · Trung tâm điều khiển",
+    "Smart Inventory · Control Center"
+  ],
+  "IPCSIM Simulation": [
+    "IPCSIM · Mô phỏng",
+    "IPCSIM Simulation"
+  ],
+  "Language": [
+    "Ngôn ngữ",
+    "Language"
+  ],
+  "Unknown system error": [
+    "Có lỗi hệ thống. Vui lòng thử lại hoặc liên hệ người quản trị.",
+    "A system error occurred. Please retry or contact your administrator."
+  ],
+  "Unknown status": [
+    "Trạng thái chưa xác định",
+    "Unknown status"
+  ],
+  "Dashboard": [
+    "Tổng quan",
+    "Dashboard"
+  ],
+  "IPC Devices": [
+    "Thiết bị IPC",
+    "IPC devices"
+  ],
+  "Cabinets": [
+    "Tủ",
+    "Cabinets"
+  ],
+  "Environment": [
+    "Môi trường",
+    "Environment"
+  ],
+  "Alarms": [
+    "Cảnh báo",
+    "Alarms"
+  ],
+  "Inventory": [
+    "Kho hàng",
+    "Inventory"
+  ],
+  "Storage Map": [
+    "Sơ đồ lưu trữ",
+    "Storage map"
+  ],
+  "Transactions": [
+    "Giao dịch",
+    "Transactions"
+  ],
+  "Audit Logs": [
+    "Nhật ký kiểm toán",
+    "Audit logs"
+  ],
+  "Users": [
+    "Người dùng",
+    "Users"
+  ],
+  "Roles & Permissions": [
+    "Vai trò & quyền",
+    "Roles & permissions"
+  ],
+  "Settings": [
+    "Cài đặt",
+    "Settings"
+  ],
+  "Yes": [
+    "Có",
+    "Yes"
+  ],
+  "No": [
+    "Không",
+    "No"
+  ],
+  "Actions": [
+    "Thao tác",
+    "Actions"
+  ],
+  "Action": [
+    "Thao tác",
+    "Action"
+  ],
+  "By Product": [
+    "Theo sản phẩm",
+    "By product"
+  ],
+  "By Location": [
+    "Theo vị trí",
+    "By location"
+  ],
+  "Locations": [
+    "Vị trí",
+    "Locations"
+  ],
+  "Stock overview": [
+    "Tổng quan kho hàng",
+    "Stock overview"
+  ],
+  "Inventory Management": [
+    "Quản lý kho hàng",
+    "Inventory management"
+  ],
+  "Inventory products": [
+    "Sản phẩm trong kho",
+    "Inventory products"
+  ],
+  "Total Products": [
+    "Tổng sản phẩm",
+    "Total products"
+  ],
+  "Total Quantity": [
+    "Tổng số lượng",
+    "Total quantity"
+  ],
+  "Total stock": [
+    "Tổng tồn kho",
+    "Total stock"
+  ],
+  "Units across inventory": [
+    "Đơn vị trong kho",
+    "Units across inventory"
+  ],
+  "Inventory Distribution by IPC": [
+    "Phân bố tồn kho theo IPC",
+    "Inventory distribution by IPC"
+  ],
+  "REAL Inventory": [
+    "Kho thực tế",
+    "Real inventory"
+  ],
+  "Simulation Inventory": [
+    "Kho mô phỏng",
+    "Simulation inventory"
+  ],
+  "Low Stock Products": [
+    "Sản phẩm sắp hết",
+    "Low stock products"
+  ],
+  "Items below minimum": [
+    "Sản phẩm dưới mức tối thiểu",
+    "Items below minimum"
+  ],
+  "Available Stock": [
+    "Tồn kho khả dụng",
+    "Available stock"
+  ],
+  "Available Quantity": [
+    "Số lượng khả dụng",
+    "Available quantity"
+  ],
+  "Available:": [
+    "Khả dụng:",
+    "Available:"
+  ],
+  "· Available:": [
+    "· Khả dụng:",
+    "· Available:"
+  ],
+  "Current Stock": [
+    "Tồn kho hiện tại",
+    "Current stock"
+  ],
+  "Current Quantity:": [
+    "Số lượng hiện tại:",
+    "Current quantity:"
+  ],
+  "New Quantity": [
+    "Số lượng mới",
+    "New quantity"
+  ],
+  "Product Name": [
+    "Tên sản phẩm",
+    "Product name"
+  ],
+  "Product Name / SKU / Barcode": [
+    "Tên sản phẩm / SKU / mã vạch",
+    "Product name / SKU / barcode"
+  ],
+  "Item Code": [
+    "Mã sản phẩm",
+    "Item code"
+  ],
+  "Item Name": [
+    "Tên sản phẩm",
+    "Item name"
+  ],
+  "Item:": [
+    "Sản phẩm:",
+    "Item:"
+  ],
+  "Category": [
+    "Loại sản phẩm",
+    "Category"
+  ],
+  "Uncategorized": [
+    "Chưa phân loại",
+    "Uncategorized"
+  ],
+  "Description": [
+    "Mô tả",
+    "Description"
+  ],
+  "Unit": [
+    "Đơn vị",
+    "Unit"
+  ],
+  "Quantity": [
+    "Số lượng",
+    "Quantity"
+  ],
+  "Quantity:": [
+    "Số lượng:",
+    "Quantity:"
+  ],
+  "Min Stock": [
+    "Tồn kho tối thiểu",
+    "Min stock"
+  ],
+  "Max Stock": [
+    "Tồn kho tối đa",
+    "Max stock"
+  ],
+  "Stock Status": [
+    "Trạng thái tồn kho",
+    "Stock status"
+  ],
+  "Low Stock": [
+    "Sắp hết hàng",
+    "Low stock"
+  ],
+  "Low stock": [
+    "Sắp hết hàng",
+    "Low stock"
+  ],
+  "LOW STOCK": [
+    "Sắp hết hàng",
+    "Low stock"
+  ],
+  "Out of Stock": [
+    "Hết hàng",
+    "Out of stock"
+  ],
+  "Out of stock": [
+    "Hết hàng",
+    "Out of stock"
+  ],
+  "OUT OF STOCK": [
+    "Hết hàng",
+    "Out of stock"
+  ],
+  "In stock": [
+    "Còn hàng",
+    "In stock"
+  ],
+  "Catalog Status": [
+    "Trạng thái danh mục",
+    "Catalog status"
+  ],
+  "Active": [
+    "Hoạt động",
+    "Active"
+  ],
+  "Inactive": [
+    "Ngừng hoạt động",
+    "Inactive"
+  ],
+  "Active:": [
+    "Đang hoạt động:",
+    "Active:"
+  ],
+  "Active IPC": [
+    "IPC hoạt động",
+    "Active IPC"
+  ],
+  "Offline IPC": [
+    "IPC mất kết nối",
+    "Offline IPC"
+  ],
+  "Pending Sync": [
+    "Chờ đồng bộ",
+    "Pending sync"
+  ],
+  "Sync Status": [
+    "Trạng thái đồng bộ",
+    "Sync status"
+  ],
+  "Alarm status": [
+    "Trạng thái cảnh báo",
+    "Alarm status"
+  ],
+  "Device status": [
+    "Trạng thái thiết bị",
+    "Device status"
+  ],
+  "Inventory Adjustment": [
+    "Điều chỉnh tồn kho",
+    "Inventory adjustment"
+  ],
+  "Storage locations": [
+    "Vị trí lưu trữ",
+    "Storage locations"
+  ],
+  "Locations currently assigned": [
+    "Vị trí đã phân bổ",
+    "Assigned locations"
+  ],
+  "Location": [
+    "Vị trí",
+    "Location"
+  ],
+  "Position": [
+    "Vị trí",
+    "Position"
+  ],
+  "Capacity:": [
+    "Sức chứa:",
+    "Capacity:"
+  ],
+  "· Capacity:": [
+    "· Sức chứa:",
+    "· Capacity:"
+  ],
+  "Shelf / Compartment": [
+    "Kệ / ô chứa",
+    "Shelf / compartment"
+  ],
+  "Last Updated / Action": [
+    "Cập nhật gần nhất / thao tác",
+    "Last updated / action"
+  ],
+  "Last Updated:": [
+    "Cập nhật gần nhất:",
+    "Last updated:"
+  ],
+  "Reason": [
+    "Lý do",
+    "Reason"
+  ],
+  "Recent PUT / PICK": [
+    "Nhập / xuất gần nhất",
+    "Recent PUT / PICK"
+  ],
+  "Search": [
+    "Tìm kiếm",
+    "Search"
+  ],
+  "Search code, item name or location...": [
+    "Tìm mã, tên sản phẩm hoặc vị trí...",
+    "Search code, item name or location..."
+  ],
+  "Search stock, inspect locations and start rack operations.": [
+    "Tìm hàng, kiểm tra vị trí và thao tác rack.",
+    "Search stock, inspect locations and start rack operations."
+  ],
+  "Select an item to see its rack locations.": [
+    "Chọn sản phẩm để xem vị trí rack.",
+    "Select an item to see its rack locations."
+  ],
+  "No inventory items match your search.": [
+    "Không có sản phẩm phù hợp với tìm kiếm.",
+    "No inventory items match your search."
+  ],
+  "No storage location assigned.": [
+    "Chưa phân bổ vị trí lưu trữ.",
+    "No storage location assigned."
+  ],
+  "Show Simulation Data": [
+    "Hiện dữ liệu mô phỏng",
+    "Show simulation data"
+  ],
+  "Role name": [
+    "Tên vai trò",
+    "Role name"
+  ],
+  "User:": [
+    "Người dùng:",
+    "User:"
+  ],
+  "SMART INVENTORY · Server-managed inventory · Auto refresh 10s": [
+    "SMART INVENTORY · Kho hàng do Server quản lý · Tự làm mới mỗi 10 giây",
+    "SMART INVENTORY · Server-managed inventory · Auto refresh 10s"
+  ],
+  "CONTROL CENTER": [
+    "TRUNG TÂM ĐIỀU KHIỂN",
+    "CONTROL CENTER"
+  ],
+  "SMART INVENTORY / CONTROL CENTER": [
+    "SMART INVENTORY / TRUNG TÂM ĐIỀU KHIỂN",
+    "SMART INVENTORY / CONTROL CENTER"
+  ],
+  "Rack operation": [
+    "Thao tác rack",
+    "Rack operation"
+  ],
+  "Manual Rack Control": [
+    "Điều khiển rack thủ công",
+    "Manual rack control"
+  ],
+  "Cabinet": [
+    "Tủ",
+    "Cabinet"
+  ],
+  "Cabinet {0}": [
+    "Tủ {0}",
+    "Cabinet {0}"
+  ],
+  "Cabinet {0} / Rack {1}": [
+    "Tủ {0} / Rack {1}",
+    "Cabinet {0} / Rack {1}"
+  ],
+  "{0} / Cabinet {1} / Rack {2}": [
+    "{0} / Tủ {1} / Rack {2}",
+    "{0} / Cabinet {1} / Rack {2}"
+  ],
+  "Rack Code": [
+    "Mã rack",
+    "Rack code"
+  ],
+  "Rack ID": [
+    "ID rack",
+    "Rack ID"
+  ],
+  "Pick": [
+    "Xuất hàng",
+    "Pick"
+  ],
+  "Put": [
+    "Nhập hàng",
+    "Put"
+  ],
+  "Pick Item": [
+    "Xuất sản phẩm",
+    "Pick item"
+  ],
+  "Put Item": [
+    "Nhập sản phẩm",
+    "Put item"
+  ],
+  "Pick Quantity": [
+    "Số lượng xuất",
+    "Pick quantity"
+  ],
+  "Put Quantity": [
+    "Số lượng nhập",
+    "Put quantity"
+  ],
+  "Target Bin Code": [
+    "Mã ô đích",
+    "Target bin code"
+  ],
+  "Confirm Pick": [
+    "Xác nhận xuất",
+    "Confirm pick"
+  ],
+  "Confirm Put": [
+    "Xác nhận nhập",
+    "Confirm put"
+  ],
+  "Ready to pick": [
+    "Sẵn sàng xuất",
+    "Ready to pick"
+  ],
+  "Ready to put": [
+    "Sẵn sàng nhập",
+    "Ready to put"
+  ],
+  "Keep Rack Open": [
+    "Giữ rack mở",
+    "Keep rack open"
+  ],
+  "Close Rack": [
+    "Đóng rack",
+    "Close rack"
+  ],
+  "Opening Rack": [
+    "Đang mở rack",
+    "Opening rack"
+  ],
+  "Closing Rack": [
+    "Đang đóng rack",
+    "Closing rack"
+  ],
+  "Closing Rack...": [
+    "Đang đóng rack...",
+    "Closing rack..."
+  ],
+  "Rack opened": [
+    "Rack đã mở",
+    "Rack opened"
+  ],
+  "Rack closed": [
+    "Rack đã đóng",
+    "Rack closed"
+  ],
+  "Rack Opened Successfully!": [
+    "Mở rack thành công!",
+    "Rack opened successfully!"
+  ],
+  "Rack Closed Successfully!": [
+    "Đóng rack thành công!",
+    "Rack closed successfully!"
+  ],
+  "Ventilation Complete!": [
+    "Thông gió hoàn tất!",
+    "Ventilation complete!"
+  ],
+  "Operation Failed": [
+    "Thao tác thất bại",
+    "Operation failed"
+  ],
+  "An error occurred during the operation": [
+    "Có lỗi xảy ra trong quá trình thao tác",
+    "An error occurred during the operation"
+  ],
+  "Waiting for rack to open...": [
+    "Đang chờ rack mở...",
+    "Waiting for rack to open..."
+  ],
+  "Waiting for rack to close...": [
+    "Đang chờ rack đóng...",
+    "Waiting for rack to close..."
+  ],
+  "Please wait while the rack is opening.": [
+    "Vui lòng chờ rack mở.",
+    "Please wait while the rack is opening."
+  ],
+  "Please wait while the rack is closing.": [
+    "Vui lòng chờ rack đóng.",
+    "Please wait while the rack is closing."
+  ],
+  "Please wait until the rack is fully open.": [
+    "Vui lòng chờ rack mở hoàn toàn.",
+    "Please wait until the rack is fully open."
+  ],
+  "The rack is open. Please choose whether to close it or keep it open.": [
+    "Rack đã mở. Chọn đóng rack hoặc giữ mở.",
+    "The rack is open. Choose whether to close it or keep it open."
+  ],
+  "Close": [
+    "Đóng",
+    "Close"
+  ],
+  "Cancel": [
+    "Hủy",
+    "Cancel"
+  ],
+  "Confirm": [
+    "Xác nhận",
+    "Confirm"
+  ],
+  "Done": [
+    "Hoàn tất",
+    "Done"
+  ],
+  "Stop": [
+    "Dừng",
+    "Stop"
+  ],
+  "Confirm command": [
+    "Xác nhận lệnh",
+    "Confirm command"
+  ],
+  "Confirm operation": [
+    "Xác nhận thao tác",
+    "Confirm operation"
+  ],
+  "Confirm rack movement": [
+    "Xác nhận di chuyển rack",
+    "Confirm rack movement"
+  ],
+  "Confirm target": [
+    "Xác nhận đích",
+    "Confirm target"
+  ],
+  "Continue in background": [
+    "Tiếp tục ở chế độ nền",
+    "Continue in background"
+  ],
+  "I checked · reset": [
+    "Đã kiểm tra · đặt lại",
+    "I checked · reset"
+  ],
+  "Queue": [
+    "Hàng đợi",
+    "Queue"
+  ],
+  "No command waiting.": [
+    "Không có lệnh chờ.",
+    "No command waiting."
+  ],
+  "Operation events will appear here.": [
+    "Nhật ký thao tác sẽ hiển thị tại đây.",
+    "Operation events will appear here."
+  ],
+  "Commands run locally; no Server confirmation is required.": [
+    "Lệnh chạy cục bộ, không cần xác nhận từ Server.",
+    "Commands run locally; no Server confirmation is required."
+  ],
+  "Completion is confirmed by fresh endpoint telemetry.": [
+    "Hoàn tất được xác nhận bằng số đo điểm cuối mới.",
+    "Completion is confirmed by fresh endpoint telemetry."
+  ],
+  "Sending command": [
+    "Đang gửi lệnh",
+    "Sending command"
+  ],
+  "Sending local commands": [
+    "Đang gửi lệnh cục bộ",
+    "Sending local commands"
+  ],
+  "Sending command to IPCSIM…": [
+    "Đang gửi lệnh tới IPCSIM…",
+    "Sending command to IPCSIM…"
+  ],
+  "Waiting for simulation": [
+    "Đang chờ mô phỏng",
+    "Waiting for simulation"
+  ],
+  "Waiting for simulation ACK and endpoint confirmation...": [
+    "Đang chờ ACK mô phỏng và xác nhận điểm cuối...",
+    "Waiting for simulation ACK and endpoint confirmation..."
+  ],
+  "Waiting for simulation telemetry…": [
+    "Đang chờ số đo mô phỏng…",
+    "Waiting for simulation telemetry…"
+  ],
+  "Awaiting telemetry": [
+    "Đang chờ số đo",
+    "Awaiting telemetry"
+  ],
+  "... Please wait.": [
+    "... Vui lòng chờ.",
+    "... Please wait."
+  ],
+  "Operation sent": [
+    "Đã gửi thao tác",
+    "Operation sent"
+  ],
+  "Operation complete": [
+    "Thao tác hoàn tất",
+    "Operation complete"
+  ],
+  "Operation needs attention": [
+    "Thao tác cần kiểm tra",
+    "Operation needs attention"
+  ],
+  "Operation not confirmed": [
+    "Thao tác chưa được xác nhận",
+    "Operation not confirmed"
+  ],
+  "Not confirmed": [
+    "Chưa xác nhận",
+    "Not confirmed"
+  ],
+  "The operation could not be completed.": [
+    "Không thể hoàn tất thao tác.",
+    "The operation could not be completed."
+  ],
+  "Command could not be confirmed.": [
+    "Không thể xác nhận lệnh.",
+    "Command could not be confirmed."
+  ],
+  "Command delivery is uncertain.": [
+    "Chưa xác định lệnh đã được nhận hay chưa.",
+    "Command delivery is uncertain."
+  ],
+  "Command failed.": [
+    "Lệnh thất bại.",
+    "Command failed."
+  ],
+  "Command queued and waiting to start.": [
+    "Lệnh đã vào hàng đợi và đang chờ chạy.",
+    "Command queued and waiting to start."
+  ],
+  "The command is being delivered over Serial.": [
+    "Lệnh đang được gửi qua Serial.",
+    "The command is being delivered over Serial."
+  ],
+  "Serial delivery is uncertain; inspect the cabinet before retrying.": [
+    "Chưa xác định kết quả gửi qua Serial; kiểm tra tủ trước khi thử lại.",
+    "Serial delivery is uncertain; inspect the cabinet before retrying."
+  ],
+  "Light command delivery is uncertain. Check the rack before retrying.": [
+    "Chưa xác định kết quả lệnh đèn. Kiểm tra rack trước khi thử lại.",
+    "Light command delivery is uncertain. Check the rack before retrying."
+  ],
+  "Light command failed.": [
+    "Lệnh đèn thất bại.",
+    "Light command failed."
+  ],
+  "Check the cabinet before retrying.": [
+    "Kiểm tra tủ trước khi thử lại.",
+    "Check the cabinet before retrying."
+  ],
+  "Local telemetry is temporarily unavailable; the popup will keep waiting.": [
+    "Tạm thời không có số đo cục bộ; hộp thoại tiếp tục chờ.",
+    "Local telemetry is temporarily unavailable; the popup will keep waiting."
+  ],
+  "No endpoint confirmation received within 90 seconds. Check the rack before any retry.": [
+    "Không nhận được xác nhận điểm cuối trong 90 giây. Kiểm tra rack trước khi thử lại.",
+    "No endpoint confirmation received within 90 seconds. Check the rack before any retry."
+  ],
+  "Could not load cabinet racks. Check the local IPC connection and retry.": [
+    "Không tải được rack của tủ. Kiểm tra kết nối IPC cục bộ và thử lại.",
+    "Could not load cabinet racks. Check the local IPC connection and retry."
+  ],
+  "No racks are configured for this cabinet.": [
+    "Tủ này chưa có rack được cấu hình.",
+    "No racks are configured for this cabinet."
+  ],
+  "Operator permission is required.": [
+    "Cần quyền người vận hành.",
+    "Operator permission is required."
+  ],
+  "Operator access required": [
+    "Cần quyền vận hành",
+    "Operator access required"
+  ],
+  "Failed to open rack.": [
+    "Không mở được rack.",
+    "Failed to open rack."
+  ],
+  "Failed to close rack.": [
+    "Không đóng được rack.",
+    "Failed to close rack."
+  ],
+  "Failed to open rack:": [
+    "Không mở được rack:",
+    "Failed to open rack:"
+  ],
+  "Failed to close rack:": [
+    "Không đóng được rack:",
+    "Failed to close rack:"
+  ],
+  "Failed to fetch breakdown status": [
+    "Không tải được trạng thái sự cố",
+    "Failed to fetch breakdown status"
+  ],
+  "Failed to read rack status": [
+    "Không đọc được trạng thái rack",
+    "Failed to read rack status"
+  ],
+  "Simulation unavailable. GAP commands are disabled.": [
+    "Mô phỏng không khả dụng. Lệnh GAP đã bị khóa.",
+    "Simulation unavailable. GAP commands are disabled."
+  ],
+  "Simulation reported a movement fault.": [
+    "Mô phỏng báo lỗi di chuyển.",
+    "Simulation reported a movement fault."
+  ],
+  "Simulation reported ERROR for Rack {0}. Inspect the cabinet before retrying.": [
+    "Mô phỏng báo lỗi rack {0}. Kiểm tra tủ trước khi thử lại.",
+    "Simulation reported an error for Rack {0}. Inspect the cabinet before retrying."
+  ],
+  "Simulation endpoint telemetry confirmed the operation.": [
+    "Số đo điểm cuối mô phỏng đã xác nhận thao tác.",
+    "Simulation endpoint telemetry confirmed the operation."
+  ],
+  "Simulation telemetry confirmed the rack reached its target endpoint.": [
+    "Số đo mô phỏng xác nhận rack đã tới điểm cuối đích.",
+    "Simulation telemetry confirmed the rack reached its target endpoint."
+  ],
+  "Simulation ACK confirmed. The rack reached the endpoint successfully.": [
+    "Đã xác nhận ACK mô phỏng. Rack đã tới điểm cuối.",
+    "Simulation ACK confirmed. The rack reached the endpoint successfully."
+  ],
+  "Simulation completion confirmed. The rack is fully closed.": [
+    "Mô phỏng xác nhận hoàn tất. Rack đã đóng hoàn toàn.",
+    "Simulation completion confirmed. The rack is fully closed."
+  ],
+  "The popup will only switch to success after the simulation confirms the rack reached the target endpoint.": [
+    "Hộp thoại chỉ báo thành công khi mô phỏng xác nhận rack đã tới điểm cuối đích.",
+    "The popup only shows success after the simulation confirms the rack reached the target endpoint."
+  ],
+  "Success appears after the target endpoint is confirmed.": [
+    "Thành công được hiển thị sau khi điểm cuối đích được xác nhận.",
+    "Success appears after the target endpoint is confirmed."
+  ],
+  "Rack {0} has an active breakdown ({1}). Please clear the issue before continuing.": [
+    "Rack {0} đang có sự cố ({1}). Khắc phục trước khi tiếp tục.",
+    "Rack {0} has an active breakdown ({1}). Please clear the issue before continuing."
+  ],
+  "Affected Racks (": [
+    "Rack bị ảnh hưởng (",
+    "Affected racks ("
+  ],
+  "Cleared": [
+    "Đã hết lỗi",
+    "Cleared"
+  ],
+  "Move Left": [
+    "Di chuyển sang trái",
+    "Move left"
+  ],
+  "Move Right": [
+    "Di chuyển sang phải",
+    "Move right"
+  ],
+  "Moving:": [
+    "Đang di chuyển:",
+    "Moving:"
+  ],
+  "State:": [
+    "Trạng thái:",
+    "State:"
+  ],
+  "GAP unknown": [
+    "Chưa xác định GAP",
+    "GAP unknown"
+  ],
+  "Mode unknown": [
+    "Chưa xác định chế độ",
+    "Mode unknown"
+  ],
+  "Current GAP is unknown. Confirm only after checking the cabinet state.": [
+    "Chưa xác định GAP hiện tại. Chỉ xác nhận sau khi kiểm tra tủ.",
+    "Current GAP is unknown. Confirm only after checking the cabinet state."
+  ],
+  "GAP state unavailable after ventilation · Return Home to re-establish": [
+    "Chưa xác định GAP sau thông gió · Về HOME để thiết lập lại",
+    "GAP state unavailable after ventilation · Return Home to re-establish"
+  ],
+  "Return Home": [
+    "Về HOME",
+    "Return Home"
+  ],
+  "Return GAP to HOME": [
+    "Đưa GAP về HOME",
+    "Return GAP to HOME"
+  ],
+  "Returning GAP to HOME": [
+    "Đang đưa GAP về HOME",
+    "Returning GAP to HOME"
+  ],
+  "Return Home · GAP right of R6": [
+    "Về HOME · GAP bên phải R6",
+    "Return Home · GAP right of R6"
+  ],
+  "Return Home complete · GAP is right of Rack 6": [
+    "Đã về HOME · GAP bên phải rack 6",
+    "Return Home complete · GAP is right of Rack 6"
+  ],
+  "Returned Home successfully": [
+    "Đã về HOME thành công",
+    "Returned Home successfully"
+  ],
+  "The cabinet is already at HOME": [
+    "Tủ đã ở HOME",
+    "The cabinet is already at HOME"
+  ],
+  "A HOME command is already pending": [
+    "Đã có lệnh HOME đang chờ",
+    "A HOME command is already pending"
+  ],
+  "Duplicate command ignored; cabinet is already at the requested state": [
+    "Bỏ qua lệnh trùng; tủ đã ở trạng thái yêu cầu",
+    "Duplicate command ignored; cabinet is already at the requested state"
+  ],
+  "Operator checked the cabinet · GAP marked unknown; pending commands cleared": [
+    "Người vận hành đã kiểm tra tủ · GAP chưa xác định; đã xóa lệnh chờ",
+    "Operator checked the cabinet · GAP marked unknown; pending commands cleared"
+  ],
+  "OPEN_RACK {0} requested": [
+    "Đã yêu cầu mở rack {0}",
+    "Open Rack {0} requested"
+  ],
+  "OPEN_RACK {0} confirmed and added to queue": [
+    "Đã xác nhận và thêm lệnh mở rack {0} vào hàng đợi",
+    "Open Rack {0} confirmed and added to queue"
+  ],
+  "RETURN_HOME requested": [
+    "Đã yêu cầu về HOME",
+    "Return Home requested"
+  ],
+  "RETURN_HOME confirmed and added to queue": [
+    "Đã xác nhận và thêm lệnh về HOME vào hàng đợi",
+    "Return Home confirmed and added to queue"
+  ],
+  "Rack {0} already has an open command pending": [
+    "Rack {0} đã có lệnh mở đang chờ",
+    "Rack {0} already has an open command pending"
+  ],
+  "Rack {0} is already active": [
+    "Rack {0} đang hoạt động",
+    "Rack {0} is already active"
+  ],
+  "Rack {0} opened successfully": [
+    "Rack {0} đã mở thành công",
+    "Rack {0} opened successfully"
+  ],
+  "Rack {0} opened · GAP aligned": [
+    "Rack {0} đã mở · GAP đã căn chỉnh",
+    "Rack {0} opened · GAP aligned"
+  ],
+  "Rack {0} light on": [
+    "Đèn rack {0} đang bật",
+    "Rack {0} light on"
+  ],
+  "Rack {0} light turned {1}.": [
+    "Đèn rack {0}: {1}.",
+    "Rack {0} light turned {1}."
+  ],
+  "Turn light {0} for Rack {1}": [
+    "{0} đèn rack {1}",
+    "Turn light {0} for Rack {1}"
+  ],
+  "Open Rack {0}": [
+    "Mở rack {0}",
+    "Open Rack {0}"
+  ],
+  "Open R{0}": [
+    "Mở R{0}",
+    "Open R{0}"
+  ],
+  "Opening Rack {0}": [
+    "Đang mở rack {0}",
+    "Opening Rack {0}"
+  ],
+  "Moving Rack {0} {1}": [
+    "Đang di chuyển rack {0} {1}",
+    "Moving Rack {0} {1}"
+  ],
+  "Moving Rack {0} {1} · {2}%": [
+    "Đang di chuyển rack {0} {1} · {2}%",
+    "Moving Rack {0} {1} · {2}%"
+  ],
+  "Moving R{0} {1} · {2}%": [
+    "Đang di chuyển R{0} {1} · {2}%",
+    "Moving R{0} {1} · {2}%"
+  ],
+  "Moving {0}": [
+    "Đang di chuyển {0}",
+    "Moving {0}"
+  ],
+  "MOVING {0} · {1}%": [
+    "ĐANG DI CHUYỂN {0} · {1}%",
+    "MOVING {0} · {1}%"
+  ],
+  "MOVEMENT PLAN ·": [
+    "KẾ HOẠCH DI CHUYỂN ·",
+    "MOVEMENT PLAN ·"
+  ],
+  "{0} movement step{1}": [
+    "Số bước di chuyển: {0}",
+    "Movement steps: {0}"
+  ],
+  "No movement": [
+    "Không di chuyển",
+    "No movement"
+  ],
+  "No rack movement is expected.": [
+    "Không cần di chuyển rack.",
+    "No rack movement is expected."
+  ],
+  "No rack movement is needed. Only the active rack will change.": [
+    "Không cần di chuyển rack. Chỉ đổi rack đang hoạt động.",
+    "No rack movement is needed. Only the active rack will change."
+  ],
+  "Current access gap: {0}": [
+    "Lối đi hiện tại: {0}",
+    "Current access gap: {0}"
+  ],
+  "Current: {0}": [
+    "Hiện tại: {0}",
+    "Current: {0}"
+  ],
+  "Target: {0}": [
+    "Đích: {0}",
+    "Target: {0}"
+  ],
+  "Target: Rack {0} · {1}": [
+    "Đích: Rack {0} · {1}",
+    "Target: Rack {0} · {1}"
+  ],
+  "ACCESS GAP · {0}": [
+    "LỐI ĐI GAP · {0}",
+    "ACCESS GAP · {0}"
+  ],
+  "Ventilate cabinet": [
+    "Thông gió tủ",
+    "Ventilate cabinet"
+  ],
+  "Ventilating cabinet": [
+    "Đang thông gió tủ",
+    "Ventilating cabinet"
+  ],
+  "Cabinet ventilation complete": [
+    "Thông gió tủ hoàn tất",
+    "Cabinet ventilation complete"
+  ],
+  "Ventilation needs inspection": [
+    "Thông gió cần kiểm tra",
+    "Ventilation needs inspection"
+  ],
+  "Distributing racks for ventilation": [
+    "Đang giãn rack để thông gió",
+    "Distributing racks for ventilation"
+  ],
+  "Dispatching ventilation commands…": [
+    "Đang gửi lệnh thông gió…",
+    "Dispatching ventilation commands…"
+  ],
+  "Contacting each rack through the local Serial link.": [
+    "Đang liên hệ từng rack qua Serial cục bộ.",
+    "Contacting each rack through the local Serial link."
+  ],
+  "Waiting for the six rack endpoints.": [
+    "Đang chờ điểm cuối của sáu rack.",
+    "Waiting for the six rack endpoints."
+  ],
+  "All {0} racks returned to the ventilation endpoint.": [
+    "Cả {0} rack đã tới điểm cuối thông gió.",
+    "All {0} racks returned to the ventilation endpoint."
+  ],
+  "All racks evenly spaced": [
+    "Các rack đã giãn đều",
+    "All racks evenly spaced"
+  ],
+  "Six-rack GAP arrangement": [
+    "Sơ đồ GAP sáu rack",
+    "Six-rack GAP arrangement"
+  ],
+  "Ventilation gap {0}": [
+    "Khoảng hở thông gió {0}",
+    "Ventilation gap {0}"
+  ],
+  "Ventilation gap {0} · 20 mm": [
+    "Khoảng hở thông gió {0} · 20 mm",
+    "Ventilation gap {0} · 20 mm"
+  ],
+  "5 × 20 mm · even spacing": [
+    "5 × 20 mm · giãn đều",
+    "5 × 20 mm · even spacing"
+  ],
+  "Target: six racks · five 20 mm gaps · access aisle unavailable during ventilation": [
+    "Đích: sáu rack · năm khoảng hở 20 mm · không có lối đi khi thông gió",
+    "Target: six racks · five 20 mm gaps · access aisle unavailable during ventilation"
+  ],
+  "Ventilation target: six racks evenly spaced with five 20 mm gaps. The access aisle is unavailable during this cycle.": [
+    "Thông gió: sáu rack giãn đều với năm khoảng hở 20 mm. Không có lối đi trong chu kỳ này.",
+    "Ventilation target: six racks evenly spaced with five 20 mm gaps. The access aisle is unavailable during this cycle."
+  ],
+  "Some commands could not be confirmed, or a rack did not reach its endpoint within 60 seconds. Check the cabinet before retrying.": [
+    "Một số lệnh chưa được xác nhận hoặc rack chưa tới điểm cuối trong 60 giây. Kiểm tra tủ trước khi thử lại.",
+    "Some commands could not be confirmed, or a rack did not reach its endpoint within 60 seconds. Check the cabinet before retrying."
+  ],
+  "The command will be sent to every rack in this cabinet (": [
+    "Lệnh sẽ được gửi tới mọi rack trong tủ này (",
+    "The command will be sent to every rack in this cabinet ("
+  ],
+  "ventilate all {0} racks in this cabinet": [
+    "thông gió cả {0} rack trong tủ này",
+    "ventilate all {0} racks in this cabinet"
+  ],
+  "The": [
+    "Lệnh",
+    "The"
+  ],
+  "command was sent through the local Serial link.": [
+    "đã được gửi qua Serial cục bộ.",
+    "command was sent through the local Serial link."
+  ],
+  "/6 complete.": [
+    "/6 hoàn tất.",
+    "/6 complete."
+  ],
+  "/6 rack commands complete": [
+    "/6 lệnh rack hoàn tất",
+    "/6 rack commands complete"
+  ],
+  " · LIGHT ON": [
+    " · ĐÈN BẬT",
+    " · LIGHT ON"
+  ],
+  " · {0} command{1} waiting": [
+    " · Lệnh chờ: {0}",
+    " · Queued commands: {0}"
+  ],
+  "{0} command sent · waiting for endpoint": [
+    "Đã gửi lệnh {0} · đang chờ điểm cuối",
+    "{0} command sent · waiting for endpoint"
+  ],
+  "{0} waiting": [
+    "{0} đang chờ",
+    "{0} waiting"
+  ],
+  "{0} successfully": [
+    "{0} thành công",
+    "{0} successfully"
+  ],
+  "{0} results": [
+    "{0} kết quả",
+    "{0} results"
+  ],
+  "{0} locations": [
+    "{0} vị trí",
+    "{0} locations"
+  ],
+  "{0} units": [
+    "{0} đơn vị",
+    "{0} units"
+  ],
+  "{0} item types": [
+    "{0} loại sản phẩm",
+    "{0} item types"
+  ],
+  "{0} racks": [
+    "{0} rack",
+    "{0} racks"
+  ],
+  "~{0} s left": [
+    "~{0} giây còn lại",
+    "~{0} s left"
+  ],
+  "~{0} s remaining": [
+    "~{0} giây còn lại",
+    "~{0} s remaining"
+  ],
+  "speed {0}": [
+    "tốc độ {0}",
+    "speed {0}"
+  ],
+  "movement in progress": [
+    "đang di chuyển",
+    "movement in progress"
+  ],
+  "step": [
+    "bước",
+    "step"
+  ],
+  "this rack": [
+    "rack này",
+    "this rack"
+  ],
+  "into": [
+    "vào",
+    "into"
+  ],
+  "more": [
+    "khác",
+    "more"
+  ],
+  "locations": [
+    "vị trí",
+    "locations"
+  ],
+  "· Completed:": [
+    "· Hoàn tất:",
+    "· Completed:"
+  ],
+  "· Created:": [
+    "· Tạo lúc:",
+    "· Created:"
+  ],
+  "· Difference:": [
+    "· Chênh lệch:",
+    "· Difference:"
+  ],
+  "· Timestamp:": [
+    "· Thời điểm:",
+    "· Timestamp:"
+  ],
+  "· approximately": [
+    "· khoảng",
+    "· approximately"
+  ],
+  "View details": [
+    "Xem chi tiết",
+    "View details"
+  ],
+  "View {0}": [
+    "Xem {0}",
+    "View {0}"
+  ],
+  "○ Empty · ● Occupied · ▣ Reserved": [
+    "○ Trống · ● Có hàng · ▣ Giữ chỗ",
+    "○ Empty · ● Occupied · ▣ Reserved"
+  ],
+  "Access Denied: This section is for Maintenance personnel only": [
+    "Không có quyền truy cập: mục này chỉ dành cho nhân viên bảo trì",
+    "Access denied: this section is for maintenance personnel only"
+  ],
+  "Hardware Maintenance": [
+    "Bảo trì phần cứng",
+    "Hardware maintenance"
+  ],
+  "Firmware Update": [
+    "Cập nhật firmware",
+    "Firmware update"
+  ],
+  "Current firmware version: v1.2.3": [
+    "Phiên bản firmware hiện tại: v1.2.3",
+    "Current firmware version: v1.2.3"
+  ],
+  "Check for Updates": [
+    "Kiểm tra cập nhật",
+    "Check for updates"
+  ],
+  "System Diagnostics": [
+    "Chẩn đoán hệ thống",
+    "System diagnostics"
+  ],
+  "Test Serial Communication": [
+    "Kiểm tra truyền thông Serial",
+    "Test Serial communication"
+  ],
+  "Verify Database Integrity": [
+    "Kiểm tra tính toàn vẹn dữ liệu",
+    "Verify database integrity"
+  ],
+  "Check Sensor Calibration": [
+    "Kiểm tra hiệu chuẩn cảm biến",
+    "Check sensor calibration"
+  ],
+  "Không có dữ liệu phù hợp với bộ lọc.": [
+    "Không có dữ liệu phù hợp với bộ lọc.",
+    "No data matches the filters."
+  ],
+  "Đang tải…": [
+    "Đang tải…",
+    "Loading…"
+  ],
+  "Đang tải Inventory…": [
+    "Đang tải Inventory…",
+    "Loading inventory…"
+  ],
+  "Đang tải giao dịch…": [
+    "Đang tải giao dịch…",
+    "Loading transactions…"
+  ],
+  "Đang lưu…": [
+    "Đang lưu…",
+    "Saving…"
+  ],
+  "Đang xử lý…": [
+    "Đang xử lý…",
+    "Processing…"
+  ],
+  "Đang đăng nhập…": [
+    "Đang đăng nhập…",
+    "Signing in…"
+  ],
+  "Đang kết nối Server…": [
+    "Đang kết nối Server…",
+    "Connecting to Server…"
+  ],
+  "Đang xác minh phiên đăng nhập": [
+    "Đang xác minh phiên đăng nhập",
+    "Verifying sign-in session"
+  ],
+  "Thử lại": [
+    "Thử lại",
+    "Retry"
+  ],
+  "Lưu": [
+    "Lưu",
+    "Save"
+  ],
+  "Hủy": [
+    "Hủy",
+    "Cancel"
+  ],
+  "Xác nhận": [
+    "Xác nhận",
+    "Confirm"
+  ],
+  "Xác nhận thao tác": [
+    "Xác nhận thao tác",
+    "Confirm operation"
+  ],
+  "Xác nhận adjustment": [
+    "Xác nhận adjustment",
+    "Confirm inventory adjustment"
+  ],
+  "Xác nhận kết quả #": [
+    "Xác nhận kết quả #",
+    "Confirm result #"
+  ],
+  "Xác nhận · đóng rack": [
+    "Xác nhận · đóng rack",
+    "Confirm · close rack"
+  ],
+  "Làm mới": [
+    "Làm mới",
+    "Refresh"
+  ],
+  "Chi tiết": [
+    "Chi tiết",
+    "Details"
+  ],
+  "Chi tiết →": [
+    "Chi tiết →",
+    "Details →"
+  ],
+  "Chi tiết hệ thống": [
+    "Chi tiết hệ thống",
+    "System details"
+  ],
+  "Chi tiết lỗi": [
+    "Chi tiết lỗi",
+    "Error details"
+  ],
+  "Chi tiết sản phẩm": [
+    "Chi tiết sản phẩm",
+    "Product details"
+  ],
+  "Tìm trong bảng": [
+    "Tìm trong bảng",
+    "Search table"
+  ],
+  "Tìm trong bảng…": [
+    "Tìm trong bảng…",
+    "Search table…"
+  ],
+  "Trước": [
+    "Trước",
+    "Previous"
+  ],
+  "Sau": [
+    "Sau",
+    "Next"
+  ],
+  "Trang trước": [
+    "Trang trước",
+    "Previous page"
+  ],
+  "Trang sau": [
+    "Trang sau",
+    "Next page"
+  ],
+  "Trang": [
+    "Trang",
+    "Page"
+  ],
+  "kết quả": [
+    "kết quả",
+    "results"
+  ],
+  "kết quả · Trang": [
+    "kết quả · Trang",
+    "results · Page"
+  ],
+  "Thao tác": [
+    "Thao tác",
+    "Action"
+  ],
+  "Nguồn": [
+    "Nguồn",
+    "Source"
+  ],
+  "Nguồn dữ liệu": [
+    "Nguồn dữ liệu",
+    "Data source"
+  ],
+  "Thiết bị": [
+    "Thiết bị",
+    "Device"
+  ],
+  "Đồng bộ": [
+    "Đồng bộ",
+    "Sync"
+  ],
+  "Sync gần nhất": [
+    "Sync gần nhất",
+    "Last sync"
+  ],
+  "Tổng quan": [
+    "Tổng quan",
+    "Overview"
+  ],
+  "Tổng quan kho hàng": [
+    "Tổng quan kho hàng",
+    "Stock overview"
+  ],
+  "Tổng quan vận hành": [
+    "Tổng quan vận hành",
+    "Operations overview"
+  ],
+  "Kho hàng": [
+    "Kho hàng",
+    "Inventory"
+  ],
+  "Tủ": [
+    "Tủ",
+    "Cabinet"
+  ],
+  "Tủ & rack": [
+    "Tủ & rack",
+    "Cabinets & racks"
+  ],
+  "Tủ / rack": [
+    "Tủ / rack",
+    "Cabinet / rack"
+  ],
+  "Tủ {0}": [
+    "Tủ {0}",
+    "Cabinet {0}"
+  ],
+  "Nhóm": [
+    "Nhóm",
+    "Group"
+  ],
+  "Nhóm tủ": [
+    "Nhóm tủ",
+    "Cabinet group"
+  ],
+  "Trong nhóm tủ": [
+    "Trong nhóm tủ",
+    "In cabinet group"
+  ],
+  "Nhóm tủ hoạt động": [
+    "Nhóm tủ hoạt động",
+    "Active cabinet groups"
+  ],
+  "Nhóm tủ đang hoạt động": [
+    "Nhóm tủ đang hoạt động",
+    "Active cabinet groups"
+  ],
+  "Theo nhóm tủ đang nhận số đo": [
+    "Theo nhóm tủ đang nhận số đo",
+    "Groups receiving telemetry"
+  ],
+  "Danh sách nhóm tủ": [
+    "Danh sách nhóm tủ",
+    "Cabinet groups"
+  ],
+  "Chọn nhóm tủ": [
+    "Chọn nhóm tủ",
+    "Select cabinet group"
+  ],
+  "Môi trường": [
+    "Môi trường",
+    "Environment"
+  ],
+  "Môi trường lưu trữ": [
+    "Môi trường lưu trữ",
+    "Storage environment"
+  ],
+  "Giao dịch hàng hóa": [
+    "Giao dịch hàng hóa",
+    "Inventory transactions"
+  ],
+  "Lịch sử giao dịch": [
+    "Lịch sử giao dịch",
+    "Transaction history"
+  ],
+  "Lịch sử hoạt động": [
+    "Lịch sử hoạt động",
+    "Activity history"
+  ],
+  "Lịch sử môi trường": [
+    "Lịch sử môi trường",
+    "Environment history"
+  ],
+  "Lịch sử báo cáo": [
+    "Lịch sử báo cáo",
+    "Report history"
+  ],
+  "Hoạt động thiết bị": [
+    "Hoạt động thiết bị",
+    "Device activity"
+  ],
+  "Sự cố & phục hồi": [
+    "Sự cố & phục hồi",
+    "Faults & recovery"
+  ],
+  "Trạng thái hệ thống": [
+    "Trạng thái hệ thống",
+    "System status"
+  ],
+  "Trạng thái lệnh MQTT": [
+    "Trạng thái lệnh MQTT",
+    "MQTT command status"
+  ],
+  "Trạng thái": [
+    "Trạng thái",
+    "Status"
+  ],
+  "Trạng thái gần nhất": [
+    "Trạng thái gần nhất",
+    "Latest status"
+  ],
+  "Loại": [
+    "Loại",
+    "Type"
+  ],
+  "Loại giao dịch": [
+    "Loại giao dịch",
+    "Transaction type"
+  ],
+  "Loại thiết bị": [
+    "Loại thiết bị",
+    "Device type"
+  ],
+  "Loại sản phẩm": [
+    "Loại sản phẩm",
+    "Product category"
+  ],
+  "Sản phẩm": [
+    "Sản phẩm",
+    "Product"
+  ],
+  "Sản phẩm / SKU": [
+    "Sản phẩm / SKU",
+    "Product / SKU"
+  ],
+  "Sản phẩm #{0}": [
+    "Sản phẩm #{0}",
+    "Product #{0}"
+  ],
+  "Danh sách sản phẩm": [
+    "Danh sách sản phẩm",
+    "Products"
+  ],
+  "Danh mục": [
+    "Danh mục",
+    "Catalog"
+  ],
+  "Danh mục được quản lý và đồng bộ từ Server.": [
+    "Danh mục được quản lý và đồng bộ từ Server.",
+    "The catalog is managed and synchronized from Server."
+  ],
+  "Danh mục và giao dịch được đồng bộ khi có kết nối.": [
+    "Danh mục và giao dịch được đồng bộ khi có kết nối.",
+    "Catalog and transactions synchronize when connected."
+  ],
+  "Danh mục dùng chung giữa REAL và SIMULATION. Số lượng chỉ thay đổi qua Inventory Adjustment hoặc giao dịch.": [
+    "Danh mục dùng chung giữa REAL và SIMULATION. Số lượng chỉ thay đổi qua Inventory Adjustment hoặc giao dịch.",
+    "The catalog is shared by REAL and SIMULATION. Quantities change only through inventory adjustments or transactions."
+  ],
+  "Người dùng": [
+    "Người dùng",
+    "Users"
+  ],
+  "Người vận hành": [
+    "Người vận hành",
+    "Operator"
+  ],
+  "Nhật ký kiểm toán": [
+    "Nhật ký kiểm toán",
+    "Audit logs"
+  ],
+  "Nhật ký thao tác": [
+    "Nhật ký thao tác",
+    "Operation log"
+  ],
+  "Ngưỡng cảnh báo": [
+    "Ngưỡng cảnh báo",
+    "Alarm thresholds"
+  ],
+  "Ngưỡng áp dụng khi nhận mẫu telemetry tiếp theo.": [
+    "Ngưỡng áp dụng khi nhận mẫu telemetry tiếp theo.",
+    "Thresholds apply to the next telemetry sample."
+  ],
+  "Nhiệt độ": [
+    "Nhiệt độ",
+    "Temperature"
+  ],
+  "Nhiệt độ (°C)": [
+    "Nhiệt độ (°C)",
+    "Temperature (°C)"
+  ],
+  "Nhiệt độ & độ ẩm": [
+    "Nhiệt độ & độ ẩm",
+    "Temperature & humidity"
+  ],
+  "Độ ẩm": [
+    "Độ ẩm",
+    "Humidity"
+  ],
+  "Độ ẩm (%)": [
+    "Độ ẩm (%)",
+    "Humidity (%)"
+  ],
+  "Tải trọng": [
+    "Tải trọng",
+    "Load"
+  ],
+  "Tải trọng (kg)": [
+    "Tải trọng (kg)",
+    "Load (kg)"
+  ],
+  "Tải trọng & khói": [
+    "Tải trọng & khói",
+    "Load & smoke"
+  ],
+  "Khói (0: không, 1: có)": [
+    "Khói (0: không, 1: có)",
+    "Smoke (0: no, 1: yes)"
+  ],
+  "Phát hiện khói": [
+    "Phát hiện khói",
+    "Smoke detected"
+  ],
+  "Có khói": [
+    "Có khói",
+    "Smoke detected"
+  ],
+  "Không có khói": [
+    "Không có khói",
+    "No smoke"
+  ],
+  "Vật cản": [
+    "Vật cản",
+    "Obstruction"
+  ],
+  "Lệch rack": [
+    "Lệch rack",
+    "Rack misalignment"
+  ],
+  "Quá tải động cơ": [
+    "Quá tải động cơ",
+    "Motor overload"
+  ],
+  "Có lỗi": [
+    "Có lỗi",
+    "Fault"
+  ],
+  "Có lỗi thiết bị": [
+    "Có lỗi thiết bị",
+    "Device fault"
+  ],
+  "Thiết bị báo lỗi": [
+    "Thiết bị báo lỗi",
+    "Device fault reported"
+  ],
+  "Thiết bị: có lỗi": [
+    "Thiết bị: có lỗi",
+    "Device: fault"
+  ],
+  "Thiết bị: chưa xác định": [
+    "Thiết bị: chưa xác định",
+    "Device: unknown"
+  ],
+  "Thiết bị sẵn sàng": [
+    "Thiết bị sẵn sàng",
+    "Device ready"
+  ],
+  "Thiết bị mất kết nối": [
+    "Thiết bị mất kết nối",
+    "Device disconnected"
+  ],
+  "Thiết bị chưa sẵn sàng vận hành.": [
+    "Thiết bị chưa sẵn sàng vận hành.",
+    "The device is not ready for operation."
+  ],
+  "Thiết bị sử dụng kết nối Serial chung.": [
+    "Thiết bị sử dụng kết nối Serial chung.",
+    "The device uses a shared Serial connection."
+  ],
+  "Chưa xác định": [
+    "Chưa xác định",
+    "Unknown"
+  ],
+  "Chưa có": [
+    "Chưa có",
+    "None yet"
+  ],
+  "Chưa kết nối": [
+    "Chưa kết nối",
+    "Disconnected"
+  ],
+  "Chưa kết nối Serial": [
+    "Chưa kết nối Serial",
+    "Serial disconnected"
+  ],
+  "Chưa sẵn sàng": [
+    "Chưa sẵn sàng",
+    "Not ready"
+  ],
+  "Chưa cấu hình": [
+    "Chưa cấu hình",
+    "Not configured"
+  ],
+  "Chưa hoạt động": [
+    "Chưa hoạt động",
+    "Inactive"
+  ],
+  "Chưa phân loại": [
+    "Chưa phân loại",
+    "Uncategorized"
+  ],
+  "Chưa có số liệu": [
+    "Chưa có số liệu",
+    "No readings yet"
+  ],
+  "Chưa có số đo cho rack này": [
+    "Chưa có số đo cho rack này",
+    "No readings for this rack yet"
+  ],
+  "Chưa có số đo khói": [
+    "Chưa có số đo khói",
+    "No smoke readings yet"
+  ],
+  "Chưa nhận được số đo trong 24 giờ qua": [
+    "Chưa nhận được số đo trong 24 giờ qua",
+    "No readings received in the past 24 hours"
+  ],
+  "Chưa có dữ liệu đồng bộ": [
+    "Chưa có dữ liệu đồng bộ",
+    "No synchronized data yet"
+  ],
+  "Chưa có dữ liệu kết nối.": [
+    "Chưa có dữ liệu kết nối.",
+    "No connection data yet."
+  ],
+  "Chưa có dữ liệu nhóm tủ.": [
+    "Chưa có dữ liệu nhóm tủ.",
+    "No cabinet group data yet."
+  ],
+  "Chưa có IPC trong nguồn đã chọn.": [
+    "Chưa có IPC trong nguồn đã chọn.",
+    "No IPC devices in the selected source."
+  ],
+  "Chưa có nhóm tủ nhận số đo trong 15 giây gần nhất.": [
+    "Chưa có nhóm tủ nhận số đo trong 15 giây gần nhất.",
+    "No cabinet groups received readings in the past 15 seconds."
+  ],
+  "Chưa có nhóm tủ phù hợp": [
+    "Chưa có nhóm tủ phù hợp",
+    "No matching cabinet groups"
+  ],
+  "Chưa có giao dịch phù hợp": [
+    "Chưa có giao dịch phù hợp",
+    "No matching transactions"
+  ],
+  "Chưa có giao dịch trong nguồn đã chọn.": [
+    "Chưa có giao dịch trong nguồn đã chọn.",
+    "No transactions in the selected source."
+  ],
+  "Chưa có hoạt động phù hợp": [
+    "Chưa có hoạt động phù hợp",
+    "No matching activity"
+  ],
+  "Chưa có báo cáo phù hợp": [
+    "Chưa có báo cáo phù hợp",
+    "No matching reports"
+  ],
+  "Chưa có rack": [
+    "Chưa có rack",
+    "No racks yet"
+  ],
+  "Chưa có rack trong nhóm tủ này": [
+    "Chưa có rack trong nhóm tủ này",
+    "No racks in this cabinet group yet"
+  ],
+  "Chưa có vị trí": [
+    "Chưa có vị trí",
+    "No locations yet"
+  ],
+  "Chưa cấu hình vị trí lưu trữ.": [
+    "Chưa cấu hình vị trí lưu trữ.",
+    "No storage locations configured."
+  ],
+  "Nhóm tủ chưa có rack.": [
+    "Nhóm tủ chưa có rack.",
+    "This cabinet group has no racks yet."
+  ],
+  "Cần kiểm tra": [
+    "Cần kiểm tra",
+    "Needs inspection"
+  ],
+  "Cần chú ý": [
+    "Cần chú ý",
+    "Needs attention"
+  ],
+  "Cần kiểm tra và bổ sung hàng": [
+    "Cần kiểm tra và bổ sung hàng",
+    "Inspect and restock"
+  ],
+  "Không báo lỗi": [
+    "Không báo lỗi",
+    "No fault reported"
+  ],
+  "Không phát hiện lỗi trong báo cáo": [
+    "Không phát hiện lỗi trong báo cáo",
+    "No faults detected in the report"
+  ],
+  "Rack cần kiểm tra": [
+    "Rack cần kiểm tra",
+    "Racks needing inspection"
+  ],
+  "Rack không báo lỗi": [
+    "Rack không báo lỗi",
+    "Racks without reported faults"
+  ],
+  "Rack có dữ liệu": [
+    "Rack có dữ liệu",
+    "Racks with data"
+  ],
+  "Rack hiển thị": [
+    "Rack hiển thị",
+    "Displayed racks"
+  ],
+  "Rack trong nhóm hoạt động": [
+    "Rack trong nhóm hoạt động",
+    "Racks in active groups"
+  ],
+  "Rack trống": [
+    "Rack trống",
+    "Empty racks"
+  ],
+  "Rack ID kỹ thuật": [
+    "Rack ID kỹ thuật",
+    "Technical rack ID"
+  ],
+  "Tổng số rack": [
+    "Tổng số rack",
+    "Total racks"
+  ],
+  "Tổng giao dịch": [
+    "Tổng giao dịch",
+    "Total transactions"
+  ],
+  "Tổng tồn kho": [
+    "Tổng tồn kho",
+    "Total stock"
+  ],
+  "Tổng số lượng": [
+    "Tổng số lượng",
+    "Total quantity"
+  ],
+  "Số lượng": [
+    "Số lượng",
+    "Quantity"
+  ],
+  "Số lượng thao tác": [
+    "Số lượng thao tác",
+    "Operation quantity"
+  ],
+  "Số đo môi trường gần nhất": [
+    "Số đo môi trường gần nhất",
+    "Latest environment readings"
+  ],
+  "Số đo gần nhất: {0}": [
+    "Số đo gần nhất: {0}",
+    "Latest reading: {0}"
+  ],
+  "Số đo của một rack theo thời gian.": [
+    "Số đo của một rack theo thời gian.",
+    "Readings from one rack over time."
+  ],
+  "Số đo mới nhất từ một rack; xem từng rack tại trang Môi trường.": [
+    "Số đo mới nhất từ một rack; xem từng rack tại trang Môi trường.",
+    "Latest reading from one rack; view each rack on the Environment page."
+  ],
+  "Có số đo trong 15 giây gần nhất": [
+    "Có số đo trong 15 giây gần nhất",
+    "Readings received in the past 15 seconds"
+  ],
+  "Xu hướng trong 24 giờ": [
+    "Xu hướng trong 24 giờ",
+    "24-hour trend"
+  ],
+  "Hoạt động": [
+    "Hoạt động",
+    "Active"
+  ],
+  "Hoàn tất": [
+    "Hoàn tất",
+    "Completed"
+  ],
+  "Thất bại": [
+    "Thất bại",
+    "Failed"
+  ],
+  "Thất bại / Hủy": [
+    "Thất bại / Hủy",
+    "Failed / cancelled"
+  ],
+  "Chờ xác nhận": [
+    "Chờ xác nhận",
+    "Awaiting confirmation"
+  ],
+  "Chờ đồng bộ": [
+    "Chờ đồng bộ",
+    "Pending sync"
+  ],
+  "Đang đồng bộ": [
+    "Đang đồng bộ",
+    "Syncing"
+  ],
+  "Đang thực hiện": [
+    "Đang thực hiện",
+    "Executing"
+  ],
+  "Đang chờ": [
+    "Đang chờ",
+    "Waiting"
+  ],
+  "Đang di chuyển": [
+    "Đang di chuyển",
+    "Moving"
+  ],
+  "Đang bận": [
+    "Đang bận",
+    "Busy"
+  ],
+  "Đã chuẩn bị": [
+    "Đã chuẩn bị",
+    "Prepared"
+  ],
+  "Đã hủy": [
+    "Đã hủy",
+    "Cancelled"
+  ],
+  "Đã từ chối": [
+    "Đã từ chối",
+    "Rejected"
+  ],
+  "Đã xác nhận": [
+    "Đã xác nhận",
+    "Confirmed"
+  ],
+  "Đã gửi lệnh": [
+    "Đã gửi lệnh",
+    "Command sent"
+  ],
+  "Đã kết nối": [
+    "Đã kết nối",
+    "Connected"
+  ],
+  "Đã kết nối Serial": [
+    "Đã kết nối Serial",
+    "Serial connected"
+  ],
+  "Đã đồng bộ": [
+    "Đã đồng bộ",
+    "Synced"
+  ],
+  "Đã mở": [
+    "Đã mở",
+    "Opened"
+  ],
+  "Đã đóng": [
+    "Đã đóng",
+    "Closed"
+  ],
+  "Ổn định": [
+    "Ổn định",
+    "Stable"
+  ],
+  "Sẵn sàng": [
+    "Sẵn sàng",
+    "Ready"
+  ],
+  "Sẵn sàng vận hành": [
+    "Sẵn sàng vận hành",
+    "Ready for operation"
+  ],
+  "Kết nối": [
+    "Kết nối",
+    "Connected"
+  ],
+  "Kết nối: chưa xác định": [
+    "Kết nối: chưa xác định",
+    "Connection: unknown"
+  ],
+  "Kết nối thiết bị": [
+    "Kết nối thiết bị",
+    "Device connection"
+  ],
+  "Kết nối Server": [
+    "Kết nối Server",
+    "Server connection"
+  ],
+  "Kết nối và đồng bộ": [
+    "Kết nối và đồng bộ",
+    "Connection & sync"
+  ],
+  "Kết nối & sẵn sàng vận hành": [
+    "Kết nối & sẵn sàng vận hành",
+    "Connection & operation readiness"
+  ],
+  "Kết nối Serial theo nhóm": [
+    "Kết nối Serial theo nhóm",
+    "Serial connections by group"
+  ],
+  "Kết nối Serial tới bộ mô phỏng / phần cứng.": [
+    "Kết nối Serial tới bộ mô phỏng / phần cứng.",
+    "Serial connection to simulator / hardware."
+  ],
+  "Mất kết nối": [
+    "Mất kết nối",
+    "Disconnected"
+  ],
+  "Server: chưa xác định": [
+    "Server: chưa xác định",
+    "Server: unknown"
+  ],
+  "Server offline": [
+    "Server mất kết nối",
+    "Server offline"
+  ],
+  "Server online": [
+    "Server đang kết nối",
+    "Server online"
+  ],
+  "Server offline · Vận hành local": [
+    "Server offline · Vận hành local",
+    "Server offline · Local operation"
+  ],
+  "Server đang offline.": [
+    "Server đang offline.",
+    "Server is offline."
+  ],
+  "Offline · lưu dữ liệu tại local": [
+    "Offline · lưu dữ liệu tại local",
+    "Offline · data stored locally"
+  ],
+  "Đồng bộ Server": [
+    "Đồng bộ Server",
+    "Server sync"
+  ],
+  "Đồng bộ chưa thành công:": [
+    "Đồng bộ chưa thành công:",
+    "Sync unsuccessful:"
+  ],
+  "Đồng bộ gần nhất: {0}{1}": [
+    "Đồng bộ gần nhất: {0}{1}",
+    "Last sync: {0}{1}"
+  ],
+  "Đồng bộ thành công gần nhất": [
+    "Đồng bộ thành công gần nhất",
+    "Last successful sync"
+  ],
+  "Giao dịch chờ đồng bộ": [
+    "Giao dịch chờ đồng bộ",
+    "Transactions pending sync"
+  ],
+  "giao dịch chờ đồng bộ": [
+    "giao dịch chờ đồng bộ",
+    "transactions pending sync"
+  ],
+  "Không có giao dịch chờ": [
+    "Không có giao dịch chờ",
+    "No pending transactions"
+  ],
+  "Giao dịch sẽ đồng bộ khi kết nối trở lại.": [
+    "Giao dịch sẽ đồng bộ khi kết nối trở lại.",
+    "Transactions will sync when the connection returns."
+  ],
+  "Dữ liệu local": [
+    "Dữ liệu local",
+    "Local data"
+  ],
+  "Dữ liệu mô phỏng": [
+    "Dữ liệu mô phỏng",
+    "Simulation data"
+  ],
+  "Cơ sở dữ liệu lưu trữ tại thiết bị.": [
+    "Cơ sở dữ liệu lưu trữ tại thiết bị.",
+    "Database stored on the device."
+  ],
+  "Chế độ hoạt động": [
+    "Chế độ hoạt động",
+    "Operating mode"
+  ],
+  "Phiên bản dữ liệu": [
+    "Phiên bản dữ liệu",
+    "Data revision"
+  ],
+  "Mã thiết bị": [
+    "Mã thiết bị",
+    "Device ID"
+  ],
+  "Thông tin thiết bị & đồng bộ": [
+    "Thông tin thiết bị & đồng bộ",
+    "Device & sync information"
+  ],
+  "Có thể thao tác tại local": [
+    "Có thể thao tác tại local",
+    "Local operation available"
+  ],
+  "Có thể vận hành với dữ liệu local.": [
+    "Có thể vận hành với dữ liệu local.",
+    "Operation is available with local data."
+  ],
+  "Cần dữ liệu đã đồng bộ, tài khoản hợp lệ và kết nối Serial để vận hành.": [
+    "Cần dữ liệu đã đồng bộ, tài khoản hợp lệ và kết nối Serial để vận hành.",
+    "Operation requires synchronized data, a valid account and a Serial connection."
+  ],
+  "Kiểm tra kết nối thiết bị, dữ liệu local và tiến trình đồng bộ Server tại một nơi.": [
+    "Kiểm tra kết nối thiết bị, dữ liệu local và tiến trình đồng bộ Server tại một nơi.",
+    "Check device connections, local data and Server sync in one place."
+  ],
+  "Cấu hình kết nối được quản lý trong môi trường chạy IPCSIM. Quản lý danh mục tại Server.": [
+    "Cấu hình kết nối được quản lý trong môi trường chạy IPCSIM. Quản lý danh mục tại Server.",
+    "Connections are configured in the IPCSIM runtime environment. Manage the catalog on Server."
+  ],
+  "Không kết nối được API local. Thử làm mới và kiểm tra IPCSIM đang chạy.": [
+    "Không kết nối được API local. Thử làm mới và kiểm tra IPCSIM đang chạy.",
+    "Cannot connect to the local API. Refresh and check that IPCSIM is running."
+  ],
+  "Không tải được danh sách tủ. Vui lòng thử làm mới.": [
+    "Không tải được danh sách tủ. Vui lòng thử làm mới.",
+    "Cannot load cabinets. Please refresh."
+  ],
+  "Không tải được dữ liệu kho hàng hoặc cấu trúc tủ. Vui lòng thử lại.": [
+    "Không tải được dữ liệu kho hàng hoặc cấu trúc tủ. Vui lòng thử lại.",
+    "Cannot load inventory or cabinet structure. Please retry."
+  ],
+  "Không tải được dữ liệu sự cố. Vui lòng làm mới.": [
+    "Không tải được dữ liệu sự cố. Vui lòng làm mới.",
+    "Cannot load fault data. Please refresh."
+  ],
+  "Không tải được dữ liệu tổng quan. Vui lòng thử làm mới.": [
+    "Không tải được dữ liệu tổng quan. Vui lòng thử làm mới.",
+    "Cannot load overview data. Please refresh."
+  ],
+  "Không tải được giao dịch local. Vui lòng kiểm tra kết nối và phiên đăng nhập.": [
+    "Không tải được giao dịch local. Vui lòng kiểm tra kết nối và phiên đăng nhập.",
+    "Cannot load local transactions. Check the connection and sign-in session."
+  ],
+  "Không tải được lịch sử giao dịch. Vui lòng làm mới.": [
+    "Không tải được lịch sử giao dịch. Vui lòng làm mới.",
+    "Cannot load transaction history. Please refresh."
+  ],
+  "Không tải được lịch sử hoạt động. Vui lòng thử làm mới.": [
+    "Không tải được lịch sử hoạt động. Vui lòng thử làm mới.",
+    "Cannot load activity history. Please refresh."
+  ],
+  "Không tải đầy đủ dữ liệu môi trường. Vui lòng làm mới.": [
+    "Không tải đầy đủ dữ liệu môi trường. Vui lòng làm mới.",
+    "Cannot load all environment data. Please refresh."
+  ],
+  "Không đọc được trạng thái local/telemetry. Lệnh vận hành đã bị khóa.": [
+    "Không đọc được trạng thái local/telemetry. Lệnh vận hành đã bị khóa.",
+    "Cannot read local status or telemetry. Operation commands are disabled."
+  ],
+  "Không tạo được operation.": [
+    "Không tạo được operation.",
+    "Cannot create the operation."
+  ],
+  "Không xác nhận được operation.": [
+    "Không xác nhận được operation.",
+    "Cannot confirm the operation."
+  ],
+  "Không đủ vị trí khả dụng cho {0} đơn vị.": [
+    "Không đủ vị trí khả dụng cho {0} đơn vị.",
+    "Insufficient available locations for {0} units."
+  ],
+  "Tủ không còn active. Hãy chọn vị trí thuộc một tủ đang active.": [
+    "Tủ không còn active. Hãy chọn vị trí thuộc một tủ đang active.",
+    "The cabinet is no longer active. Select a location in an active cabinet."
+  ],
+  "Tài khoản không có quyền inventory.move.": [
+    "Tài khoản không có quyền inventory.move.",
+    "This account does not have inventory.move permission."
+  ],
+  "Serial offline. Không thể gửi lệnh tới rack.": [
+    "Serial offline. Không thể gửi lệnh tới rack.",
+    "Serial is offline. Cannot send commands to racks."
+  ],
+  "JSON không hợp lệ": [
+    "JSON không hợp lệ",
+    "Invalid JSON"
+  ],
+  "Edge API token không hợp lệ hoặc thiết bị chưa sẵn sàng.": [
+    "Edge API token không hợp lệ hoặc thiết bị chưa sẵn sàng.",
+    "The Edge API token is invalid or the device is not ready."
+  ],
+  "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.": [
+    "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
+    "Your session has expired. Please sign in again."
+  ],
+  "Chưa xác minh được phiên local. Kiểm tra kết nối tới IPC.": [
+    "Chưa xác minh được phiên local. Kiểm tra kết nối tới IPC.",
+    "Cannot verify the local session. Check the IPC connection."
+  ],
+  "Không liên hệ được IPC để thu hồi phiên; dữ liệu đăng nhập cục bộ đã được xóa.": [
+    "Không liên hệ được IPC để thu hồi phiên; dữ liệu đăng nhập cục bộ đã được xóa.",
+    "Cannot contact IPC to revoke the session; local sign-in data has been cleared."
+  ],
+  "Đăng nhập local thất bại; kiểm tra tài khoản đã đồng bộ về IPC.": [
+    "Đăng nhập local thất bại; kiểm tra tài khoản đã đồng bộ về IPC.",
+    "Local sign-in failed; check that the account has synchronized to IPC."
+  ],
+  "Đăng nhập": [
+    "Đăng nhập",
+    "Sign in"
+  ],
+  "Đăng nhập vận hành": [
+    "Đăng nhập vận hành",
+    "Operator sign-in"
+  ],
+  "Đăng xuất": [
+    "Đăng xuất",
+    "Sign out"
+  ],
+  "Tên đăng nhập": [
+    "Tên đăng nhập",
+    "Username"
+  ],
+  "Mật khẩu": [
+    "Mật khẩu",
+    "Password"
+  ],
+  "Hiện mật khẩu": [
+    "Hiện mật khẩu",
+    "Show password"
+  ],
+  "Ẩn mật khẩu": [
+    "Ẩn mật khẩu",
+    "Hide password"
+  ],
+  "Nhập token được cấu hình cho thiết bị IPCSIM.": [
+    "Nhập token được cấu hình cho thiết bị IPCSIM.",
+    "Enter the token configured for the IPCSIM device."
+  ],
+  "Sử dụng tài khoản Server đã đồng bộ về IPC để tiếp tục.": [
+    "Sử dụng tài khoản Server đã đồng bộ về IPC để tiếp tục.",
+    "Use a Server account synchronized to IPC to continue."
+  ],
+  "Quản lý thiết bị và hàng hóa tập trung.": [
+    "Quản lý thiết bị và hàng hóa tập trung.",
+    "Central device and inventory management."
+  ],
+  "Quản lý kho hàng · Điều khiển tủ & rack": [
+    "Quản lý kho hàng · Điều khiển tủ & rack",
+    "Inventory management · Cabinet & rack control"
+  ],
+  "VẬN HÀNH": [
+    "VẬN HÀNH",
+    "OPERATIONS"
+  ],
+  "THEO DÕI & LỊCH SỬ": [
+    "THEO DÕI & LỊCH SỬ",
+    "MONITORING & HISTORY"
+  ],
+  "HỆ THỐNG": [
+    "HỆ THỐNG",
+    "SYSTEM"
+  ],
+  "KHÔNG GIAN LÀM VIỆC": [
+    "KHÔNG GIAN LÀM VIỆC",
+    "WORKSPACE"
+  ],
+  "Điều khiển IPCSIM": [
+    "Điều khiển IPCSIM",
+    "IPCSIM control"
+  ],
+  "Điều khiển thiết bị": [
+    "Điều khiển thiết bị",
+    "Device control"
+  ],
+  "IPCSIM / GIÁM SÁT": [
+    "IPCSIM / GIÁM SÁT",
+    "IPCSIM / MONITORING"
+  ],
+  "IPCSIM · Mô phỏng vận hành": [
+    "IPCSIM · Mô phỏng vận hành",
+    "IPCSIM · Operation simulation"
+  ],
+  "Mô phỏng vận hành": [
+    "Mô phỏng vận hành",
+    "Operation simulation"
+  ],
+  "Điều hướng chính": [
+    "Điều hướng chính",
+    "Main navigation"
+  ],
+  "Mở menu": [
+    "Mở menu",
+    "Open menu"
+  ],
+  "Mở rộng sidebar": [
+    "Mở rộng sidebar",
+    "Expand sidebar"
+  ],
+  "Thu gọn sidebar": [
+    "Thu gọn sidebar",
+    "Collapse sidebar"
+  ],
+  "Thu gọn": [
+    "Thu gọn",
+    "Collapse"
+  ],
+  "Truy cập nhanh": [
+    "Truy cập nhanh",
+    "Quick access"
+  ],
+  "Đóng chi tiết": [
+    "Đóng chi tiết",
+    "Close details"
+  ],
+  "Đóng chi tiết sản phẩm": [
+    "Đóng chi tiết sản phẩm",
+    "Close product details"
+  ],
+  "Đóng thao tác": [
+    "Đóng thao tác",
+    "Close operation"
+  ],
+  "Đóng ×": [
+    "Đóng ×",
+    "Close ×"
+  ],
+  "Đóng": [
+    "Đóng",
+    "Close"
+  ],
+  "Ẩn": [
+    "Ẩn",
+    "Hide"
+  ],
+  "Tất cả": [
+    "Tất cả",
+    "All"
+  ],
+  "ALL · Tất cả": [
+    "ALL · Tất cả",
+    "ALL · All"
+  ],
+  "[REAL] Thực tế": [
+    "[REAL] Thực tế",
+    "[REAL] Real"
+  ],
+  "[SIM] Mô phỏng": [
+    "[SIM] Mô phỏng",
+    "[SIM] Simulation"
+  ],
+  "Thực tế trước, mô phỏng sau": [
+    "Thực tế trước, mô phỏng sau",
+    "Real data first, simulation second"
+  ],
+  "Ưu tiên dữ liệu thực tế": [
+    "Ưu tiên dữ liệu thực tế",
+    "Prefer real data"
+  ],
+  "Bạn không có quyền xem nguồn đã chọn. Hãy đổi bộ lọc nguồn.": [
+    "Bạn không có quyền xem nguồn đã chọn. Hãy đổi bộ lọc nguồn.",
+    "You do not have access to this source. Change the source filter."
+  ],
+  "Cảnh báo": [
+    "Cảnh báo",
+    "Warning"
+  ],
+  "Tất cả danh mục": [
+    "Tất cả danh mục",
+    "All categories"
+  ],
+  "Tất cả nhóm tủ": [
+    "Tất cả nhóm tủ",
+    "All cabinet groups"
+  ],
+  "Tất cả rack": [
+    "Tất cả rack",
+    "All racks"
+  ],
+  "Tất cả trạng thái": [
+    "Tất cả trạng thái",
+    "All statuses"
+  ],
+  "Tất cả tủ": [
+    "Tất cả tủ",
+    "All cabinets"
+  ],
+  "Bộ lọc": [
+    "Bộ lọc",
+    "Filters"
+  ],
+  "Lọc": [
+    "Lọc",
+    "Filter"
+  ],
+  "Lọc dữ liệu": [
+    "Lọc dữ liệu",
+    "Filter data"
+  ],
+  "Xóa bộ lọc": [
+    "Xóa bộ lọc",
+    "Clear filters"
+  ],
+  "Chế độ xem kho": [
+    "Chế độ xem kho",
+    "Inventory view"
+  ],
+  "Chế độ xem sự cố": [
+    "Chế độ xem sự cố",
+    "Fault view"
+  ],
+  "Tìm sản phẩm / SKU / mã vạch": [
+    "Tìm sản phẩm / SKU / mã vạch",
+    "Search product / SKU / barcode"
+  ],
+  "Tìm sản phẩm hoặc mã giao dịch": [
+    "Tìm sản phẩm hoặc mã giao dịch",
+    "Search product or transaction ID"
+  ],
+  "Tìm tủ / rack / ô chứa": [
+    "Tìm tủ / rack / ô chứa",
+    "Search cabinet / rack / bin"
+  ],
+  "Tìm sản phẩm, xem vị trí và thực hiện PICK / PUT.": [
+    "Tìm sản phẩm, xem vị trí và thực hiện PICK / PUT.",
+    "Search products, view locations and perform PICK / PUT."
+  ],
+  "Tìm sản phẩm, kiểm tra tồn kho và vị trí lưu trữ. Mở chi tiết sản phẩm để nhập hoặc xuất hàng.": [
+    "Tìm sản phẩm, kiểm tra tồn kho và vị trí lưu trữ. Mở chi tiết sản phẩm để nhập hoặc xuất hàng.",
+    "Search products, check stock and storage locations. Open product details to put or pick goods."
+  ],
+  "Không có sản phẩm phù hợp": [
+    "Không có sản phẩm phù hợp",
+    "No matching products"
+  ],
+  "Không có sản phẩm phù hợp. Hãy đổi bộ lọc.": [
+    "Không có sản phẩm phù hợp. Hãy đổi bộ lọc.",
+    "No matching products. Change the filters."
+  ],
+  "Không có vị trí phù hợp": [
+    "Không có vị trí phù hợp",
+    "No matching locations"
+  ],
+  "Không có vị trí phù hợp.": [
+    "Không có vị trí phù hợp.",
+    "No matching locations."
+  ],
+  "Thử tìm kiếm khác hoặc xóa bộ lọc.": [
+    "Thử tìm kiếm khác hoặc xóa bộ lọc.",
+    "Try another search or clear the filters."
+  ],
+  "Thử đổi bộ lọc hoặc chờ dữ liệu mới.": [
+    "Thử đổi bộ lọc hoặc chờ dữ liệu mới.",
+    "Change the filters or wait for new data."
+  ],
+  "Thử đổi tủ, rack hoặc từ khóa.": [
+    "Thử đổi tủ, rack hoặc từ khóa.",
+    "Try another cabinet, rack or keyword."
+  ],
+  "Tồn kho": [
+    "Tồn kho",
+    "Stock"
+  ],
+  "Tồn kho ban đầu": [
+    "Tồn kho ban đầu",
+    "Initial stock"
+  ],
+  "Còn hàng": [
+    "Còn hàng",
+    "In stock"
+  ],
+  "Hết hàng": [
+    "Hết hàng",
+    "Out of stock"
+  ],
+  "Sắp hết hàng": [
+    "Sắp hết hàng",
+    "Low stock"
+  ],
+  "Sản phẩm sắp hết": [
+    "Sản phẩm sắp hết",
+    "Low stock products"
+  ],
+  "Sản phẩm dưới mức tối thiểu": [
+    "Sản phẩm dưới mức tối thiểu",
+    "Products below minimum stock"
+  ],
+  "Có thể xuất": [
+    "Có thể xuất",
+    "Available to pick"
+  ],
+  "Hiện có": [
+    "Hiện có",
+    "Current stock"
+  ],
+  "Vị trí": [
+    "Vị trí",
+    "Location"
+  ],
+  "vị trí": [
+    "vị trí",
+    "locations"
+  ],
+  "Vị trí lưu trữ": [
+    "Vị trí lưu trữ",
+    "Storage locations"
+  ],
+  "vị trí lưu trữ": [
+    "vị trí lưu trữ",
+    "storage locations"
+  ],
+  "Vị trí trong kho": [
+    "Vị trí trong kho",
+    "Inventory locations"
+  ],
+  "Vị trí thao tác": [
+    "Vị trí thao tác",
+    "Operation location"
+  ],
+  "Vị trí đã chọn": [
+    "Vị trí đã chọn",
+    "Selected location"
+  ],
+  "Vị trí đề xuất": [
+    "Vị trí đề xuất",
+    "Suggested location"
+  ],
+  "Vị trí chưa có hàng": [
+    "Vị trí chưa có hàng",
+    "Location has no stock"
+  ],
+  "Sản phẩm chưa có tồn kho tại vị trí nào.": [
+    "Sản phẩm chưa có tồn kho tại vị trí nào.",
+    "This product has no stock at any location."
+  ],
+  "Sản phẩm chưa có vị trí trong nguồn này.": [
+    "Sản phẩm chưa có vị trí trong nguồn này.",
+    "This product has no locations in this source."
+  ],
+  "Sức chứa": [
+    "Sức chứa",
+    "Capacity"
+  ],
+  "Sức chứa ô": [
+    "Sức chứa ô",
+    "Bin capacity"
+  ],
+  "· Sức chứa ô": [
+    "· Sức chứa ô",
+    "· Bin capacity"
+  ],
+  "Trống": [
+    "Trống",
+    "Empty"
+  ],
+  "Đầy": [
+    "Đầy",
+    "Full"
+  ],
+  "ô chứa": [
+    "ô chứa",
+    "bins"
+  ],
+  "Giữ chỗ": [
+    "Giữ chỗ",
+    "Reserve"
+  ],
+  "Bỏ giữ chỗ": [
+    "Bỏ giữ chỗ",
+    "Release reservation"
+  ],
+  "Giảm số lượng": [
+    "Giảm số lượng",
+    "Decrease quantity"
+  ],
+  "Mã vạch": [
+    "Mã vạch",
+    "Barcode"
+  ],
+  " · Mã vạch {0}": [
+    " · Mã vạch {0}",
+    " · Barcode {0}"
+  ],
+  "Mã bản ghi": [
+    "Mã bản ghi",
+    "Record ID"
+  ],
+  "Mã giao dịch": [
+    "Mã giao dịch",
+    "Transaction ID"
+  ],
+  "Thời gian": [
+    "Thời gian",
+    "Time"
+  ],
+  "Thời gian báo cáo": [
+    "Thời gian báo cáo",
+    "Report time"
+  ],
+  "Tạo mới": [
+    "Tạo mới",
+    "Create"
+  ],
+  "Tạo người dùng": [
+    "Tạo người dùng",
+    "Create user"
+  ],
+  "Cập nhật người dùng": [
+    "Cập nhật người dùng",
+    "Update user"
+  ],
+  "Tạo role": [
+    "Tạo role",
+    "Create role"
+  ],
+  "Cập nhật role": [
+    "Cập nhật role",
+    "Update role"
+  ],
+  "Lưu role": [
+    "Lưu role",
+    "Save role"
+  ],
+  "Không cấp": [
+    "Không cấp",
+    "No access"
+  ],
+  "Scope: REAL, SIMULATION hoặc ALL. Quyền được kiểm tra tại backend.": [
+    "Scope: REAL, SIMULATION hoặc ALL. Quyền được kiểm tra tại backend.",
+    "Scope: REAL, SIMULATION or ALL. Permissions are checked by the backend."
+  ],
+  "Đăng ký IPC": [
+    "Đăng ký IPC",
+    "Register IPC"
+  ],
+  "Phân công cabinet cho IPC": [
+    "Phân công cabinet cho IPC",
+    "Assign cabinet to IPC"
+  ],
+  "Cấu hình cabinet / rack": [
+    "Cấu hình cabinet / rack",
+    "Configure cabinet / rack"
+  ],
+  "Thêm sản phẩm vào danh mục": [
+    "Thêm sản phẩm vào danh mục",
+    "Add product to catalog"
+  ],
+  "Cập nhật thông tin sản phẩm": [
+    "Cập nhật thông tin sản phẩm",
+    "Update product details"
+  ],
+  "Lưu danh mục": [
+    "Lưu danh mục",
+    "Save catalog"
+  ],
+  "Đã lưu thành công.": [
+    "Đã lưu thành công.",
+    "Saved successfully."
+  ],
+  "Đã lưu thông tin sản phẩm.": [
+    "Đã lưu thông tin sản phẩm.",
+    "Product details saved."
+  ],
+  "Thêm vị trí theo topology": [
+    "Thêm vị trí theo topology",
+    "Add topology location"
+  ],
+  "Ghi nhận giao dịch kho": [
+    "Ghi nhận giao dịch kho",
+    "Record inventory transaction"
+  ],
+  "Chỉ xác nhận sau khi kiểm tra hàng hóa thực tế. Để chỉnh tồn, mở Inventory → chi tiết sản phẩm → Inventory Adjustment. RETURN phải tham chiếu giao dịch BORROW.": [
+    "Chỉ xác nhận sau khi kiểm tra hàng hóa thực tế. Để chỉnh tồn, mở Inventory → chi tiết sản phẩm → Inventory Adjustment. RETURN phải tham chiếu giao dịch BORROW.",
+    "Confirm only after checking the physical goods. To adjust stock, open Inventory → product details → Inventory adjustment. RETURN must reference a BORROW transaction."
+  ],
+  "Tồn kho tách theo nguồn. Tổng của sản phẩm bao gồm mọi vị trí trong nguồn đã chọn; bộ lọc IPC/Cabinet giúp tìm nơi chứa hàng. Available loại trừ vị trí BUSY / FAULT.": [
+    "Tồn kho tách theo nguồn. Tổng của sản phẩm bao gồm mọi vị trí trong nguồn đã chọn; bộ lọc IPC/Cabinet giúp tìm nơi chứa hàng. Available loại trừ vị trí BUSY / FAULT.",
+    "Stock is separated by source. Product totals include all locations in the selected source; IPC/cabinet filters help locate goods. Available stock excludes BUSY / FAULT locations."
+  ],
+  "Sync Status phản ánh xác nhận dataset hiện tại của IPC; Failed là giao dịch offline cần đối soát.": [
+    "Sync Status phản ánh xác nhận dataset hiện tại của IPC; Failed là giao dịch offline cần đối soát.",
+    "Sync status reflects the IPC acknowledgement of the current dataset; failed offline transactions require reconciliation."
+  ],
+  "(thời điểm kiểm đếm; Server lưu thời điểm xác nhận trong lịch sử)": [
+    "(thời điểm kiểm đếm; Server lưu thời điểm xác nhận trong lịch sử)",
+    "(counting time; Server records the confirmation time in history)"
+  ],
+  "Cập nhật:": [
+    "Cập nhật:",
+    "Updated:"
+  ],
+  "Cập nhật mỗi 5 giây": [
+    "Cập nhật mỗi 5 giây",
+    "Updates every 5 seconds"
+  ],
+  "Tải thêm giao dịch": [
+    "Tải thêm giao dịch",
+    "Load more transactions"
+  ],
+  "Nắm nhanh tình hình kho hàng, hoạt động tủ và kết nối thiết bị trước khi bắt đầu công việc.": [
+    "Nắm nhanh tình hình kho hàng, hoạt động tủ và kết nối thiết bị trước khi bắt đầu công việc.",
+    "Review stock, cabinet activity and device connections before starting work."
+  ],
+  "Tổng quan cập nhật mỗi 5 giây · kết nối thiết bị mỗi 2 giây.": [
+    "Tổng quan cập nhật mỗi 5 giây · kết nối thiết bị mỗi 2 giây.",
+    "Overview updates every 5 seconds · device connections every 2 seconds."
+  ],
+  "Theo dõi các nhóm tủ và mở chi tiết để thao tác rack, điều khiển đèn hoặc thông gió.": [
+    "Theo dõi các nhóm tủ và mở chi tiết để thao tác rack, điều khiển đèn hoặc thông gió.",
+    "Monitor cabinet groups and open details to operate racks, lights or ventilation."
+  ],
+  "Theo dõi nhiệt độ, độ ẩm, tải trọng và cảnh báo khói theo từng rack.": [
+    "Theo dõi nhiệt độ, độ ẩm, tải trọng và cảnh báo khói theo từng rack.",
+    "Monitor temperature, humidity, load and smoke alarms for each rack."
+  ],
+  "Theo dõi nhập, xuất sản phẩm cùng trạng thái xử lý và đồng bộ. Thực hiện PICK / PUT tại trang Kho hàng.": [
+    "Theo dõi nhập, xuất sản phẩm cùng trạng thái xử lý và đồng bộ. Thực hiện PICK / PUT tại trang Kho hàng.",
+    "Monitor put and pick transactions, processing and sync status. Perform PICK / PUT on the Inventory page."
+  ],
+  "Kiểm tra lỗi rack và các báo cáo gần nhất.": [
+    "Kiểm tra lỗi rack và các báo cáo gần nhất.",
+    "Check rack faults and recent reports."
+  ],
+  "Nhận biết rack cần kiểm tra và xem lại các lần báo lỗi, hết lỗi từ thiết bị.": [
+    "Nhận biết rack cần kiểm tra và xem lại các lần báo lỗi, hết lỗi từ thiết bị.",
+    "Identify racks needing inspection and review fault and recovery reports from the device."
+  ],
+  "Báo cáo mới nhất của từng rack trong dữ liệu đã tải.": [
+    "Báo cáo mới nhất của từng rack trong dữ liệu đã tải.",
+    "Latest report for each rack in the loaded data."
+  ],
+  "Các báo cáo sự cố và hết lỗi, mới nhất trước.": [
+    "Các báo cáo sự cố và hết lỗi, mới nhất trước.",
+    "Fault and recovery reports, newest first."
+  ],
+  "Dữ liệu cập nhật mỗi 5 giây · tối đa 200 báo cáo gần nhất. Rack chưa có báo cáo chưa được đánh giá trạng thái.": [
+    "Dữ liệu cập nhật mỗi 5 giây · tối đa 200 báo cáo gần nhất. Rack chưa có báo cáo chưa được đánh giá trạng thái.",
+    "Data updates every 5 seconds · up to 200 recent reports. Racks without reports have no assessed status."
+  ],
+  "Lịch sử đóng, mở rack và thông gió. Theo dõi giao dịch PICK / PUT tại trang Giao dịch hàng hóa.": [
+    "Lịch sử đóng, mở rack và thông gió. Theo dõi giao dịch PICK / PUT tại trang Giao dịch hàng hóa.",
+    "History of rack closing, opening and ventilation. Track PICK / PUT on the Inventory transactions page."
+  ],
+  "Hiển thị trong 200 lệnh thiết bị gần nhất. “Đã gửi lệnh” không đồng nghĩa chuyển động đã hoàn tất. Bản ghi cũ chưa có thời gian được hiển thị “—”.": [
+    "Hiển thị trong 200 lệnh thiết bị gần nhất. “Đã gửi lệnh” không đồng nghĩa chuyển động đã hoàn tất. Bản ghi cũ chưa có thời gian được hiển thị “—”.",
+    "Shows the 200 most recent device commands. “Command sent” does not confirm movement completion. Older records without timestamps display “—”."
+  ],
+  "Trạng thái cập nhật mỗi 2 giây. Các thao tác thiết bị thực hiện trong chi tiết tủ.": [
+    "Trạng thái cập nhật mỗi 2 giây. Các thao tác thiết bị thực hiện trong chi tiết tủ.",
+    "Status updates every 2 seconds. Device operations are available in cabinet details."
+  ],
+  "rack báo lỗi trong dữ liệu gần nhất. Kiểm tra vật cản, độ lệch và tải động cơ trước khi tiếp tục thao tác.": [
+    "rack báo lỗi trong dữ liệu gần nhất. Kiểm tra vật cản, độ lệch và tải động cơ trước khi tiếp tục thao tác.",
+    "racks report faults in the latest data. Check obstructions, alignment and motor load before continuing."
+  ],
+  "rack báo phát hiện khói trong số đo gần nhất. Kiểm tra thiết bị và khu vực lưu trữ.": [
+    "rack báo phát hiện khói trong số đo gần nhất. Kiểm tra thiết bị và khu vực lưu trữ.",
+    "racks report smoke in the latest readings. Check the device and storage area."
+  ],
+  "Chưa xác định được kết nối thiết bị. Kiểm tra tại trang Trạng thái hệ thống.": [
+    "Chưa xác định được kết nối thiết bị. Kiểm tra tại trang Trạng thái hệ thống.",
+    "Device connection is unknown. Check the System status page."
+  ],
+  "Xem tất cả hoặc tập trung vào một nhóm.": [
+    "Xem tất cả hoặc tập trung vào một nhóm.",
+    "View all groups or focus on one."
+  ],
+  "Xem tất cả tủ & rack": [
+    "Xem tất cả tủ & rack",
+    "View all cabinets & racks"
+  ],
+  "Xem môi trường theo rack": [
+    "Xem môi trường theo rack",
+    "View environment by rack"
+  ],
+  "Xem lịch sử mở, đóng và thông gió.": [
+    "Xem lịch sử mở, đóng và thông gió.",
+    "View opening, closing and ventilation history."
+  ],
+  "Xem sản phẩm tại vị trí": [
+    "Xem sản phẩm tại vị trí",
+    "View products at this location"
+  ],
+  "Xem {0}": [
+    "Xem {0}",
+    "View {0}"
+  ],
+  "Mở chi tiết tủ": [
+    "Mở chi tiết tủ",
+    "Open cabinet details"
+  ],
+  "Mở Control Center": [
+    "Mở Control Center",
+    "Open control center"
+  ],
+  "Mở lối đi, điều khiển đèn và thông gió trong nhóm tủ.": [
+    "Mở lối đi, điều khiển đèn và thông gió trong nhóm tủ.",
+    "Open access gaps, control lights and ventilate the cabinet group."
+  ],
+  "Mở rack": [
+    "Mở rack",
+    "Open rack"
+  ],
+  "Đóng rack": [
+    "Đóng rack",
+    "Close rack"
+  ],
+  "Đóng / về HOME": [
+    "Đóng / về HOME",
+    "Close / return HOME"
+  ],
+  "Đóng tủ · về HOME": [
+    "Đóng tủ · về HOME",
+    "Close cabinet · return HOME"
+  ],
+  "HOME · bên phải R6": [
+    "HOME · bên phải R6",
+    "HOME · right of R6"
+  ],
+  "Đèn": [
+    "Đèn",
+    "Light"
+  ],
+  "Thông gió": [
+    "Thông gió",
+    "Ventilation"
+  ],
+  "Thông gió toàn bộ tủ": [
+    "Thông gió toàn bộ tủ",
+    "Ventilate the whole cabinet"
+  ],
+  "Thông gió · 5 khoảng hở": [
+    "Thông gió · 5 khoảng hở",
+    "Ventilation · 5 gaps"
+  ],
+  "Sơ đồ rack & lối đi": [
+    "Sơ đồ rack & lối đi",
+    "Rack & access gap layout"
+  ],
+  "Hàng đợi lệnh": [
+    "Hàng đợi lệnh",
+    "Command queue"
+  ],
+  "Hàng lưu trữ": [
+    "Hàng lưu trữ",
+    "Stored goods"
+  ],
+  "Mỗi lần di chuyển một rack · Rack 1 và 2 dùng chung lối đi.": [
+    "Mỗi lần di chuyển một rack · Rack 1 và 2 dùng chung lối đi.",
+    "One rack moves at a time · Racks 1 and 2 share an access gap."
+  ],
+  "Cần đúng 6 rack theo thứ tự địa chỉ để dùng sơ đồ GAP. Cabinet hiện có": [
+    "Cần đúng 6 rack theo thứ tự địa chỉ để dùng sơ đồ GAP. Cabinet hiện có",
+    "The GAP layout requires exactly 6 racks in address order. This cabinet has"
+  ],
+  "Điều khiển GAP tạm khóa trong khi thao tác cabinet khác đang chạy.": [
+    "Điều khiển GAP tạm khóa trong khi thao tác cabinet khác đang chạy.",
+    "GAP controls are locked while another cabinet operation is running."
+  ],
+  "Các lệnh đang chờ không được tự gửi tiếp.": [
+    "Các lệnh đang chờ không được tự gửi tiếp.",
+    "Pending commands will not be sent automatically."
+  ],
+  "Lệnh được gửi qua MQTT; trạng thái gửi chưa xác nhận thao tác vật lý.": [
+    "Lệnh được gửi qua MQTT; trạng thái gửi chưa xác nhận thao tác vật lý.",
+    "Commands are sent via MQTT; delivery status does not confirm physical completion."
+  ],
+  "Gửi lệnh {0} tới {1}? Kiểm tra khu vực rack trước khi xác nhận.": [
+    "Gửi lệnh {0} tới {1}? Kiểm tra khu vực rack trước khi xác nhận.",
+    "Send {0} to {1}? Check the rack area before confirming."
+  ],
+  "Kế hoạch thao tác": [
+    "Kế hoạch thao tác",
+    "Operation plan"
+  ],
+  "Xem kế hoạch": [
+    "Xem kế hoạch",
+    "View plan"
+  ],
+  "Xem vị trí đề xuất": [
+    "Xem vị trí đề xuất",
+    "View suggested locations"
+  ],
+  "Tự động đề xuất": [
+    "Tự động đề xuất",
+    "Suggest automatically"
+  ],
+  "Bắt đầu": [
+    "Bắt đầu",
+    "Start"
+  ],
+  "Ghi chú xác nhận": [
+    "Ghi chú xác nhận",
+    "Confirmation note"
+  ],
+  "Nhập hàng · PUT": [
+    "Nhập hàng · PUT",
+    "Put stock · PUT"
+  ],
+  "Xuất hàng · PICK": [
+    "Xuất hàng · PICK",
+    "Pick stock · PICK"
+  ],
+  "Điều chỉnh": [
+    "Điều chỉnh",
+    "Adjustment"
+  ],
+  "Đang gửi tới cabinet workflow…": [
+    "Đang gửi tới cabinet workflow…",
+    "Sending to cabinet workflow…"
+  ],
+  "Cabinet đã mở. Hoàn tất thao tác thực tế rồi xác nhận để workflow đóng rack và cập nhật tồn kho cục bộ.": [
+    "Cabinet đã mở. Hoàn tất thao tác thực tế rồi xác nhận để workflow đóng rack và cập nhật tồn kho cục bộ.",
+    "The cabinet is open. Complete the physical operation, then confirm to close the rack and update local stock."
+  ],
+  "Operation completed. Inventory đã cập nhật sau khi cabinet đóng thành công.": [
+    "Operation completed. Inventory đã cập nhật sau khi cabinet đóng thành công.",
+    "Operation completed. Inventory was updated after the cabinet closed successfully."
+  ],
+  "Operation failed/cancelled. Inventory không thay đổi.": [
+    "Operation failed/cancelled. Inventory không thay đổi.",
+    "Operation failed/cancelled. Inventory was unchanged."
+  ],
+  "{0} hoàn tất. Rack vẫn đang mở và tồn kho cục bộ đã được cập nhật.": [
+    "{0} hoàn tất. Rack vẫn đang mở và tồn kho cục bộ đã được cập nhật.",
+    "{0} completed. The rack remains open and local stock has been updated."
+  ],
+  "{0} hoàn tất. Rack đã đóng và tồn kho cục bộ đã được cập nhật.": [
+    "{0} hoàn tất. Rack đã đóng và tồn kho cục bộ đã được cập nhật.",
+    "{0} completed. The rack is closed and local stock has been updated."
+  ],
+  "{0} giao dịch chờ": [
+    "{0} giao dịch chờ",
+    "{0} pending transactions"
+  ],
+  "{0} giao dịch chờ đồng bộ": [
+    "{0} giao dịch chờ đồng bộ",
+    "{0} transactions pending sync"
+  ],
+  "{0} bản ghi": [
+    "{0} bản ghi",
+    "{0} records"
+  ],
+  "{0} loại sản phẩm": [
+    "{0} loại sản phẩm",
+    "{0} product types"
+  ],
+  "{0} sản phẩm": [
+    "{0} sản phẩm",
+    "{0} products"
+  ],
+  "{0} vị trí": [
+    "{0} vị trí",
+    "{0} locations"
+  ],
+  "{0} / {1} nhóm tủ": [
+    "{0} / {1} nhóm tủ",
+    "{0} / {1} cabinet groups"
+  ],
+  "{0} / {1} rack có số đo": [
+    "{0} / {1} rack có số đo",
+    "{0} / {1} racks with readings"
+  ],
+  "· Sau": [
+    "· Sau",
+    "· After"
+  ],
+  "· còn lại": [
+    "· còn lại",
+    "· remaining"
+  ],
+  "Có": [
+    "Có",
+    "Yes"
+  ],
+  "Không": [
+    "Không",
+    "No"
+  ],
+  "có": [
+    "có",
+    "yes"
+  ],
+  "không": [
+    "không",
+    "no"
+  ],
+  "ONLINE": [
+    "Đang kết nối",
+    "Online"
+  ],
+  "OFFLINE": [
+    "Mất kết nối",
+    "Offline"
+  ],
+  "Online": [
+    "Đang kết nối",
+    "Online"
+  ],
+  "Offline": [
+    "Mất kết nối",
+    "Offline"
+  ],
+  "Connected": [
+    "Đã kết nối",
+    "Connected"
+  ],
+  "Disconnected": [
+    "Mất kết nối",
+    "Disconnected"
+  ],
+  "Synced": [
+    "Đã đồng bộ",
+    "Synced"
+  ],
+  "Pending": [
+    "Đang chờ",
+    "Pending"
+  ],
+  "SYNCED": [
+    "Đã đồng bộ",
+    "Synced"
+  ],
+  "PENDING": [
+    "Đang chờ",
+    "Pending"
+  ],
+  "READY": [
+    "Sẵn sàng",
+    "Ready"
+  ],
+  "UNAVAILABLE": [
+    "Không khả dụng",
+    "Unavailable"
+  ],
+  "N/A": [
+    "Không áp dụng",
+    "N/A"
+  ],
+  "UNKNOWN": [
+    "Chưa xác định",
+    "Unknown"
+  ],
+  "IDLE": [
+    "Chờ thao tác",
+    "Idle"
+  ],
+  "HOME": [
+    "Về HOME",
+    "HOME"
+  ],
+  "RETURN_HOME": [
+    "Về HOME",
+    "Return HOME"
+  ],
+  "RETURNING_HOME": [
+    "Đang về HOME",
+    "Returning HOME"
+  ],
+  "OPEN": [
+    "Đã mở",
+    "Open"
+  ],
+  "CLOSED": [
+    "Đã đóng",
+    "Closed"
+  ],
+  "OPENING": [
+    "Đang mở",
+    "Opening"
+  ],
+  "CLOSING": [
+    "Đang đóng",
+    "Closing"
+  ],
+  "MOVING": [
+    "Đang di chuyển",
+    "Moving"
+  ],
+  "WAITING": [
+    "Đang chờ",
+    "Waiting"
+  ],
+  "SENDING": [
+    "Đang gửi",
+    "Sending"
+  ],
+  "QUEUED": [
+    "Trong hàng đợi",
+    "Queued"
+  ],
+  "CHECK": [
+    "Cần kiểm tra",
+    "Needs inspection"
+  ],
+  "ERROR": [
+    "Có lỗi",
+    "Error"
+  ],
+  "FAULT": [
+    "Có lỗi",
+    "Fault"
+  ],
+  "BUSY": [
+    "Đang bận",
+    "Busy"
+  ],
+  "BREAKDOWN": [
+    "Sự cố",
+    "Breakdown"
+  ],
+  "CLEAR": [
+    "Hết lỗi",
+    "Clear"
+  ],
+  "COMPLETED": [
+    "Hoàn tất",
+    "Completed"
+  ],
+  "FAILED": [
+    "Thất bại",
+    "Failed"
+  ],
+  "CANCELLED": [
+    "Đã hủy",
+    "Cancelled"
+  ],
+  "UNCERTAIN": [
+    "Cần kiểm tra",
+    "Uncertain"
+  ],
+  "PREPARED": [
+    "Đã chuẩn bị",
+    "Prepared"
+  ],
+  "EXECUTING": [
+    "Đang thực hiện",
+    "Executing"
+  ],
+  "AWAITING_CONFIRMATION": [
+    "Chờ xác nhận",
+    "Awaiting confirmation"
+  ],
+  "SENT": [
+    "Đã gửi",
+    "Sent"
+  ],
+  "ACKNOWLEDGED": [
+    "Đã nhận",
+    "Acknowledged"
+  ],
+  "ACKED": [
+    "Đã nhận",
+    "Acknowledged"
+  ],
+  "CONFIRMED": [
+    "Đã xác nhận",
+    "Confirmed"
+  ],
+  "REJECTED": [
+    "Đã từ chối",
+    "Rejected"
+  ],
+  "EXPIRED": [
+    "Đã hết hạn",
+    "Expired"
+  ],
+  "SUCCESS": [
+    "Thành công",
+    "Success"
+  ],
+  "VENTILATING": [
+    "Đang thông gió",
+    "Ventilating"
+  ],
+  "VENTILATED": [
+    "Đã thông gió",
+    "Ventilated"
+  ],
+  "LEFT": [
+    "Sang trái",
+    "Left"
+  ],
+  "RIGHT": [
+    "Sang phải",
+    "Right"
+  ],
+  "on": [
+    "Bật",
+    "on"
+  ],
+  "off": [
+    "Tắt",
+    "off"
+  ],
+  "REAL": [
+    "Thực tế",
+    "Real"
+  ],
+  "SIMULATION": [
+    "Mô phỏng",
+    "Simulation"
+  ],
+  "ALL": [
+    "Tất cả",
+    "All"
+  ],
+  "PICK": [
+    "Xuất hàng",
+    "Pick"
+  ],
+  "PUT": [
+    "Nhập hàng",
+    "Put"
+  ],
+  "ADJUST": [
+    "Điều chỉnh",
+    "Adjust"
+  ],
+  "INITIAL": [
+    "Tồn kho ban đầu",
+    "Initial stock"
+  ],
+  "BORROW": [
+    "Mượn",
+    "Borrow"
+  ],
+  "RETURN": [
+    "Trả",
+    "Return"
+  ],
+  "MOVE": [
+    "Chuyển vị trí",
+    "Move"
+  ],
+  "IN": [
+    "Nhập",
+    "In"
+  ],
+  "OUT": [
+    "Xuất",
+    "Out"
+  ],
+  "LIGHT": [
+    "Bật đèn",
+    "Light on"
+  ],
+  "LIGHT_OFF": [
+    "Tắt đèn",
+    "Light off"
+  ],
+  "STOP": [
+    "Dừng",
+    "Stop"
+  ],
+  "VENTILATE": [
+    "Thông gió",
+    "Ventilate"
+  ],
+  "true": [
+    "Có",
+    "Yes"
+  ],
+  "false": [
+    "Không",
+    "No"
+  ],
+  "info": [
+    "Thông tin",
+    "Info"
+  ],
+  "warning": [
+    "Cảnh báo",
+    "Warning"
+  ],
+  "error": [
+    "Lỗi",
+    "Error"
+  ],
+  "success": [
+    "Thành công",
+    "Success"
+  ],
+  "CRITICAL": [
+    "Nghiêm trọng",
+    "Critical"
+  ],
+  "WARNING": [
+    "Cảnh báo",
+    "Warning"
+  ],
+  "INFO": [
+    "Thông tin",
+    "Info"
+  ],
+  "Invalid credentials": [
+    "Thông tin đăng nhập không hợp lệ",
+    "Invalid credentials"
+  ],
+  "Invalid credentials or user not yet synchronized": [
+    "Thông tin đăng nhập không hợp lệ hoặc tài khoản chưa được đồng bộ",
+    "Invalid credentials or user not yet synchronized"
+  ],
+  "User is not authorized in the local snapshot; synchronize this device first": [
+    "Tài khoản chưa được cấp quyền trong dữ liệu cục bộ; hãy đồng bộ thiết bị trước",
+    "User is not authorized in the local snapshot; synchronize this device first"
+  ],
+  "Local permission denied": [
+    "Không có quyền thao tác cục bộ",
+    "Local permission denied"
+  ],
+  "Edge API token required": [
+    "Cần token Edge API",
+    "Edge API token required"
+  ],
+  "Insufficient stock": [
+    "Không đủ tồn kho",
+    "Insufficient stock"
+  ],
+  "Insufficient local stock": [
+    "Không đủ tồn kho cục bộ",
+    "Insufficient local stock"
+  ],
+  "Local bin capacity exceeded": [
+    "Vượt sức chứa ô cục bộ",
+    "Local bin capacity exceeded"
+  ],
+  "Bin capacity exceeded": [
+    "Vượt sức chứa ô",
+    "Bin capacity exceeded"
+  ],
+  "Inventory conflict; physical evidence must be reconciled": [
+    "Xung đột tồn kho; cần đối soát bằng chứng thực tế",
+    "Inventory conflict; physical evidence must be reconciled"
+  ],
+  "Rack not found": [
+    "Không tìm thấy rack",
+    "Rack not found"
+  ],
+  "Cabinet not found": [
+    "Không tìm thấy tủ",
+    "Cabinet not found"
+  ],
+  "Bin not found": [
+    "Không tìm thấy ô chứa",
+    "Bin not found"
+  ],
+  "Shelf not found": [
+    "Không tìm thấy kệ",
+    "Shelf not found"
+  ],
+  "Item not found": [
+    "Không tìm thấy sản phẩm",
+    "Item not found"
+  ],
+  "Cabinet code already exists": [
+    "Mã tủ đã tồn tại",
+    "Cabinet code already exists"
+  ],
+  "Rack code already exists in this cabinet": [
+    "Mã rack đã tồn tại trong tủ này",
+    "Rack code already exists in this cabinet"
+  ],
+  "Cannot delete cabinet with racks": [
+    "Không thể xóa tủ đang có rack",
+    "Cannot delete cabinet with racks"
+  ],
+  "No racks found for this cabinet": [
+    "Không tìm thấy rack trong tủ này",
+    "No racks found for this cabinet"
+  ],
+  "Serial connection not open": [
+    "Kết nối Serial chưa mở",
+    "Serial connection not open"
+  ],
+  "Partial Serial write; operation requires reconciliation": [
+    "Chỉ gửi được một phần dữ liệu Serial; thao tác cần đối soát",
+    "Partial Serial write; operation requires reconciliation"
+  ],
+  "Simulation group {0} has no configured Serial port": [
+    "Nhóm mô phỏng {0} chưa cấu hình cổng Serial",
+    "Simulation group {0} has no configured Serial port"
+  ],
+  "Hardware is not implemented; physical command execution is disabled": [
+    "Chưa triển khai phần cứng; lệnh điều khiển vật lý đã bị khóa",
+    "Hardware is not implemented; physical command execution is disabled"
+  ],
+  "Hardware integration is disabled": [
+    "Tích hợp phần cứng đã bị khóa",
+    "Hardware integration is disabled"
+  ],
+  "JSON body must be an object": [
+    "Nội dung JSON phải là một đối tượng",
+    "JSON body must be an object"
+  ],
+  "enabled must be boolean": [
+    "enabled phải là giá trị đúng/sai",
+    "enabled must be boolean"
+  ],
+  "is_active must be boolean": [
+    "is_active phải là giá trị đúng/sai",
+    "is_active must be boolean"
+  ],
+  "success must be boolean": [
+    "success phải là giá trị đúng/sai",
+    "success must be boolean"
+  ],
+  "reserved must be boolean": [
+    "reserved phải là giá trị đúng/sai",
+    "reserved must be boolean"
+  ],
+  "Resolve pending operations before changing device status": [
+    "Xử lý thao tác đang chờ trước khi đổi trạng thái thiết bị",
+    "Resolve pending operations before changing device status"
+  ],
+  "Invalid identity": [
+    "Định danh không hợp lệ",
+    "Invalid identity"
+  ],
+  "Bootstrap topology is locked; mapping cannot be deleted": [
+    "Cấu trúc khởi tạo đã khóa; không thể xóa ánh xạ",
+    "Bootstrap topology is locked; mapping cannot be deleted"
+  ],
+  "Cabinet logical ID is locked by bootstrap mapping": [
+    "ID logic của tủ đã bị khóa bởi ánh xạ khởi tạo",
+    "Cabinet logical ID is locked by bootstrap mapping"
+  ],
+  "Create a new location for topology changes": [
+    "Tạo vị trí mới để thay đổi cấu trúc",
+    "Create a new location for topology changes"
+  ],
+  "Rack mapping is locked; unknown Hardware must be specified before configuration": [
+    "Ánh xạ rack đã khóa; cần xác định phần cứng trước khi cấu hình",
+    "Rack mapping is locked; unknown Hardware must be specified before configuration"
+  ],
+  "Serial address already used by this device": [
+    "Địa chỉ Serial đã được thiết bị này sử dụng",
+    "Serial address already used by this device"
+  ],
+  "Invalid domain": [
+    "Miền dữ liệu không hợp lệ",
+    "Invalid domain"
+  ],
+  "offset must be nonnegative; limit must be 1..1000": [
+    "offset phải không âm; limit phải trong khoảng 1..1000",
+    "offset must be nonnegative; limit must be 1..1000"
+  ],
+  "offset must be nonnegative": [
+    "offset phải không âm",
+    "offset must be nonnegative"
+  ],
+  "Unsupported command": [
+    "Lệnh không được hỗ trợ",
+    "Unsupported command"
+  ],
+  "Use ISO timestamp with timezone": [
+    "Dùng thời gian ISO có múi giờ",
+    "Use ISO timestamp with timezone"
+  ],
+  "Manage superusers through Django administration": [
+    "Quản lý tài khoản quản trị cao nhất trong trang quản trị Django",
+    "Manage superusers through Django administration"
+  ],
+  "Cannot deactivate yourself": [
+    "Không thể vô hiệu hóa tài khoản của chính mình",
+    "Cannot deactivate yourself"
+  ],
+  "Password required": [
+    "Cần nhập mật khẩu",
+    "Password required"
+  ],
+  "Unknown role": [
+    "Vai trò không tồn tại",
+    "Unknown role"
+  ],
+  "Invalid permission or scope": [
+    "Quyền hoặc phạm vi không hợp lệ",
+    "Invalid permission or scope"
+  ],
+  "Invalid threshold": [
+    "Ngưỡng không hợp lệ",
+    "Invalid threshold"
+  ],
+  "Threshold outside allowed range": [
+    "Ngưỡng ngoài khoảng cho phép",
+    "Threshold outside allowed range"
+  ],
+  "Assignment crosses domain or invalid device": [
+    "Phân công khác miền dữ liệu hoặc thiết bị không hợp lệ",
+    "Assignment crosses domain or invalid device"
+  ],
+  "Resolve pending operations before reassignment": [
+    "Xử lý thao tác đang chờ trước khi phân công lại",
+    "Resolve pending operations before reassignment"
+  ],
+  "Cabinet index already used by target device": [
+    "Chỉ số tủ đã được thiết bị đích sử dụng",
+    "Cabinet index already used by target device"
+  ],
+  "Cabinet index outside target device topology": [
+    "Chỉ số tủ ngoài cấu trúc của thiết bị đích",
+    "Cabinet index outside target device topology"
+  ],
+  "Serial rack addresses must be unique per device": [
+    "Địa chỉ Serial của rack phải duy nhất trong mỗi thiết bị",
+    "Serial rack addresses must be unique per device"
+  ],
+  "request_key must be a unique identifier up to 64 characters": [
+    "request_key phải là định danh duy nhất, tối đa 64 ký tự",
+    "request_key must be a unique identifier up to 64 characters"
+  ],
+  "Idempotency key reused with different request": [
+    "Khóa chống lặp đã được dùng cho yêu cầu khác",
+    "Idempotency key reused with different request"
+  ],
+  "Device must be online and synchronized": [
+    "Thiết bị phải có kết nối và đã đồng bộ",
+    "Device must be online and synchronized"
+  ],
+  "Device Serial connection is unavailable": [
+    "Kết nối Serial của thiết bị không khả dụng",
+    "Device Serial connection is unavailable"
+  ],
+  "Hardware integration is not implemented; IPC control is disabled": [
+    "Chưa triển khai tích hợp phần cứng; điều khiển IPC đã bị khóa",
+    "Hardware integration is not implemented; IPC control is disabled"
+  ],
+  "Simulator does not support this cabinet group yet": [
+    "Bộ mô phỏng chưa hỗ trợ nhóm tủ này",
+    "Simulator does not support this cabinet group yet"
+  ],
+  "Unsupported operation": [
+    "Thao tác không được hỗ trợ",
+    "Unsupported operation"
+  ],
+  "Resolve pending operation before sending another command": [
+    "Xử lý thao tác đang chờ trước khi gửi lệnh khác",
+    "Resolve pending operation before sending another command"
+  ],
+  "Quantity must be an integer": [
+    "Số lượng phải là số nguyên",
+    "Quantity must be an integer"
+  ],
+  "Invalid quantity": [
+    "Số lượng không hợp lệ",
+    "Invalid quantity"
+  ],
+  "Operation already resolved with another outcome": [
+    "Thao tác đã được xử lý với kết quả khác",
+    "Operation already resolved with another outcome"
+  ],
+  "Record operator evidence of actual business outcome": [
+    "Ghi bằng chứng của người vận hành về kết quả thực tế",
+    "Record operator evidence of actual business outcome"
+  ],
+  "Wait for device result or status reconciliation": [
+    "Chờ kết quả thiết bị hoặc đối soát trạng thái",
+    "Wait for device result or status reconciliation"
+  ],
+  "Expired command did not execute": [
+    "Lệnh hết hạn chưa được thực thi",
+    "Expired command did not execute"
+  ],
+  "Invalid transaction type or quantity": [
+    "Loại giao dịch hoặc số lượng không hợp lệ",
+    "Invalid transaction type or quantity"
+  ],
+  "request_key required (maximum 64 characters)": [
+    "Cần request_key (tối đa 64 ký tự)",
+    "request_key required (maximum 64 characters)"
+  ],
+  "Record evidence of the physical stock movement": [
+    "Ghi bằng chứng di chuyển hàng thực tế",
+    "Record evidence of the physical stock movement"
+  ],
+  "Invalid origin/destination for transaction": [
+    "Vị trí nguồn/đích của giao dịch không hợp lệ",
+    "Invalid origin/destination for transaction"
+  ],
+  "Cannot move stock across REAL/SIMULATION": [
+    "Không thể chuyển hàng giữa REAL và SIMULATION",
+    "Cannot move stock across REAL/SIMULATION"
+  ],
+  "Origin and destination must differ": [
+    "Vị trí nguồn và đích phải khác nhau",
+    "Origin and destination must differ"
+  ],
+  "Idempotency key reused with different transaction": [
+    "Khóa chống lặp đã được dùng cho giao dịch khác",
+    "Idempotency key reused with different transaction"
+  ],
+  "Return exceeds outstanding borrowed quantity": [
+    "Số lượng trả vượt số lượng đang mượn",
+    "Return exceeds outstanding borrowed quantity"
+  ],
+  "borrow_id is only valid for RETURN": [
+    "borrow_id chỉ dùng cho RETURN",
+    "borrow_id is only valid for RETURN"
+  ],
+  "Resolve pending device operation at this location first": [
+    "Xử lý thao tác thiết bị đang chờ tại vị trí này trước",
+    "Resolve pending device operation at this location first"
+  ],
+  "Stock changed since review; reload the location before adjusting": [
+    "Tồn kho đã thay đổi; tải lại vị trí trước khi điều chỉnh",
+    "Stock changed since review; reload the location before adjusting"
+  ],
+  "Location reserved or capacity exceeded": [
+    "Vị trí đã giữ chỗ hoặc vượt sức chứa",
+    "Location reserved or capacity exceeded"
+  ],
+  "Request failed ({0})": [
+    "Yêu cầu thất bại ({0})",
+    "Request failed ({0})"
+  ],
+  "Network Error": [
+    "Lỗi kết nối mạng",
+    "Network error"
+  ],
+  "Failed to fetch": [
+    "Không kết nối được máy chủ",
+    "Failed to fetch"
+  ],
+  "Field required": [
+    "Trường bắt buộc",
+    "Field required"
+  ],
+  "Input should be a valid integer": [
+    "Cần nhập số nguyên hợp lệ",
+    "Input should be a valid integer"
+  ],
+  "Input should be a valid number": [
+    "Cần nhập số hợp lệ",
+    "Input should be a valid number"
+  ],
+  "Required field": [
+    "Vui lòng điền trường này.",
+    "Please fill out this field."
+  ],
+  "Invalid value": [
+    "Giá trị không hợp lệ.",
+    "Invalid value."
+  ],
+  "Value out of range": [
+    "Giá trị ngoài khoảng cho phép.",
+    "Value out of range."
+  ],
+  "Value too short": [
+    "Giá trị quá ngắn.",
+    "Value is too short."
+  ],
+  "Value too long": [
+    "Giá trị quá dài.",
+    "Value is too long."
+  ],
+  "Value does not match format": [
+    "Giá trị không đúng định dạng.",
+    "Value does not match the required format."
+  ],
+  "Invalid email": [
+    "Địa chỉ email không hợp lệ.",
+    "Invalid email address."
+  ],
+  "Invalid URL": [
+    "Địa chỉ URL không hợp lệ.",
+    "Invalid URL."
+  ],
+  "Overview": [
+    "Tổng quan",
+    "Overview"
+  ],
+  "Devices": [
+    "Thiết bị",
+    "Devices"
+  ],
+  "Monitoring": [
+    "Giám sát",
+    "Monitoring"
+  ],
+  "Administration": [
+    "Quản trị",
+    "Administration"
+  ],
+  "Barcode": [
+    "Mã vạch",
+    "Barcode"
+  ],
+  "Available": [
+    "Khả dụng",
+    "Available"
+  ],
+  "available": [
+    "khả dụng",
+    "available"
+  ],
+  "unavailable": [
+    "không khả dụng",
+    "unavailable"
+  ],
+  "Normal": [
+    "Bình thường",
+    "Normal"
+  ],
+  "Failed": [
+    "Thất bại",
+    "Failed"
+  ],
+  "Complete": [
+    "Hoàn tất",
+    "Complete"
+  ],
+  "Ventilating": [
+    "Đang thông gió",
+    "Ventilating"
+  ],
+  "Running": [
+    "Đang chạy",
+    "Running"
+  ],
+  "Queued": [
+    "Trong hàng đợi",
+    "Queued"
+  ],
+  "Processing...": [
+    "Đang xử lý...",
+    "Processing..."
+  ],
+  "Opening...": [
+    "Đang mở...",
+    "Opening..."
+  ],
+  "Closing...": [
+    "Đang đóng...",
+    "Closing..."
+  ],
+  "Ventilating...": [
+    "Đang thông gió...",
+    "Ventilating..."
+  ],
+  "Opening rack": [
+    "Đang mở rack",
+    "Opening rack"
+  ],
+  "Closing rack": [
+    "Đang đóng rack",
+    "Closing rack"
+  ],
+  "Rack opened successfully": [
+    "Mở rack thành công",
+    "Rack opened successfully"
+  ],
+  "Rack closed successfully": [
+    "Đóng rack thành công",
+    "Rack closed successfully"
+  ],
+  "Next": [
+    "Tiếp theo",
+    "Next"
+  ],
+  "Selected": [
+    "Đã chọn",
+    "Selected"
+  ],
+  "Unknown": [
+    "Chưa xác định",
+    "Unknown"
+  ],
+  "Speed": [
+    "Tốc độ",
+    "Speed"
+  ],
+  "Home": [
+    "Về HOME",
+    "Home"
+  ],
+  "Acknowledged": [
+    "Đã xác nhận",
+    "Acknowledged"
+  ],
+  "Acknowledge": [
+    "Xác nhận cảnh báo",
+    "Acknowledge"
+  ],
+  "/ min": [
+    "/ tối thiểu",
+    "/ min"
+  ],
+  "IPC → Cabinet Group → Rack": [
+    "IPC → Nhóm tủ → Rack",
+    "IPC → Cabinet group → Rack"
+  ],
+  "Dashboard →": [
+    "Tổng quan →",
+    "Dashboard →"
+  ],
+  "Site chưa đặt tên": [
+    "Site chưa đặt tên",
+    "Unnamed site"
+  ],
+  "ACTIVE": [
+    "Hoạt động",
+    "Active"
+  ],
+  "AVAILABLE": [
+    "Sẵn sàng",
+    "Available"
+  ],
+  "FULL": [
+    "Đầy",
+    "Full"
+  ],
+  "EMPTY": [
+    "Trống",
+    "Empty"
+  ],
+  "CLOSE": [
+    "Đóng rack",
+    "Close rack"
+  ],
+  "local_sent": [
+    "Đã gửi lệnh",
+    "Command sent"
+  ],
+  "local_uncertain": [
+    "Chưa xác định",
+    "Uncertain"
+  ],
+  "uncertain": [
+    "Chưa xác định",
+    "Uncertain"
+  ],
+  "rejected": [
+    "Đã từ chối",
+    "Rejected"
+  ],
+  "confirmed": [
+    "Đã xác nhận",
+    "Confirmed"
+  ],
+  "failed": [
+    "Thất bại",
+    "Failed"
+  ],
+  "pending": [
+    "Đang chờ",
+    "Pending"
+  ],
+  "Local session expired; sign in again": [
+    "Phiên cục bộ đã hết hạn; vui lòng đăng nhập lại",
+    "Local session expired; sign in again"
+  ],
+  "Credentials or permissions changed": [
+    "Thông tin đăng nhập hoặc quyền đã thay đổi",
+    "Credentials or permissions changed"
+  ],
+  "Too many local sessions": [
+    "Quá nhiều phiên đăng nhập cục bộ",
+    "Too many local sessions"
+  ],
+  "Physical hardware integration is disabled": [
+    "Tích hợp phần cứng vật lý đã bị khóa",
+    "Physical hardware integration is disabled"
+  ],
+  "Local Serial is disconnected": [
+    "Serial cục bộ mất kết nối",
+    "Local Serial is disconnected"
+  ],
+  "Device outside local scope": [
+    "Thiết bị ngoài phạm vi cục bộ",
+    "Device outside local scope"
+  ],
+  "Invalid device command": [
+    "Lệnh thiết bị không hợp lệ",
+    "Invalid device command"
+  ],
+  "A stable request_key is required": [
+    "Cần request_key ổn định",
+    "A stable request_key is required"
+  ],
+  "Finish the active PUT/PICK before issuing another hardware command": [
+    "Hoàn tất PUT/PICK đang chạy trước khi gửi lệnh phần cứng khác",
+    "Finish the active PUT/PICK before issuing another hardware command"
+  ],
+  "Serial result uncertain; inspect hardware before retrying": [
+    "Kết quả Serial chưa xác định; kiểm tra phần cứng trước khi thử lại",
+    "Serial result uncertain; inspect hardware before retrying"
+  ],
+  "keep_open must be boolean": [
+    "keep_open phải là giá trị đúng/sai",
+    "keep_open must be boolean"
+  ],
+  "Insufficient quantity": [
+    "Không đủ số lượng",
+    "Insufficient quantity"
+  ],
+  "field.username": [
+    "Tên đăng nhập",
+    "Username"
+  ],
+  "field.password": [
+    "Mật khẩu",
+    "Password"
+  ],
+  "field.name": [
+    "Tên",
+    "Name"
+  ],
+  "field.code": [
+    "Mã",
+    "Code"
+  ],
+  "field.description": [
+    "Mô tả",
+    "Description"
+  ],
+  "field.enabled": [
+    "Cho phép hoạt động",
+    "Enabled"
+  ],
+  "field.is_active": [
+    "Hoạt động",
+    "Active"
+  ],
+  "field.id": [
+    "ID",
+    "ID"
+  ],
+  "field.key": [
+    "Khóa",
+    "Key"
+  ],
+  "field.value": [
+    "Giá trị",
+    "Value"
+  ],
+  "field.quantity": [
+    "Số lượng",
+    "Quantity"
+  ],
+  "field.kind": [
+    "Loại",
+    "Type"
+  ],
+  "field.type": [
+    "Loại",
+    "Type"
+  ],
+  "field.note": [
+    "Ghi chú",
+    "Note"
+  ],
+  "field.reason": [
+    "Lý do",
+    "Reason"
+  ],
+  "field.roles": [
+    "Vai trò",
+    "Roles"
+  ],
+  "field.permissions": [
+    "Quyền",
+    "Permissions"
+  ],
+  "field.scope": [
+    "Phạm vi",
+    "Scope"
+  ],
+  "field.source_type": [
+    "Nguồn",
+    "Source"
+  ],
+  "field.ipc_id": [
+    "IPC",
+    "IPC"
+  ],
+  "field.device_id": [
+    "Thiết bị IPC",
+    "IPC device"
+  ],
+  "field.online": [
+    "Thiết bị",
+    "Device"
+  ],
+  "field.state": [
+    "Trạng thái",
+    "State"
+  ],
+  "field.status": [
+    "Trạng thái",
+    "Status"
+  ],
+  "field.severity": [
+    "Mức độ",
+    "Severity"
+  ],
+  "field.result": [
+    "Kết quả",
+    "Result"
+  ],
+  "field.execution_state": [
+    "Trạng thái thực thi",
+    "Execution state"
+  ],
+  "field.created_at": [
+    "Tạo lúc",
+    "Created at"
+  ],
+  "field.updated_at": [
+    "Cập nhật lúc",
+    "Updated at"
+  ],
+  "field.completed_at": [
+    "Hoàn tất lúc",
+    "Completed at"
+  ],
+  "field.received_at": [
+    "Nhận lúc",
+    "Received at"
+  ],
+  "field.acknowledged_at": [
+    "Xác nhận lúc",
+    "Acknowledged at"
+  ],
+  "field.expires_at": [
+    "Hết hạn lúc",
+    "Expires at"
+  ],
+  "field.last_seen": [
+    "Liên lạc gần nhất",
+    "Last seen"
+  ],
+  "field.last_sync": [
+    "Đồng bộ gần nhất",
+    "Last sync"
+  ],
+  "field.synchronized": [
+    "Đồng bộ",
+    "Sync"
+  ],
+  "field.mqtt_connected": [
+    "Kết nối MQTT",
+    "MQTT connection"
+  ],
+  "field.serial_connected": [
+    "Kết nối Serial",
+    "Serial connection"
+  ],
+  "field.cabinet_group_count": [
+    "Số nhóm tủ",
+    "Cabinet groups"
+  ],
+  "field.cabinet_id": [
+    "ID tủ",
+    "Cabinet ID"
+  ],
+  "field.cabinet_group_id": [
+    "ID nhóm tủ",
+    "Cabinet group ID"
+  ],
+  "field.cabinet_index": [
+    "Chỉ số tủ",
+    "Cabinet index"
+  ],
+  "field.cabinet": [
+    "Tủ",
+    "Cabinet"
+  ],
+  "field.rack_id": [
+    "ID rack",
+    "Rack ID"
+  ],
+  "field.rack_index": [
+    "Chỉ số rack",
+    "Rack index"
+  ],
+  "field.rack": [
+    "Rack",
+    "Rack"
+  ],
+  "field.serial_address": [
+    "Địa chỉ Serial",
+    "Serial address"
+  ],
+  "field.address": [
+    "Địa chỉ",
+    "Address"
+  ],
+  "field.area": [
+    "Khu vực",
+    "Area"
+  ],
+  "field.item_id": [
+    "ID sản phẩm",
+    "Product ID"
+  ],
+  "field.item__name": [
+    "Tên sản phẩm",
+    "Product name"
+  ],
+  "field.bin_id": [
+    "ID ô chứa",
+    "Bin ID"
+  ],
+  "field.shelf_id": [
+    "ID kệ",
+    "Shelf ID"
+  ],
+  "field.parent_id": [
+    "ID vị trí cha",
+    "Parent location ID"
+  ],
+  "field.capacity": [
+    "Sức chứa",
+    "Capacity"
+  ],
+  "field.reserved": [
+    "Giữ chỗ",
+    "Reserved"
+  ],
+  "field.occupied_quantity": [
+    "Số lượng đã chứa",
+    "Occupied quantity"
+  ],
+  "field.location_code": [
+    "Mã vị trí",
+    "Location code"
+  ],
+  "field.unit": [
+    "Đơn vị",
+    "Unit"
+  ],
+  "field.sku": [
+    "SKU",
+    "SKU"
+  ],
+  "field.barcode": [
+    "Mã vạch",
+    "Barcode"
+  ],
+  "field.min_stock": [
+    "Tồn kho tối thiểu",
+    "Minimum stock"
+  ],
+  "field.max_stock": [
+    "Tồn kho tối đa",
+    "Maximum stock"
+  ],
+  "field.category": [
+    "Loại sản phẩm",
+    "Category"
+  ],
+  "field.category_id": [
+    "ID loại sản phẩm",
+    "Category ID"
+  ],
+  "field.from": [
+    "Từ thời điểm",
+    "From"
+  ],
+  "field.to": [
+    "Đến thời điểm",
+    "To"
+  ],
+  "field.offset": [
+    "Vị trí bắt đầu",
+    "Offset"
+  ],
+  "field.limit": [
+    "Giới hạn",
+    "Limit"
+  ],
+  "field.temperature": [
+    "Nhiệt độ",
+    "Temperature"
+  ],
+  "field.humidity": [
+    "Độ ẩm",
+    "Humidity"
+  ],
+  "field.temperature_max": [
+    "Nhiệt độ tối đa",
+    "Maximum temperature"
+  ],
+  "field.humidity_max": [
+    "Độ ẩm tối đa",
+    "Maximum humidity"
+  ],
+  "field.weight": [
+    "Tải trọng",
+    "Load"
+  ],
+  "field.gas": [
+    "Khí/khói",
+    "Gas/smoke"
+  ],
+  "field.active": [
+    "Hoạt động",
+    "Active"
+  ],
+  "field.success": [
+    "Thành công",
+    "Success"
+  ],
+  "field.borrow_id": [
+    "ID giao dịch mượn",
+    "Borrow transaction ID"
+  ],
+  "field.origin_bin_id": [
+    "ID ô nguồn",
+    "Origin bin ID"
+  ],
+  "field.destination_bin_id": [
+    "ID ô đích",
+    "Destination bin ID"
+  ],
+  "field.request_key": [
+    "Khóa yêu cầu",
+    "Request key"
+  ],
+  "field.error": [
+    "Lỗi",
+    "Error"
+  ],
+  "field.error_code": [
+    "Mã lỗi",
+    "Error code"
+  ],
+  "field.error_message": [
+    "Thông báo lỗi",
+    "Error message"
+  ],
+  "field.message": [
+    "Thông báo",
+    "Message"
+  ],
+  "field.sync_error": [
+    "Lỗi đồng bộ",
+    "Sync error"
+  ],
+  "field.operation_status": [
+    "Trạng thái thao tác",
+    "Operation status"
+  ],
+  "field.sync_status": [
+    "Trạng thái đồng bộ",
+    "Sync status"
+  ],
+  "field.measured_at": [
+    "Đo lúc",
+    "Measured at"
+  ],
+  "field.user_id": [
+    "ID người dùng",
+    "User ID"
+  ],
+  "field.user": [
+    "Người dùng",
+    "User"
+  ],
+  "field.object_id": [
+    "ID đối tượng",
+    "Object ID"
+  ],
+  "field.action": [
+    "Thao tác",
+    "Action"
+  ],
+  "field.endpoint": [
+    "Điểm cuối",
+    "Endpoint"
+  ],
+  "field.is_endpoint": [
+    "Đã tới điểm cuối",
+    "At endpoint"
+  ],
+  "field.is_obstructed": [
+    "Vật cản",
+    "Obstruction"
+  ],
+  "field.is_skewed": [
+    "Lệch rack",
+    "Rack misalignment"
+  ],
+  "field.is_overload_motor": [
+    "Quá tải động cơ",
+    "Motor overload"
+  ],
+  "Roles": [
+    "Vai trò",
+    "Roles"
+  ],
+  "PUT/PICK requires a positive integer quantity": [
+    "PUT/PICK yêu cầu số lượng nguyên dương",
+    "PUT/PICK requires a positive integer quantity"
+  ],
+  "Idempotency key reused for another operation": [
+    "Khóa chống lặp đã được dùng cho thao tác khác",
+    "Idempotency key reused for another operation"
+  ],
+  "Initial master synchronization required": [
+    "Cần đồng bộ danh mục ban đầu",
+    "Initial master synchronization required"
+  ],
+  "Resolve the active physical transaction first": [
+    "Xử lý giao dịch vật lý đang chạy trước",
+    "Resolve the active physical transaction first"
+  ],
+  "Resolve the outstanding Server command before local inventory operations": [
+    "Xử lý lệnh Server đang chờ trước khi thao tác kho cục bộ",
+    "Resolve the outstanding Server command before local inventory operations"
+  ],
+  "Invalid product or device location": [
+    "Sản phẩm hoặc vị trí thiết bị không hợp lệ",
+    "Invalid product or device location"
+  ],
+  "Unknown local transaction": [
+    "Không tìm thấy giao dịch cục bộ",
+    "Unknown local transaction"
+  ],
+  "Serial result uncertain; inspect hardware, do not repeat the command": [
+    "Kết quả Serial chưa xác định; kiểm tra phần cứng, không lặp lại lệnh",
+    "Serial result uncertain; inspect hardware, do not repeat the command"
+  ],
+  "Record the actual physical outcome": [
+    "Ghi nhận kết quả thực tế",
+    "Record the actual physical outcome"
+  ],
+  "keep_open requires a successful operation": [
+    "keep_open yêu cầu thao tác thành công",
+    "keep_open requires a successful operation"
+  ],
+  "Wait for hardware OPEN completion; an uncertain operation cannot be auto-confirmed": [
+    "Chờ phần cứng hoàn tất OPEN; không thể tự xác nhận thao tác chưa rõ kết quả",
+    "Wait for hardware OPEN completion; an uncertain operation cannot be auto-confirmed"
+  ],
+  "Cannot keep a rack open without successful OPEN endpoint evidence": [
+    "Không thể giữ rack mở khi chưa có bằng chứng điểm cuối OPEN thành công",
+    "Cannot keep a rack open without successful OPEN endpoint evidence"
+  ],
+  "Bin code already exists": [
+    "Mã ô chứa đã tồn tại",
+    "Bin code already exists"
+  ],
+  "Cannot delete bin with inventory locations": [
+    "Không thể xóa ô chứa đang có vị trí tồn kho",
+    "Cannot delete bin with inventory locations"
+  ],
+  "Item code already exists": [
+    "Mã sản phẩm đã tồn tại",
+    "Item code already exists"
+  ],
+  "Cannot delete item with existing stock": [
+    "Không thể xóa sản phẩm đang còn tồn kho",
+    "Cannot delete item with existing stock"
+  ],
+  "No inventory locations available to pick": [
+    "Không có vị trí tồn kho khả dụng để xuất",
+    "No inventory locations available to pick"
+  ],
+  "No bins available for put transactions": [
+    "Không có ô chứa khả dụng để nhập",
+    "No bins available for put transactions"
+  ],
+  "No inventory locations available to adjust": [
+    "Không có vị trí tồn kho khả dụng để điều chỉnh",
+    "No inventory locations available to adjust"
+  ],
+  "Either bin_id or bin_code is required": [
+    "Cần bin_id hoặc bin_code",
+    "Either bin_id or bin_code is required"
+  ],
+  "Quantity must be greater than zero for put transactions": [
+    "Số lượng nhập phải lớn hơn không",
+    "Quantity must be greater than zero for put transactions"
+  ],
+  "Quantity must be greater than zero for pick transactions": [
+    "Số lượng xuất phải lớn hơn không",
+    "Quantity must be greater than zero for pick transactions"
+  ],
+  "Obstruction": [
+    "Vật cản",
+    "Obstruction"
+  ],
+  "Skewed": [
+    "Lệch rack",
+    "Skewed"
+  ],
+  "Motor overload": [
+    "Quá tải động cơ",
+    "Motor overload"
+  ],
+  "OBSTRUCTION": [
+    "Vật cản",
+    "Obstruction"
+  ],
+  "SKEW": [
+    "Lệch rack",
+    "Rack misalignment"
+  ],
+  "OVERLOAD": [
+    "Quá tải",
+    "Overload"
+  ],
+  "MOTOR_OVERLOAD": [
+    "Quá tải động cơ",
+    "Motor overload"
+  ],
+  "Product / SKU / Category": [
+    "Sản phẩm / SKU / loại",
+    "Product / SKU / category"
+  ],
+  "Total / Available": [
+    "Tổng / khả dụng",
+    "Total / available"
+  ],
+  "Locations / Source": [
+    "Vị trí / nguồn",
+    "Locations / source"
+  ],
+  "Stock / Sync": [
+    "Tồn kho / đồng bộ",
+    "Stock / sync"
+  ],
+  "Opening": [
+    "Đang mở",
+    "Opening"
+  ],
+  "Closing": [
+    "Đang đóng",
+    "Closing"
+  ],
+  "Obstructed": [
+    "Có vật cản",
+    "Obstructed"
+  ],
+  "Overload": [
+    "Quá tải",
+    "Overload"
+  ],
+  "Authentication required": [
+    "Cần đăng nhập",
+    "Authentication required"
+  ],
+  "Permission denied": [
+    "Không có quyền truy cập",
+    "Permission denied"
+  ],
+  "Not found or outside scope": [
+    "Không tìm thấy hoặc ngoài phạm vi truy cập",
+    "Not found or outside scope"
+  ],
+  "Method not allowed": [
+    "Phương thức không được phép",
+    "Method not allowed"
+  ],
+  "Invalid JSON body": [
+    "Nội dung JSON không hợp lệ",
+    "Invalid JSON body"
+  ],
+  "POST required": [
+    "Cần phương thức POST",
+    "POST required"
+  ],
+  "Use POST, PATCH or DELETE": [
+    "Dùng POST, PATCH hoặc DELETE",
+    "Use POST, PATCH or DELETE"
+  ],
+  "Not enough quantity available to pick": [
+    "Không đủ số lượng khả dụng để xuất",
+    "Not enough quantity available to pick"
+  ],
+  "Quantity must be non-negative": [
+    "Số lượng phải không âm",
+    "Quantity must be non-negative"
+  ],
+  "Unknown breakdown": [
+    "Sự cố chưa xác định",
+    "Unknown breakdown"
+  ],
+  "Cannot open rack {0} because breakdown is active: {1}": [
+    "Không thể mở rack {0} vì đang có sự cố: {1}",
+    "Cannot open rack {0} because breakdown is active: {1}"
+  ],
+  "This password is too short. It must contain at least {0} characters.": [
+    "Mật khẩu quá ngắn. Cần ít nhất {0} ký tự.",
+    "This password is too short. It must contain at least {0} characters."
+  ],
+  "This password is too common.": [
+    "Mật khẩu quá phổ biến. Hãy chọn mật khẩu khác.",
+    "This password is too common. Choose another password."
+  ],
+  "This password is entirely numeric.": [
+    "Mật khẩu không được chỉ gồm chữ số.",
+    "This password must not contain only digits."
+  ],
+  "The password is too similar to the {0}.": [
+    "Mật khẩu quá giống {0}.",
+    "The password is too similar to the {0}."
+  ],
+  "Cannot close rack {0} because breakdown is active: {1}": [
+    "Không thể đóng rack {0} vì đang có sự cố: {1}",
+    "Cannot close rack {0} because breakdown is active: {1}"
+  ],
+  "Reconcile a fresh Simulation snapshot before sending commands": [
+    "Cần đối chiếu trạng thái Simulation mới trước khi gửi lệnh.",
+    "Reconcile a fresh Simulation snapshot before sending commands"
+  ],
+  "Cabinet has a fault or an unfinished command; recover it first": [
+    "Tủ đang lỗi hoặc có lệnh chưa hoàn tất; cần phục hồi trước.",
+    "Cabinet has a fault or an unfinished command; recover it first"
+  ],
+  "Cabinet physical interlock is active": [
+    "Khóa an toàn cơ khí của tủ đang bật.",
+    "Cabinet physical interlock is active"
+  ],
+  "Verify the mechanical reference before issuing commands": [
+    "Kiểm tra vị trí gốc cơ khí trước khi gửi lệnh.",
+    "Verify the mechanical reference before issuing commands"
+  ],
+  "Serial delivery could not be confirmed": [
+    "Chưa xác nhận được việc gửi qua Serial.",
+    "Serial delivery could not be confirmed"
+  ]
+}

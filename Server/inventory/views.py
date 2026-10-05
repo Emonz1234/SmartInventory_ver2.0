@@ -209,7 +209,11 @@ def operations(request):
         rows = Operation.objects.filter(device__device_type__in=domains).order_by('-created_at')
         if request.GET.get('device_id'):
             rows = rows.filter(device_id=request.GET['device_id'])
-        return JsonResponse([{**row, "source_type":source(row.pop("device__device_type"))} for row in rows.values("id", "device_id", "device__device_type", "rack_id", "kind", "quantity", "state", "execution_state", "created_at")[:200]], safe=False)
+        result = list(rows.values("id", "device_id", "device__device_type", "rack_id", "kind", "quantity", "state", "execution_state", "execution_updated_at", "created_at")[:200])
+        errors = {}
+        for event in RuntimeEvent.objects.filter(device__device_type__in=domains, payload__command_id__in=[str(r['id']) for r in result]).order_by('-id'):
+            errors.setdefault(event.payload['command_id'], event.payload.get('error', ''))
+        return JsonResponse([{**row, "error":errors.get(str(row['id']), ''), "source_type":source(row.pop("device__device_type"))} for row in result], safe=False)
     if request.method != "POST":
         return JsonResponse({"error": "Permission denied"}, status=403)
     if not any(allowed(request.user, p, s) for p in ["cabinet.control", "inventory.move"] for s in ["REAL", "SIMULATION"]):

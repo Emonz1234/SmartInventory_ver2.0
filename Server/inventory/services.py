@@ -182,6 +182,9 @@ def create_operation(user, data):
         quantity=qty, requested_by=user, request_key=data["request_key"], expires_at=timezone.now()+timedelta(seconds=30))
     queue(device, "command", "command.execute", command_payload(operation),
           command_id=str(operation.pk), revision=device.revision)
+    import logging
+    logging.getLogger(__name__).info('command.create device=%s command=%s rack=%s address=%s action=%s',
+                                    device.pk, operation.pk, rack.pk, rack.address, kind)
     from .models import AuditLog
     AuditLog.objects.create(actor=user, action="command.create", resource="operation", object_id=str(operation.pk), source_type=source(device.device_type), after={"kind": kind})
     return operation

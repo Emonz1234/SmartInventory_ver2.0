@@ -1,3 +1,4 @@
+import { t as uiText, useLanguage } from '../i18n';
 import { Card, CardContent, Typography, Box, Chip } from '@mui/material'
 
 interface StatusCardProps {
@@ -16,11 +17,12 @@ const statusColors = {
 }
 
 export const StatusCard = ({ title, value, unit, status, color }: StatusCardProps) => {
+  useLanguage();
   return (
     <Card>
       <CardContent>
         <Typography variant="caption" color="textSecondary" display="block" sx={{ mb: 1 }}>
-          {title}
+          {uiText(title)}
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
           <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
@@ -34,7 +36,7 @@ export const StatusCard = ({ title, value, unit, status, color }: StatusCardProp
         </Box>
         {status && (
           <Chip
-            label={status}
+            label={uiText(status)}
             size="small"
             color={status === 'error' ? 'error' : status === 'warning' ? 'warning' : 'success'}
           />

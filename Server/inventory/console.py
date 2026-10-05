@@ -85,6 +85,9 @@ def rack_row(r):
         address=r.address,
         source_type=source(r.cabinet.domain),
         online=bool(r.cabinet.device and online(r.cabinet.device)),
+        serial_connected=bool(r.cabinet.device and r.cabinet.device.serial_connected),
+        synchronized=bool(r.cabinet.device and r.cabinet.device.revision > 0 and r.cabinet.device.revision == r.cabinet.device.acknowledged_revision),
+        configuration_status=r.cabinet.configuration_status,
         last_update=status.updated_at if status else None,
         **(status.values if status else {})
     )

@@ -1,7 +1,18 @@
+import { t as uiText, errorText, statusText, useLanguage, LanguageSelector, fieldText, recordError } from './i18n';
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
 import Inventory from "./Inventory.jsx";
+import RackCommands from "./RackCommands.jsx";
+import {
+  Icon,
+  SourceBadge,
+  DataTable,
+  PageHeader,
+  KpiCard,
+  LoadingState,
+  ConfirmButton,
+} from "./ui.jsx";
 
 async function api(path, method = "GET", data) {
   const csrf = document.cookie
@@ -18,8 +29,11 @@ async function api(path, method = "GET", data) {
     ...(data ? { body: JSON.stringify(data) } : {}),
   });
   const value = await response.json();
-  if (!response.ok)
-    throw new Error(value.error || `Request failed (${response.status})`);
+  if (!response.ok) {
+    const error = new Error(value.error || `Request failed (${response.status})`);
+    error.response = { data: value, status: response.status };
+    throw recordError(error);
+  }
   return value;
 }
 const key = () =>
@@ -40,20 +54,15 @@ const pages = [
   ["Roles & Permissions", "roles", "role.manage"],
   ["Settings", "settings", "system.manage"],
 ];
-function Badge({ source }) {
-  return source ? (
-    <span className={"badge " + (source === "SIMULATION" ? "sim" : "real")}>
-      [{source}]
-    </span>
-  ) : null;
-}
+const Badge = SourceBadge;
 function Value({ value }) {
+  useLanguage();
   if (value === null || value === undefined || value === "")
     return <span className="muted">—</span>;
   if (typeof value === "boolean")
     return (
       <span className={value ? "positive" : "muted"}>
-        {value ? "Yes" : "No"}
+        {value ? uiText("Yes") : uiText("No")}
       </span>
     );
   if (Array.isArray(value))
@@ -71,7 +80,7 @@ function Value({ value }) {
       <span className="detail-value">
         {Object.entries(value).map(([k, v]) => (
           <span key={k}>
-            <b>{k.replaceAll("_", " ")}:</b> <Value value={v} />
+            <b>{fieldText(k)}:</b> {['error', 'error_message', 'message', 'sync_error'].includes(k) ? errorText(v) : ['state', 'status', 'kind', 'severity', 'execution_state', 'operation_status', 'sync_status'].includes(k) ? statusText(v) : <Value value={v} />}
             {" · "}
           </span>
         ))}
@@ -79,45 +88,10 @@ function Value({ value }) {
     );
   return String(value);
 }
-function Table({ rows = [], columns, onSelect, actions }) {
-  if (!rows.length)
-    return <div className="empty">Không có dữ liệu phù hợp với bộ lọc.</div>;
+function Table(props) {
+  useLanguage();
   return (
-    <div className="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            {columns.map((c) => (
-              <th key={c}>{c.replaceAll("_", " ")}</th>
-            ))}
-            {actions && <th>Actions</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr
-              key={r.id || i}
-              className={r.source_type === "SIMULATION" ? "simulation" : ""}
-            >
-              {columns.map((c) => (
-                <td key={c}>
-                  {c === "source_type" ? (
-                    <Badge source={r[c]} />
-                  ) : c === columns[0] && onSelect ? (
-                    <button className="link" onClick={() => onSelect(r)}>
-                      <Value value={r[c]} />
-                    </button>
-                  ) : (
-                    <Value value={r[c]} />
-                  )}
-                </td>
-              ))}
-              {actions && <td className="actions">{actions(r)}</td>}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable {...props} renderValue={(value) => <Value value={value} />} />
   );
 }
 function Form({
@@ -127,6 +101,7 @@ function Form({
   label = "Lưu",
   disabled = false,
 }) {
+  useLanguage();
   const [working, setWorking] = useState(false);
   return (
     <form
@@ -163,8 +138,11 @@ function Form({
     >
       <fieldset disabled={disabled || working}>
         {fields.map((f) => (
-          <label key={f.name}>
-            {f.label || f.name.replaceAll("_", " ")}
+          <label
+            key={f.name}
+            className={!f.optional ? "required-field" : undefined}
+          >
+            {f.label ? uiText(f.label) : fieldText(f.name)}
             {f.options ? (
               <select
                 name={f.name}
@@ -178,7 +156,7 @@ function Form({
                     key={typeof o === "object" ? o.value : o}
                     value={typeof o === "object" ? o.value : o}
                   >
-                    {typeof o === "object" ? o.label : o}
+                    {typeof o === "object" ? o.label : uiText(o)}
                   </option>
                 ))}
               </select>
@@ -206,7 +184,7 @@ function Form({
             )}
           </label>
         ))}
-        <button type="submit">{working ? "Đang lưu…" : label}</button>
+        <button type="submit">{working ? uiText("Đang lưu…") : uiText(label)}</button>
       </fieldset>
     </form>
   );
@@ -214,6 +192,7 @@ function Form({
 const text = (name) => ({ name });
 const number = (name, optional = false) => ({ name, type: "number", optional });
 function App() {
+  useLanguage();
   const [session, setSession] = useState(null),
     [page, setPage] = useState("Dashboard"),
     [source, setSource] = useState("REAL");
@@ -228,6 +207,7 @@ function App() {
     [master, setMaster] = useState("shelves"),
     [edit, setEdit] = useState(false);
   const seq = useRef(0);
+  const [collapsed, setCollapsed] = useState(false);
   const can = (permission, scope = source) =>
     scope === "ALL"
       ? ["REAL", "SIMULATION", "ALL"].some((s) =>
@@ -238,7 +218,7 @@ function App() {
   useEffect(() => {
     api("session")
       .then(setSession)
-      .catch((e) => setError(e.message));
+      .catch((e) => setError(e));
   }, []);
   useEffect(() => {
     if (!session?.authenticated) return;
@@ -273,7 +253,7 @@ function App() {
           setError("");
         }
       } catch (e) {
-        if (alive && current === seq.current) setError(e.message);
+        if (alive && current === seq.current) setError(e);
       }
     };
     setData(null);
@@ -284,7 +264,7 @@ function App() {
           if (alive) setLookup({ roles });
         })
         .catch((e) => {
-          if (alive) setError(e.message);
+          if (alive) setError(e);
         });
     }
     load();
@@ -304,7 +284,7 @@ function App() {
       setVersion((v) => v + 1);
       return result;
     } catch (e) {
-      setError(e.message);
+      setError(e);
       throw e;
     } finally {
       setBusy(false);
@@ -324,7 +304,7 @@ function App() {
           ),
         });
       } catch (e) {
-        setError(e.message);
+        setError(e);
       }
     }
   }
@@ -342,25 +322,27 @@ function App() {
   if (!session)
     return (
       <main className="login">
+        <LanguageSelector />
         <h1>Smart Inventory</h1>
-        <p>{error || "Đang kết nối Server…"}</p>
+        <p>{(errorText(error) || uiText("Đang kết nối Server…"))}</p>
       </main>
     );
   if (!session.authenticated)
     return (
       <main className="login">
+        <LanguageSelector />
         <div className="logo">SI</div>
-        <p className="eyebrow">SMART INVENTORY / CONTROL CENTER</p>
-        <h1>Đăng nhập</h1>
-        <p className="muted">Quản lý thiết bị và hàng hóa tập trung.</p>
+        <p className="eyebrow">{uiText("SMART INVENTORY / CONTROL CENTER")}</p>
+        <h1>{uiText("Đăng nhập")}</h1>
+        <p className="muted">{uiText("Quản lý thiết bị và hàng hóa tập trung.")}</p>
         {error && (
           <p role="alert" className="error">
-            {error}
+            {errorText(error)}
           </p>
         )}
         <Form
           fields={[text("username"), { name: "password", type: "password" }]}
-          label="Đăng nhập"
+          label={uiText("Đăng nhập")}
           submit={(d) =>
             act(async () => {
               const s = await api("session", "POST", d);
@@ -375,29 +357,59 @@ function App() {
   const rows = Array.isArray(data) ? data : [];
   const permission = pages.find((p) => p[0] === page)[2];
   return (
-    <div className="shell">
+    <div className={"shell" + (collapsed ? " collapsed" : "")}>
       <aside>
         <div className="brand">
           <span className="logo">SI</span>
           <div>
-            Smart Inventory<small>CONTROL CENTER</small>
+            Smart Inventory<small>{uiText("CONTROL CENTER")}</small>
           </div>
         </div>
-        <nav>
-          {pages
-            .filter((p) => can(p[2], "ALL"))
-            .map((p, i) => (
-              <button
-                key={p[0]}
-                className={p[0] === page ? "active" : ""}
-                onClick={() => navigate(p[0])}
-              >
-                <span>{String(i + 1).padStart(2, "0")}</span>
-                {p[0]}
-              </button>
-            ))}
+        <button
+          className="collapse-button"
+          aria-label={collapsed ? uiText("Mở rộng sidebar") : uiText("Thu gọn sidebar")}
+          aria-expanded={!collapsed}
+          onClick={() => setCollapsed((v) => !v)}
+        >
+          <Icon name="collapse" />
+          <span>{uiText("Thu gọn")}</span>
+        </button>
+        <nav aria-label={uiText("Điều hướng chính")}>
+          {[
+            ["Overview", ["Dashboard"], "grid"],
+            ["Inventory", ["Inventory", "Storage Map", "Transactions"], "box"],
+            ["Devices", ["IPC Devices", "Cabinets"], "device"],
+            ["Monitoring", ["Environment", "Alarms", "Audit Logs"], "activity"],
+            [
+              "Administration",
+              ["Users", "Roles & Permissions", "Settings"],
+              "users",
+            ],
+          ].map(([group, names, icon]) => {
+            const visible = pages.filter(
+              (p) => names.includes(p[0]) && can(p[2], "ALL"),
+            );
+            return visible.length ? (
+              <div className="nav-group" key={group}>
+                <small className="nav-label">{uiText(group)}</small>
+                {visible.map((p) => (
+                  <button
+                    key={p[0]}
+                    title={uiText(p[0])}
+                    aria-current={p[0] === page ? "page" : undefined}
+                    className={p[0] === page ? "active" : ""}
+                    onClick={() => navigate(p[0])}
+                  >
+                    <Icon name={p[0] === "Settings" ? "settings" : icon} />
+                    <span className="nav-text">{uiText(p[0])}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null;
+          })}
         </nav>
         <div className="account">
+          <LanguageSelector />
           <strong>{session.username}</strong>
           <button
             className="secondary"
@@ -406,23 +418,12 @@ function App() {
                 () => {},
               )
             }
-          >
-            Đăng xuất
-          </button>
+          > {uiText("Đăng xuất")} </button>
         </div>
       </aside>
       <main>
-        <header>
-          <div>
-            <p className="eyebrow">OPERATIONS WORKSPACE</p>
-            <h1>{page}</h1>
-            <p className="muted">
-              Thiết bị, dữ liệu và tồn kho trong một hệ thống.
-            </p>
-          </div>
-          <label className="source-filter">
-            Nguồn dữ liệu
-            <select
+        <PageHeader title={uiText(page)}>
+          <label className="source-filter"> {uiText("Nguồn dữ liệu")} <select
               value={source}
               onChange={(e) => {
                 setSource(e.target.value);
@@ -430,45 +431,37 @@ function App() {
                 setFilters({});
               }}
             >
-              <option value="REAL">[REAL] Thực tế</option>
-              <option value="SIMULATION">[SIM] Mô phỏng</option>
-              <option value="ALL">ALL · Tất cả</option>
+              <option value="REAL">{uiText("[REAL] Thực tế")}</option>
+              <option value="SIMULATION">{uiText("[SIM] Mô phỏng")}</option>
+              <option value="ALL">{uiText("ALL · Tất cả")}</option>
             </select>
           </label>
-        </header>
+        </PageHeader>
         <div className="toolbar">
           <span>
             <Badge source={source} />{" "}
-            {source === "REAL"
-              ? "Ưu tiên dữ liệu thực tế"
-              : source === "SIMULATION"
-                ? "Dữ liệu mô phỏng"
-                : "Thực tế trước, mô phỏng sau"}
+            {source === "REAL" ? uiText("Ưu tiên dữ liệu thực tế") : source === "SIMULATION" ? uiText("Dữ liệu mô phỏng") : uiText("Thực tế trước, mô phỏng sau")}
           </span>
           <button
             className="secondary"
             onClick={() => setVersion((v) => v + 1)}
-          >
-            Làm mới
-          </button>
+          > {uiText("Làm mới")} </button>
         </div>
         {error && (
           <p role="alert" className="error">
-            {error}
+            {errorText(error)}
           </p>
         )}
         {notice && (
           <p role="status" className="notice">
-            {notice}
+            {uiText(notice)}
           </p>
         )}
-        {busy && <p role="status">Đang xử lý…</p>}
+        {busy && <p role="status">{uiText("Đang xử lý…")}</p>}
         {!can(permission) && (
-          <p className="empty">
-            Bạn không có quyền xem nguồn đã chọn. Hãy đổi bộ lọc nguồn.
-          </p>
+          <p className="empty"> {uiText("Bạn không có quyền xem nguồn đã chọn. Hãy đổi bộ lọc nguồn.")} </p>
         )}
-        {data === null && !error && <p role="status">Đang tải…</p>}
+        {data === null && !error && <LoadingState />}
         {page === "Dashboard" && can("inventory.view") && (
           <Inventory
             api={api}
@@ -488,17 +481,14 @@ function App() {
               ["Cabinets", data.cabinet_groups],
               ["Racks", data.racks],
             ].map(([label, value]) => (
-              <article key={label}>
-                <span>{label}</span>
-                <strong>{value}</strong>
-              </article>
+              <KpiCard key={label} label={uiText(label)} value={value} />
             ))}
           </div>
         )}
         {page === "IPC Devices" && (
           <>
             <section>
-              <h2>Kết nối và đồng bộ</h2>
+              <h2>{uiText("Kết nối và đồng bộ")}</h2>
               <Table
                 rows={rows}
                 onSelect={open}
@@ -558,7 +548,7 @@ function App() {
             )}
             {can("ipc.manage") && (
               <section>
-                <h2>Đăng ký IPC</h2>
+                <h2>{uiText("Đăng ký IPC")}</h2>
                 <Form
                   fields={[
                     text("device_id"),
@@ -579,14 +569,14 @@ function App() {
         {page === "Cabinets" && (
           <>
             <section>
-              <h2>IPC → Cabinet Group → Rack</h2>
+              <h2> {uiText("IPC → Cabinet Group → Rack")} </h2>
               <Form
                 fields={[
                   { name: "ipc_id", optional: true },
                   number("cabinet_id", true),
                 ]}
                 initial={filters}
-                label="Lọc"
+                label={uiText("Lọc")}
                 submit={(d) =>
                   setFilters(
                     Object.fromEntries(Object.entries(d).filter(([, v]) => v)),
@@ -610,8 +600,7 @@ function App() {
             </section>
             {selection && (
               <section>
-                <p className="breadcrumb">
-                  Dashboard → {selection.ipc_id} → {selection.cabinet} →{" "}
+                <p className="breadcrumb"> {uiText("Dashboard →")} {selection.ipc_id} → {selection.cabinet} →{" "}
                   {selection.name}
                 </p>
                 <h2>
@@ -632,37 +621,15 @@ function App() {
                     "is_skewed",
                   ].map((k) => (
                     <div key={k}>
-                      <dt>{k.replaceAll("_", " ")}</dt>
+                      <dt>{fieldText(k)}</dt>
                       <dd>
-                        <Value value={selection[k]} />
+                        {['error', 'error_message', 'message', 'sync_error'].includes(k) ? errorText(selection[k]) : ['state', 'status', 'kind', 'severity', 'execution_state'].includes(k) ? statusText(selection[k]) : <Value value={selection[k]} />}
                       </dd>
                     </div>
                   ))}
                 </dl>
-                <div className="actions">
-                  {["OPEN", "CLOSE", "VENTILATE"].map((command) => (
-                    <button
-                      key={command}
-                      disabled={
-                        busy ||
-                        !selection.online ||
-                        !can("cabinet.control", selection.source_type)
-                      }
-                      onClick={() =>
-                        mutate(`racks/${selection.id}/commands`, "POST", {
-                          command,
-                          request_key: key(),
-                        }).catch(() => {})
-                      }
-                    >
-                      {command}
-                    </button>
-                  ))}
-                </div>
-                <p className="muted">
-                  Lệnh được gửi qua MQTT; trạng thái gửi chưa xác nhận thao tác
-                  vật lý.
-                </p>
+                <RackCommands key={selection.id} rack={selection} api={api} allowed={can("cabinet.control", selection.source_type)} />
+                <p className="muted"> {uiText("Lệnh được gửi qua MQTT; trạng thái gửi chưa xác nhận thao tác vật lý.")} </p>
               </section>
             )}
             <OperationPanel
@@ -673,7 +640,7 @@ function App() {
             />
             {can("ipc.manage") && (
               <section>
-                <h2>Cấu hình cabinet / rack</h2>
+                <h2>{uiText("Cấu hình cabinet / rack")}</h2>
                 <Form
                   fields={[
                     number("id"),
@@ -683,7 +650,7 @@ function App() {
                   ]}
                   submit={(d) => mutate("cabinets", "PATCH", d)}
                 />
-                <h3>Phân công cabinet cho IPC</h3>
+                <h3>{uiText("Phân công cabinet cho IPC")}</h3>
                 <Form
                   fields={[
                     number("cabinet_id"),
@@ -696,8 +663,8 @@ function App() {
           </>
         )}
         {page === "Environment" && (
-          <section>
-            <h2>Lịch sử môi trường</h2>
+          <section className="environment-panel">
+            <h2>{uiText("Lịch sử môi trường")}</h2>
             <Form
               fields={[
                 { name: "ipc_id", optional: true },
@@ -706,7 +673,7 @@ function App() {
                 { name: "from", type: "datetime-local", optional: true },
                 { name: "to", type: "datetime-local", optional: true },
               ]}
-              label="Lọc dữ liệu"
+              label={uiText("Lọc dữ liệu")}
               submit={(d) => {
                 for (const k of ["from", "to"])
                   if (d[k]) d[k] = new Date(d[k]).toISOString();
@@ -732,15 +699,15 @@ function App() {
         )}
         {page === "Alarms" && (
           <section>
-            <h2>Cảnh báo</h2>
+            <h2>{uiText("Cảnh báo")}</h2>
             <select
-              aria-label="Alarm status"
+              aria-label={uiText("Alarm status")}
               value={filters.active || ""}
               onChange={(e) => setFilters({ active: e.target.value })}
             >
-              <option value="">Tất cả trạng thái</option>
-              <option value="true">Active</option>
-              <option value="false">Cleared</option>
+              <option value="">{uiText("Tất cả trạng thái")}</option>
+              <option value="true">{uiText("Active")}</option>
+              <option value="false">{uiText("Cleared")}</option>
             </select>
             <Table
               rows={rows}
@@ -789,8 +756,8 @@ function App() {
         {page === "Storage Map" && (
           <>
             <section>
-              <h2>Vị trí lưu trữ</h2>
-              <p className="legend">○ Empty · ● Occupied · ▣ Reserved</p>
+              <h2>{uiText("Vị trí lưu trữ")}</h2>
+              <p className="legend">{uiText("○ Empty · ● Occupied · ▣ Reserved")}</p>
               {Object.entries(
                 Object.groupBy(
                   rows,
@@ -799,7 +766,7 @@ function App() {
                 ),
               ).map(([group, locations]) => (
                 <div className="storage-group" key={group}>
-                  <h3>{group}</h3>
+                  <h3>{uiText(group)}</h3>
                   <div className="positions">
                     {locations.map((r) => (
                       <button
@@ -809,7 +776,7 @@ function App() {
                       >
                         <Badge source={r.source_type} />
                         <strong>{r.code}</strong>
-                        <span>{r.status}</span>
+                        <span>{uiText(r.status)}</span>
                         <small>#{r.id}</small>
                       </button>
                     ))}
@@ -817,7 +784,7 @@ function App() {
                 </div>
               ))}
               {!rows.length && (
-                <p className="empty">Chưa cấu hình vị trí lưu trữ.</p>
+                <p className="empty">{uiText("Chưa cấu hình vị trí lưu trữ.")}</p>
               )}
               {selection && (
                 <div className="inset">
@@ -841,22 +808,20 @@ function App() {
                         .catch(() => {})
                     }
                   >
-                    {selection.status === "reserved" ? "Bỏ giữ chỗ" : "Giữ chỗ"}
+                    {selection.status === "reserved" ? uiText("Bỏ giữ chỗ") : uiText("Giữ chỗ")}
                   </button>
                 </div>
               )}
             </section>
             {can("inventory.create") && (
               <section>
-                <h2>Thêm vị trí theo topology</h2>
-                <label>
-                  Loại
-                  <select
+                <h2>{uiText("Thêm vị trí theo topology")}</h2>
+                <label> {uiText("Loại")} <select
                     value={master}
                     onChange={(e) => setMaster(e.target.value)}
                   >
-                    <option value="shelves">Shelf / Compartment</option>
-                    <option value="bins">Position</option>
+                    <option value="shelves">{uiText("Shelf / Compartment")}</option>
+                    <option value="bins">{uiText("Position")}</option>
                   </select>
                 </label>
                 <Form
@@ -875,12 +840,8 @@ function App() {
         {page === "Transactions" && (
           <>
             <section>
-              <h2>Ghi nhận giao dịch kho</h2>
-              <p>
-                Chỉ xác nhận sau khi kiểm tra hàng hóa thực tế. Để chỉnh tồn,
-                mở Inventory → chi tiết sản phẩm → Inventory Adjustment.
-                RETURN phải tham chiếu giao dịch BORROW.
-              </p>
+              <h2>{uiText("Ghi nhận giao dịch kho")}</h2>
+              <p> {uiText("Chỉ xác nhận sau khi kiểm tra hàng hóa thực tế. Để chỉnh tồn, mở Inventory → chi tiết sản phẩm → Inventory Adjustment. RETURN phải tham chiếu giao dịch BORROW.")} </p>
               <Form
                 disabled={!can("inventory.move") || busy}
                 fields={[
@@ -910,7 +871,7 @@ function App() {
               />
             </section>
             <section>
-              <h2>Lịch sử giao dịch</h2>
+              <h2>{uiText("Lịch sử giao dịch")}</h2>
               <Table
                 rows={rows}
                 columns={[
@@ -932,7 +893,7 @@ function App() {
         )}
         {page === "Audit Logs" && (
           <section>
-            <h2>Nhật ký kiểm toán</h2>
+            <h2>{uiText("Nhật ký kiểm toán")}</h2>
             <Table
               rows={rows}
               columns={[
@@ -951,7 +912,7 @@ function App() {
         )}
         {page === "Users" && (
           <section>
-            <h2>Người dùng</h2>
+            <h2>{uiText("Người dùng")}</h2>
             <Table
               rows={rows}
               onSelect={(r) => {
@@ -960,16 +921,14 @@ function App() {
               }}
               columns={["id", "username", "is_active", "roles"]}
             />
-            <h3>{edit ? "Cập nhật người dùng" : "Tạo người dùng"}</h3>
+            <h3>{edit ? uiText("Cập nhật người dùng") : uiText("Tạo người dùng")}</h3>
             <button
               className="secondary"
               onClick={() => {
                 setEdit(false);
                 setSelection(null);
               }}
-            >
-              Tạo mới
-            </button>
+            > {uiText("Tạo mới")} </button>
             <Form
               key={edit ? selection?.id : "new"}
               disabled={!canAll("user.manage")}
@@ -1004,10 +963,8 @@ function App() {
         )}
         {page === "Roles & Permissions" && (
           <section>
-            <h2>Roles & Permissions</h2>
-            <p>
-              Scope: REAL, SIMULATION hoặc ALL. Quyền được kiểm tra tại backend.
-            </p>
+            <h2>{uiText("Roles & Permissions")}</h2>
+            <p> {uiText("Scope: REAL, SIMULATION hoặc ALL. Quyền được kiểm tra tại backend.")} </p>
             <Table
               rows={rows}
               onSelect={(r) => {
@@ -1016,16 +973,14 @@ function App() {
               }}
               columns={["id", "name", "permissions"]}
             />
-            <h3>{edit ? "Cập nhật role" : "Tạo role"}</h3>
+            <h3>{edit ? uiText("Cập nhật role") : uiText("Tạo role")}</h3>
             <button
               className="secondary"
               onClick={() => {
                 setEdit(false);
                 setSelection(null);
               }}
-            >
-              Tạo mới
-            </button>
+            > {uiText("Tạo mới")} </button>
             <RoleForm
               key={edit ? selection?.id : "new"}
               initial={edit ? selection : null}
@@ -1040,11 +995,11 @@ function App() {
         )}
         {page === "Settings" && data && (
           <section>
-            <h2>Ngưỡng cảnh báo</h2>
+            <h2>{uiText("Ngưỡng cảnh báo")}</h2>
             <dl>
               {Object.entries(data).map(([k, v]) => (
                 <div key={k}>
-                  <dt>{k}</dt>
+                  <dt>{fieldText(k)}</dt>
                   <dd>{v}</dd>
                 </div>
               ))}
@@ -1056,9 +1011,7 @@ function App() {
               ]}
               submit={(d) => mutate("settings", "PATCH", d)}
             />
-            <p className="muted">
-              Ngưỡng áp dụng khi nhận mẫu telemetry tiếp theo.
-            </p>
+            <p className="muted"> {uiText("Ngưỡng áp dụng khi nhận mẫu telemetry tiếp theo.")} </p>
           </section>
         )}
         {["Environment", "Alarms", "Transactions", "Audit Logs"].includes(
@@ -1074,11 +1027,8 @@ function App() {
                   offset: Math.max(0, Number(filters.offset || 0) - 200),
                 })
               }
-            >
-              Trang tr??c
-            </button>
-            <span>
-              Trang {Math.floor(Number(filters.offset || 0) / 200) + 1}
+            > {uiText("Trang trước")} </button>
+            <span> {uiText("Trang")} {Math.floor(Number(filters.offset || 0) / 200) + 1}
             </span>
             <button
               className="secondary"
@@ -1089,19 +1039,16 @@ function App() {
                   offset: Number(filters.offset || 0) + 200,
                 })
               }
-            >
-              Trang sau
-            </button>
+            > {uiText("Trang sau")} </button>
           </div>
         )}
-        <footer>
-          SMART INVENTORY · Server-managed inventory · Auto refresh 10s
-        </footer>
+        <footer> {uiText("SMART INVENTORY · Server-managed inventory · Auto refresh 10s")} </footer>
       </main>
     </div>
   );
 }
 function RoleForm({ initial, submit }) {
+  useLanguage();
   const [permissions, setPermissions] = useState([]),
     [grants, setGrants] = useState(initial?.permissions || []),
     [name, setName] = useState(initial?.name || ""),
@@ -1124,9 +1071,7 @@ function RoleForm({ initial, submit }) {
         }
       }}
     >
-      <label>
-        Role name
-        <input
+      <label> {uiText("Role name")} <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
@@ -1147,19 +1092,20 @@ function RoleForm({ initial, submit }) {
                 ])
               }
             >
-              <option value="">Không cấp</option>
+              <option value="">{uiText("Không cấp")}</option>
               {["REAL", "SIMULATION", "ALL"].map((s) => (
-                <option key={s}>{s}</option>
+                <option key={s} value={s}>{uiText(s)}</option>
               ))}
             </select>
           </label>
         ))}
       </div>
-      <button disabled={busy}>Lưu role</button>
+      <button disabled={busy}>{uiText("Lưu role")}</button>
     </form>
   );
 }
 function OperationPanel({ source, can, act, version }) {
+  useLanguage();
   const [rows, setRows] = useState([]),
     [error, setError] = useState(""),
     [selected, setSelected] = useState(null);
@@ -1174,7 +1120,7 @@ function OperationPanel({ source, can, act, version }) {
           }
         })
         .catch((e) => {
-          if (live) setError(e.message);
+          if (live) setError(e);
         });
     setSelected(null);
     load();
@@ -1186,8 +1132,8 @@ function OperationPanel({ source, can, act, version }) {
   }, [source, version]);
   return (
     <section>
-      <h2>Trạng thái lệnh MQTT</h2>
-      {error && <p className="error">{error}</p>}
+      <h2>{uiText("Trạng thái lệnh MQTT")}</h2>
+      {error && <p className="error">{errorText(error)}</p>}
       <Table
         rows={rows}
         columns={[
@@ -1203,7 +1149,7 @@ function OperationPanel({ source, can, act, version }) {
       />
       {selected && (
         <>
-          <h3>Xác nhận kết quả #{selected.id}</h3>
+          <h3>{uiText("Xác nhận kết quả #")}{selected.id}</h3>
           <Form
             disabled={!can("cabinet.control", selected.source_type)}
             fields={[

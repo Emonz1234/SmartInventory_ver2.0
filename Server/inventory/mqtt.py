@@ -85,6 +85,14 @@ def receive(route, raw):
         elif kind == "events.command_result":
             op = Operation.objects.select_for_update().get(pk=message["command_id"], device=device)
             state = payload["state"]
+            execution = payload.get('execution_state')
+            if execution is not None:
+                from .services import command_payload
+                expected = command_payload(op)
+                if (device.device_type != 'IPCSIM' or execution not in {'moving', 'completed', 'fault'}
+                    or payload.get('address') != expected['address'] or payload.get('action') != expected['action']
+                    or payload.get('cabinet_index') != (expected['address']-1)//6+1 or state != 'sent'):
+                    raise ValueError('Execution result does not match assigned command')
             if state not in {"sent", "uncertain", "expired", "confirmed", "failed"}:
                 raise ValueError("Invalid device operation state")
             if state in {"confirmed", "failed"} and op.state != state:
@@ -95,6 +103,11 @@ def receive(route, raw):
                     op.execution_state = 'sent_to_serial' if state == 'sent' else state
                     op.execution_updated_at = timezone.now()
                 op.save(update_fields=["state", "execution_state", "execution_updated_at"])
+            if execution and op.state not in {'confirmed', 'failed', 'cancelled'} and op.execution_state != 'completed':
+                op.execution_state, op.execution_updated_at = execution, timezone.now()
+                op.save(update_fields=['execution_state', 'execution_updated_at'])
+            RuntimeEvent.objects.create(device=device, message_id=message['message_id'], payload={**payload, 'command_id': str(op.pk)})
+            log.info('command.result device=%s command=%s state=%s execution=%s', device.pk, op.pk, state, op.execution_state)
             Outbox.objects.filter(device=device, channel="command", body__message_type="command.execute", body__command_id=str(op.pk)).update(acknowledged=True)
         elif kind in {"telemetry.sample", "events.serial"}:
             address = payload.get("rack_id")
@@ -204,6 +217,8 @@ def run_worker(stop=None):
                     info = client.publish(topic(out.device_id, "down", out.channel), encode(out.body), qos=1)
                     info.wait_for_publish(timeout=3)
                     if info.is_published():
+                        if out.body['message_type'] == 'command.execute':
+                            log.info('command.publish device=%s command=%s attempt=%s', out.device_id, out.body['command_id'], out.attempts+1)
                         update = {"sent_at": timezone.now(), "attempts": out.attempts+1}
                         if out.channel in {"ack", "status"}:
                             update["acknowledged"] = True

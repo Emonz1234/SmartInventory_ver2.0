@@ -1,3 +1,4 @@
+import { t as uiText, errorText, useLanguage } from '../i18n';
 import { useState, useEffect } from 'react'
 import {
   Box,
@@ -34,6 +35,7 @@ import { cabinetAPI } from '@api/cabinet'
 import { systemAPI } from '@api/system'
 
 export const Inventory = () => {
+  useLanguage();
   const [search, setSearch] = useState('')
   const [debounced, setDebounced] = useState('')
   const [selectedItem, setSelectedItem] = useState<any | null>(null)
@@ -58,7 +60,7 @@ export const Inventory = () => {
     isCloseComplete: boolean
   } | null>(null)
   const [completingOperation, setCompletingOperation] = useState(false)
-  const [rackError, setRackError] = useState<string | null>(null)
+  const [rackError, setRackError] = useState<any>(null)
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(search), 300)
@@ -212,7 +214,7 @@ export const Inventory = () => {
           await cabinetAPI.openRack(rackInfo.rackId)
         } catch (err: any) {
           const message = err?.response?.data?.detail || 'Failed to open rack.'
-          setRackError(message)
+          setRackError(err || message)
           console.error('Failed to open rack:', err)
         }
       }
@@ -254,7 +256,7 @@ export const Inventory = () => {
           await cabinetAPI.openRack(rackInfo.rackId)
         } catch (err: any) {
           const message = err?.response?.data?.detail || 'Failed to open rack.'
-          setRackError(message)
+          setRackError(err || message)
           console.error('Failed to open rack:', err)
         }
       }
@@ -290,7 +292,7 @@ export const Inventory = () => {
       await cabinetAPI.closeRack(rackOperationData.rackId)
     } catch (err: any) {
       const message = err?.response?.data?.detail || 'Failed to close rack.'
-      setRackError(message)
+      setRackError(err || message)
       console.error('Failed to close rack:', err)
       setCompletingOperation(false)
     }
@@ -334,19 +336,15 @@ export const Inventory = () => {
     <Box>
       <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ md: 'center' }} spacing={1} sx={{ mb: 3 }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 'bold', letterSpacing: '-0.02em' }}>
-            Inventory Management
-          </Typography>
-          <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            Search stock, inspect locations and start rack operations.
-          </Typography>
+          <Typography variant="h4" sx={{ fontWeight: 'bold', letterSpacing: '-0.02em' }}> {uiText("Inventory Management")} </Typography>
+          <Typography color="text.secondary" sx={{ mt: 0.5 }}> {uiText("Search stock, inspect locations and start rack operations.")} </Typography>
         </Box>
-        <Chip icon={<Inventory2 />} label={`${inventoryItems.length} item types`} color="primary" variant="outlined" />
+        <Chip icon={<Inventory2 />} label={uiText("{0} item types", inventoryItems.length)} color="primary" variant="outlined" />
       </Stack>
 
       {rackError && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          {rackError}
+          {errorText(rackError)}
         </Alert>
       )}
 
@@ -356,9 +354,9 @@ export const Inventory = () => {
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="center">
                 <Box>
-                  <Typography variant="body2" color="text.secondary">Total stock</Typography>
+                  <Typography variant="body2" color="text.secondary">{uiText("Total stock")}</Typography>
                   <Typography variant="h4" sx={{ fontWeight: 'bold', mt: 0.5 }}>{totalStock}</Typography>
-                  <Typography variant="caption" color="text.secondary">Units across inventory</Typography>
+                  <Typography variant="caption" color="text.secondary">{uiText("Units across inventory")}</Typography>
                 </Box>
                 <Inventory2 color="primary" sx={{ fontSize: 36 }} />
               </Stack>
@@ -370,9 +368,9 @@ export const Inventory = () => {
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="center">
                 <Box>
-                  <Typography variant="body2" color="text.secondary">Low stock</Typography>
+                  <Typography variant="body2" color="text.secondary">{uiText("Low stock")}</Typography>
                   <Typography variant="h4" sx={{ fontWeight: 'bold', mt: 0.5 }}>{lowStockItems}</Typography>
-                  <Typography variant="caption" color="text.secondary">Items below minimum</Typography>
+                  <Typography variant="caption" color="text.secondary">{uiText("Items below minimum")}</Typography>
                 </Box>
                 <WarningAmber color={lowStockItems ? 'warning' : 'success'} sx={{ fontSize: 36 }} />
               </Stack>
@@ -384,9 +382,9 @@ export const Inventory = () => {
             <CardContent>
               <Stack direction="row" justifyContent="space-between" alignItems="center">
                 <Box>
-                  <Typography variant="body2" color="text.secondary">Storage locations</Typography>
+                  <Typography variant="body2" color="text.secondary">{uiText("Storage locations")}</Typography>
                   <Typography variant="h4" sx={{ fontWeight: 'bold', mt: 0.5 }}>{locationCount}</Typography>
-                  <Typography variant="caption" color="text.secondary">Locations currently assigned</Typography>
+                  <Typography variant="caption" color="text.secondary">{uiText("Locations currently assigned")}</Typography>
                 </Box>
                 <LocationOn color="info" sx={{ fontSize: 36 }} />
               </Stack>
@@ -402,14 +400,14 @@ export const Inventory = () => {
             <CardContent sx={{ p: { xs: 2, md: 2.5 } }}>
               <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1.5} sx={{ mb: 2 }}>
                 <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>Stock overview</Typography>
-                  <Typography variant="body2" color="text.secondary">Select an item to see its rack locations.</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>{uiText("Stock overview")}</Typography>
+                  <Typography variant="body2" color="text.secondary">{uiText("Select an item to see its rack locations.")}</Typography>
                 </Box>
-                <Chip label={`${filtered.length} results`} size="small" variant="outlined" />
+                <Chip label={uiText("{0} results", filtered.length)} size="small" variant="outlined" />
               </Stack>
               <TextField
                 fullWidth
-                placeholder="Search code, item name or location..."
+                placeholder={uiText("Search code, item name or location...")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 InputProps={{ startAdornment: <InputAdornment position="start"><Search color="action" /></InputAdornment> }}
@@ -419,19 +417,19 @@ export const Inventory = () => {
                 <Table stickyHeader size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell>Item Code</TableCell>
-                      <TableCell>Item Name</TableCell>
-                      <TableCell align="right">Quantity</TableCell>
-                      <TableCell>Unit</TableCell>
-                      <TableCell>Location</TableCell>
-                      <TableCell align="center">Action</TableCell>
+                      <TableCell>{uiText("Item Code")}</TableCell>
+                      <TableCell>{uiText("Item Name")}</TableCell>
+                      <TableCell align="right">{uiText("Quantity")}</TableCell>
+                      <TableCell>{uiText("Unit")}</TableCell>
+                      <TableCell>{uiText("Location")}</TableCell>
+                      <TableCell align="center">{uiText("Action")}</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {inventoryQuery.isLoading ? (
                       Array.from({ length: 5 }).map((_, index) => <TableRow key={index}><TableCell colSpan={6}><Skeleton /></TableCell></TableRow>)
                     ) : filtered.length === 0 ? (
-                      <TableRow><TableCell colSpan={6} align="center"><Typography color="text.secondary" sx={{ py: 5 }}>No inventory items match your search.</Typography></TableCell></TableRow>
+                      <TableRow><TableCell colSpan={6} align="center"><Typography color="text.secondary" sx={{ py: 5 }}>{uiText("No inventory items match your search.")}</Typography></TableCell></TableRow>
                     ) : filtered.map((item: any) => {
                       const quantity = Number(item.total_quantity ?? item.qty ?? 0)
                       const minimum = Number(item.min_qty ?? item.minimum_quantity ?? 0)
@@ -443,19 +441,18 @@ export const Inventory = () => {
                         onClick={() => setSelectedItem(item)}
                         sx={{ cursor: 'pointer' }}
                       >
-                        <TableCell sx={{ fontWeight: 'bold', color: 'primary.main' }}>{item.item_code ?? item.code}</TableCell>
-                        <TableCell>{item.item_name ?? item.name}</TableCell>
+                        <TableCell sx={{ fontWeight: 'bold', color: 'primary.main' }}>{(item.item_code ?? item.code)}</TableCell>
+                        <TableCell>{(item.item_name ?? item.name)}</TableCell>
                         <TableCell align="right"><Chip label={quantity} size="small" color={isLowStock ? 'warning' : 'default'} /></TableCell>
-                        <TableCell>{item.unit ?? '--'}</TableCell>
+                        <TableCell>{(item.unit ?? '--')}</TableCell>
                         <TableCell>
                           <Stack direction="row" alignItems="center" spacing={0.5}>
                             <LocationOn sx={{ fontSize: 16 }} color="action" />
-                            <span>{(item.locations && item.locations[0] && item.locations[0].location_path) || item.location || '--'}</span>
+                            <span>{(((item.locations && item.locations[0] && item.locations[0].location_path) || item.location) || '--')}</span>
                           </Stack>
                           {item.locations && item.locations.length > 1 && (
                             <Typography variant="caption" display="block" color="textSecondary">
-                              +{item.locations.length - 1} more
-                            </Typography>
+                              +{item.locations.length - 1} {uiText("more")} </Typography>
                           )}
                         </TableCell>
                         <TableCell align="center">
@@ -486,9 +483,7 @@ export const Inventory = () => {
                     if (menuItem) setSelectedItem(menuItem)
                     setMenuAnchorEl(null)
                   }}
-                >
-                  View details
-                </MenuItem>
+                > {uiText("View details")} </MenuItem>
                 <MenuItem
                   onClick={() => {
                     if (menuItem) {
@@ -497,9 +492,7 @@ export const Inventory = () => {
                     }
                     setMenuAnchorEl(null)
                   }}
-                >
-                  Pick
-                </MenuItem>
+                > {uiText("Pick")} </MenuItem>
                 <MenuItem
                   onClick={() => {
                     if (menuItem) {
@@ -508,9 +501,7 @@ export const Inventory = () => {
                     }
                     setMenuAnchorEl(null)
                   }}
-                >
-                  Put
-                </MenuItem>
+                > {uiText("Put")} </MenuItem>
               </Menu>
             </CardContent>
           </Card>
@@ -524,10 +515,10 @@ export const Inventory = () => {
                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
                   <Box>
                     <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      {selectedItem.item_name ?? selectedItem.name}
+                      {(selectedItem.item_name ?? selectedItem.name)}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                      {selectedItem.item_code ?? selectedItem.code}
+                      {(selectedItem.item_code ?? selectedItem.code)}
                     </Typography>
                   </Box>
                   <Chip icon={<Info />} label="Selected" size="small" color="primary" variant="outlined" />
@@ -535,47 +526,37 @@ export const Inventory = () => {
                 <Divider sx={{ my: 2 }} />
                 <Stack spacing={2}>
                   <Box sx={{ p: 1.5, bgcolor: 'grey.50', borderRadius: 2 }}>
-                    <Typography variant="caption" color="textSecondary">
-                      Item Code
-                    </Typography>
-                    <Typography sx={{ fontWeight: 'bold' }}>{selectedItem.item_code ?? selectedItem.code}</Typography>
+                    <Typography variant="caption" color="textSecondary"> {uiText("Item Code")} </Typography>
+                    <Typography sx={{ fontWeight: 'bold' }}>{(selectedItem.item_code ?? selectedItem.code)}</Typography>
                   </Box>
                   <Box sx={{ p: 1.5, bgcolor: 'grey.50', borderRadius: 2 }}>
-                    <Typography variant="caption" color="textSecondary">
-                      Current Stock
-                    </Typography>
+                    <Typography variant="caption" color="textSecondary"> {uiText("Current Stock")} </Typography>
                     <Stack direction="row" alignItems="baseline" spacing={1}>
-                      <Typography variant="h5" sx={{ fontWeight: 'bold' }}>{selectedItem.total_quantity ?? selectedItem.qty}</Typography>
+                      <Typography variant="h5" sx={{ fontWeight: 'bold' }}>{(selectedItem.total_quantity ?? selectedItem.qty)}</Typography>
                       <Typography color="text.secondary">{selectedItem.unit}</Typography>
                     </Stack>
                   </Box>
                   <Box>
-                    <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                      Storage locations
-                    </Typography>
+                    <Typography variant="subtitle2" sx={{ mb: 1 }}> {uiText("Storage locations")} </Typography>
                     {selectedItem.locations && selectedItem.locations.length > 0 ? (
                       <Stack spacing={1}>
                         {selectedItem.locations.map((loc: any) => (
                           <Stack key={loc.id} direction="row" justifyContent="space-between" alignItems="center" sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1.5 }}>
                             <Stack direction="row" spacing={0.75} alignItems="center">
                               <LocationOn sx={{ fontSize: 17 }} color="action" />
-                              <Typography variant="body2">{loc.location_path || 'Unknown'}</Typography>
+                              <Typography variant="body2">{(loc.location_path || 'Unknown')}</Typography>
                             </Stack>
-                            <Chip label={`${loc.quantity} ${selectedItem.unit || ''}`} size="small" />
+                            <Chip label={`${loc.quantity} ${(selectedItem.unit || '')}`} size="small" />
                           </Stack>
                         ))}
                       </Stack>
                     ) : (
-                      <Typography variant="body2" color="text.secondary">No storage location assigned.</Typography>
+                      <Typography variant="body2" color="text.secondary">{uiText("No storage location assigned.")}</Typography>
                     )}
                   </Box>
                   <Stack direction="row" spacing={1}>
-                    <Button variant="contained" color="warning" startIcon={<Remove />} size="small" fullWidth onClick={() => setPickOpen(true)} sx={{ minHeight: 42 }}>
-                      Pick
-                    </Button>
-                    <Button variant="outlined" color="success" startIcon={<Add />} size="small" fullWidth onClick={() => setPutOpen(true)} sx={{ minHeight: 42 }}>
-                      Put
-                    </Button>
+                    <Button variant="contained" color="warning" startIcon={<Remove />} size="small" fullWidth onClick={() => setPickOpen(true)} sx={{ minHeight: 42 }}> {uiText("Pick")} </Button>
+                    <Button variant="outlined" color="success" startIcon={<Add />} size="small" fullWidth onClick={() => setPutOpen(true)} sx={{ minHeight: 42 }}> {uiText("Put")} </Button>
                   </Stack>
                 </Stack>
               </CardContent>
@@ -585,24 +566,22 @@ export const Inventory = () => {
 
         {/* Pick Dialog */}
         <Dialog open={pickOpen} onClose={() => setPickOpen(false)}>
-          <DialogTitle>Pick Item</DialogTitle>
+          <DialogTitle>{uiText("Pick Item")}</DialogTitle>
           <DialogContent>
-            <Typography>Item: {selectedItem?.item_name ?? selectedItem?.name}</Typography>
-            <TextField label="Quantity" type="number" value={qty} onChange={(e) => setQty(Number(e.target.value))} fullWidth sx={{ mt: 2 }} />
+            <Typography>{uiText("Item:")} {(selectedItem?.item_name ?? selectedItem?.name)}</Typography>
+            <TextField label={uiText("Quantity")} type="number" value={qty} onChange={(e) => setQty(Number(e.target.value))} fullWidth sx={{ mt: 2 }} />
           </DialogContent>
           <DialogActions>
             <Button onClick={() => {
               setPickOpen(false)
               setQty(0)
-            }}>Cancel</Button>
+            }}>{uiText("Cancel")}</Button>
             <Button
               onClick={handlePickConfirm}
               variant="contained"
               color="success"
               disabled={!hasValidQuantity}
-            >
-              Confirm Pick
-            </Button>
+            > {uiText("Confirm Pick")} </Button>
           </DialogActions>
         </Dialog>
 
@@ -611,55 +590,45 @@ export const Inventory = () => {
           setPutOpen(false)
           setQty(0)
         }}>
-          <DialogTitle>Put Item</DialogTitle>
+          <DialogTitle>{uiText("Put Item")}</DialogTitle>
           <DialogContent>
-            <Typography>Item: {selectedItem?.item_name ?? selectedItem?.name}</Typography>
-            <TextField label="Quantity" type="number" value={qty} onChange={(e) => setQty(Number(e.target.value))} fullWidth sx={{ mt: 2 }} />
+            <Typography>{uiText("Item:")} {(selectedItem?.item_name ?? selectedItem?.name)}</Typography>
+            <TextField label={uiText("Quantity")} type="number" value={qty} onChange={(e) => setQty(Number(e.target.value))} fullWidth sx={{ mt: 2 }} />
           </DialogContent>
           <DialogActions>
             <Button onClick={() => {
               setPutOpen(false)
               setQty(0)
-            }}>Cancel</Button>
+            }}>{uiText("Cancel")}</Button>
             <Button
               onClick={handlePutConfirm}
               variant="contained"
               color="primary"
               disabled={!hasValidQuantity}
-            >
-              Confirm Put
-            </Button>
+            > {uiText("Confirm Put")} </Button>
           </DialogActions>
         </Dialog>
 
         {/* Rack Notification Dialog */}
         <Dialog open={rackNotificationOpen} onClose={() => {}} maxWidth="sm" fullWidth>
           <DialogTitle sx={{ fontWeight: 'bold', pb: 1 }}>
-            {rackOperationData?.operationType === 'pick' ? 'Pick Item' : 'Put Item'}
+            {rackOperationData?.operationType === 'pick' ? uiText('Pick Item') : uiText('Put Item')}
           </DialogTitle>
 
           <DialogContent sx={{ pt: 2 }}>
             {isCloseSuccess ? (
               <Box sx={{ textAlign: 'center', py: 3 }}>
                 <CheckCircle sx={{ fontSize: 80, color: 'green', mb: 2 }} />
-                <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 1 }}>
-                  Rack Closed Successfully!
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  Simulation completion confirmed. The rack is fully closed.
-                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 1 }}> {uiText("Rack Closed Successfully!")} </Typography>
+                <Typography variant="body2" color="textSecondary"> {uiText("Simulation completion confirmed. The rack is fully closed.")} </Typography>
               </Box>
             ) : isClosingRack ? (
               <Stack spacing={3}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 2 }}>
                   <CircularProgress size={40} sx={{ mr: 2 }} />
                   <Stack spacing={0.5}>
-                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                      Waiting for rack to close...
-                    </Typography>
-                    <Typography variant="caption" color="textSecondary">
-                      Please wait while the rack is closing.
-                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}> {uiText("Waiting for rack to close...")} </Typography>
+                    <Typography variant="caption" color="textSecondary"> {uiText("Please wait while the rack is closing.")} </Typography>
                   </Stack>
                 </Box>
 
@@ -679,12 +648,8 @@ export const Inventory = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 2 }}>
                   <CircularProgress size={40} sx={{ mr: 2 }} />
                   <Stack spacing={0.5}>
-                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                      Waiting for rack to open...
-                    </Typography>
-                    <Typography variant="caption" color="textSecondary">
-                      Please wait while the rack is opening.
-                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}> {uiText("Waiting for rack to open...")} </Typography>
+                    <Typography variant="caption" color="textSecondary"> {uiText("Please wait while the rack is opening.")} </Typography>
                   </Stack>
                 </Box>
 
@@ -699,19 +664,13 @@ export const Inventory = () => {
                   </CardContent>
                 </Card>
 
-                <Alert severity="info" sx={{ fontSize: '0.85rem' }}>
-                  Please wait until the rack is fully open.
-                </Alert>
+                <Alert severity="info" sx={{ fontSize: '0.85rem' }}> {uiText("Please wait until the rack is fully open.")} </Alert>
               </Stack>
             ) : (
               <Box sx={{ textAlign: 'center', py: 3 }}>
                 <CheckCircle sx={{ fontSize: 80, color: 'green', mb: 2 }} />
-                <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 1 }}>
-                  Rack Opened Successfully!
-                </Typography>
-                <Typography variant="body2" color="textSecondary">
-                  The rack is open. Please choose whether to close it or keep it open.
-                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 1 }}> {uiText("Rack Opened Successfully!")} </Typography>
+                <Typography variant="body2" color="textSecondary"> {uiText("The rack is open. Please choose whether to close it or keep it open.")} </Typography>
               </Box>
             )}
           </DialogContent>
@@ -728,9 +687,7 @@ export const Inventory = () => {
                 variant="contained"
                 color="success"
                 fullWidth
-              >
-                Done
-              </Button>
+              > {uiText("Done")} </Button>
             ) : rackOperationData?.isRackOpened ? (
               <Stack direction="row" spacing={1.5} sx={{ width: '100%' }}>
                 <Button
@@ -740,25 +697,21 @@ export const Inventory = () => {
                   disabled={completingOperation}
                   fullWidth
                 >
-                  {completingOperation ? 'Closing Rack...' : 'Close Rack'}
+                  {completingOperation ? uiText('Closing Rack...') : uiText('Close Rack')}
                 </Button>
                 <Button
                   onClick={handleKeepRackOpen}
                   variant="outlined"
                   color="inherit"
                   fullWidth
-                >
-                  Keep Rack Open
-                </Button>
+                > {uiText("Keep Rack Open")} </Button>
               </Stack>
             ) : isAwaitingRackAction || isClosingRack ? (
               <Button disabled fullWidth>
-                {isClosingRack ? 'Waiting for rack to close...' : 'Waiting for rack to open...'}
+                {isClosingRack ? uiText('Waiting for rack to close...') : uiText('Waiting for rack to open...')}
               </Button>
             ) : (
-              <Button disabled fullWidth>
-                Waiting for rack to open...
-              </Button>
+              <Button disabled fullWidth> {uiText("Waiting for rack to open...")} </Button>
             )}
           </DialogActions>
         </Dialog>

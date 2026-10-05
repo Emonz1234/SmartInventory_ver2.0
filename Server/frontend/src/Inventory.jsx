@@ -1,15 +1,15 @@
+import { t as uiText, errorText, useLanguage, LanguageSelector } from './i18n';
 import React, { useEffect, useRef, useState } from "react";
+import {
+  StatusBadge,
+  KpiCard,
+  LoadingState,
+  Pagination,
+  ErrorState,
+} from "./ui.jsx";
 
 const date = (value) => (value ? new Date(value).toLocaleString() : "—");
-export function Chip({ value }) {
-  return (
-    <span
-      className={"inv-chip " + String(value).toLowerCase().replaceAll(" ", "-")}
-    >
-      {value}
-    </span>
-  );
-}
+export const Chip = StatusBadge;
 const groups = (rows, field) =>
   rows.reduce(
     (all, row) => ({ ...all, [row[field]]: [...(all[row[field]] || []), row] }),
@@ -25,6 +25,7 @@ export default function Inventory({
   version,
   dashboard = false,
 }) {
+  useLanguage();
   const [data, setData] = useState(null),
     [error, setError] = useState(""),
     [reload, setReload] = useState(0);
@@ -43,6 +44,9 @@ export default function Inventory({
     [reason, setReason] = useState(""),
     [saving, setSaving] = useState(false),
     [saveError, setSaveError] = useState("");
+  const [productPage, setProductPage] = useState(0);
+  const [productSort, setProductSort] = useState(null);
+  useEffect(() => setProductPage(0), [source, query, filters]);
   const dialog = useRef(null),
     opener = useRef(null),
     requestKey = useRef(null);
@@ -62,7 +66,7 @@ export default function Inventory({
           }
         })
         .catch((e) => {
-          if (live) setError(e.message);
+          if (live) setError(e);
         });
     load();
     const timer = setInterval(load, 10000);
@@ -94,7 +98,7 @@ export default function Inventory({
         }
       })
       .catch((e) => {
-        if (live) setHistoryError(e.message);
+        if (live) setHistoryError(e);
       })
       .finally(() => {
         if (live) setHistoryBusy(false);
@@ -140,6 +144,30 @@ export default function Inventory({
       (!(filters.ipc_id || filters.cabinet_id) ||
         p.locations.some(matchesLocation)),
   );
+  const sortedProducts = productSort
+    ? [...products].sort((a, b) => {
+        const av = a[productSort.key],
+          bv = b[productSort.key];
+        return (
+          (typeof av === "number"
+            ? av - bv
+            : String(av ?? "").localeCompare(String(bv ?? ""), undefined, {
+                numeric: true,
+              })) * productSort.direction
+        );
+      })
+    : products;
+  const currentProductPage = Math.min(
+    productPage,
+    Math.max(0, Math.ceil(products.length / 20) - 1),
+  );
+  const sortProducts = (key) => {
+    setProductSort({
+      key,
+      direction: productSort?.key === key ? -productSort.direction : 1,
+    });
+    setProductPage(0);
+  };
   const locations = (data?.locations || []).filter(
     (l) =>
       matchesLocation(l) &&
@@ -153,11 +181,14 @@ export default function Inventory({
   );
   if (error)
     return (
-      <section role="alert" className="error">
-        {error} <button onClick={() => setReload((v) => v + 1)}>Thử lại</button>
+      <ErrorState retry={() => setReload((v) => v + 1)}>{errorText(error)}</ErrorState>
+    );
+  if (!data)
+    return (
+      <section>
+        <LoadingState>{uiText("Đang tải Inventory…")}</LoadingState>
       </section>
     );
-  if (!data) return <section role="status">Đang tải Inventory…</section>;
   if (dashboard)
     return (
       <>
@@ -194,15 +225,26 @@ export default function Inventory({
             ["Active IPC", data.devices.filter((d) => d.online).length],
             ["Offline IPC", data.devices.filter((d) => !d.online).length],
           ].map(([label, value]) => (
-            <article key={label}>
-              <span>{label}</span>
-              <strong>{value}</strong>
-            </article>
+            <KpiCard key={label} label={uiText(label)} value={value} />
           ))}
         </div>
         <div className="inv-dashboard">
+          <section className="device-overview">
+            <h2>{uiText("Device status")}</h2>
+            {data.devices.length ? (
+              data.devices.map((d) => (
+                <div className="device-summary" key={d.id}>
+                  <strong>{d.id}</strong>
+                  <Chip value={d.source_type} />
+                  <Chip value={d.online ? "Online" : "Offline"} />
+                </div>
+              ))
+            ) : (
+              <p className="empty">{uiText("Chưa có IPC trong nguồn đã chọn.")}</p>
+            )}
+          </section>
           <section>
-            <h2>Low Stock Products</h2>
+            <h2>{uiText("Low Stock Products")}</h2>
             {data.products
               .filter((p) => p.stock_status === "Low Stock")
               .slice(0, 6)
@@ -210,13 +252,13 @@ export default function Inventory({
                 <p key={p.id + p.source_type}>
                   {p.name} <Chip value={p.source_type} />{" "}
                   <strong>
-                    {p.quantity} / min {p.min_stock}
+                    {p.quantity} {uiText("/ min")} {p.min_stock}
                   </strong>
                 </p>
               ))}
           </section>
           <section>
-            <h2>Inventory Distribution by IPC</h2>
+            <h2>{uiText("Inventory Distribution by IPC")}</h2>
             {data.devices.map((d) => (
               <p key={d.id}>
                 {d.id} <Chip value={d.source_type} />{" "}
@@ -230,7 +272,7 @@ export default function Inventory({
           </section>
         </div>
         <section>
-          <h2>Recent PUT / PICK</h2>
+          <h2>{uiText("Recent PUT / PICK")}</h2>
           <History
             compact
             rows={data.transactions
@@ -244,7 +286,7 @@ export default function Inventory({
     <div className="inventory-workspace">
       {session.grants?.["inventory.create"]?.includes("ALL") && (
         <details className="inv-catalog">
-          <summary>Thêm sản phẩm vào danh mục</summary>
+          <summary>{uiText("Thêm sản phẩm vào danh mục")}</summary>
           <CatalogForm
             api={api}
             source={source}
@@ -261,7 +303,7 @@ export default function Inventory({
               aria-pressed={mode === v}
               onClick={() => setMode(v)}
             >
-              {v}
+              {uiText(v)}
             </button>
           ))}
         </div>
@@ -270,15 +312,11 @@ export default function Inventory({
             type="checkbox"
             checked={source !== "REAL"}
             onChange={(e) => setSource(e.target.checked ? "ALL" : "REAL")}
-          />{" "}
-          Show Simulation Data
-        </label>
+          />{" "} {uiText("Show Simulation Data")} </label>
       </div>
       <section className="inv-filter">
-        <label>
-          Search
-          <input
-            placeholder="Product Name / SKU / Barcode"
+        <label> {uiText("Search")} <input
+            placeholder={uiText("Product Name / SKU / Barcode")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -290,7 +328,7 @@ export default function Inventory({
           options={data.devices.map((d) => [d.id, d.id + " · " + d.name])}
         />
         <Select
-          label="Cabinet"
+          label={uiText("Cabinet")}
           value={filters.cabinet_id}
           onChange={(v) => change("cabinet_id", v)}
           options={[
@@ -302,78 +340,97 @@ export default function Inventory({
           ]}
         />
         <Select
-          label="Category"
+          label={uiText("Category")}
           value={filters.category}
           onChange={(v) => change("category", v)}
           options={[...new Set(data.products.map((p) => p.category))]}
         />
         <Select
-          label="Stock Status"
+          label={uiText("Stock Status")}
+          translateOptions
           value={filters.stock_status}
           onChange={(v) => change("stock_status", v)}
           options={["Normal", "Low Stock", "Out of Stock"]}
         />
         <Select
-          label="Sync Status"
+          label={uiText("Sync Status")}
+          translateOptions
           value={filters.sync_status}
           onChange={(v) => change("sync_status", v)}
           options={["Synced", "Pending", "Failed"]}
         />
       </section>
-      <p className="muted">
-        Tồn kho tách theo nguồn. Tổng của sản phẩm bao gồm mọi vị trí trong
-        nguồn đã chọn; bộ lọc IPC/Cabinet giúp tìm nơi chứa hàng. Available loại
-        trừ vị trí BUSY / FAULT.
-      </p>
+      <p className="muted"> {uiText("Tồn kho tách theo nguồn. Tổng của sản phẩm bao gồm mọi vị trí trong nguồn đã chọn; bộ lọc IPC/Cabinet giúp tìm nơi chứa hàng. Available loại trừ vị trí BUSY / FAULT.")} </p>
       {mode === "By Product" ? (
         <section>
           <div className="inv-product-head">
-            <span>Product / SKU / Category</span>
-            <span>Total / Available</span>
-            <span>Locations / Source</span>
-            <span>Stock / Sync</span>
-            <span>Last Updated / Action</span>
+            {[
+              ["name", "Product / SKU / Category"],
+              ["quantity", "Total / Available"],
+              ["source_type", "Locations / Source"],
+              ["stock_status", "Stock / Sync"],
+              ["last_updated", "Last Updated / Action"],
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                className="sort-button"
+                onClick={() => sortProducts(key)}
+              >
+                {uiText(label)}
+                <span aria-hidden="true">
+                  {productSort?.key === key ? productSort.direction === 1 ? "↑" : "↓" : "↕"}
+                </span>
+              </button>
+            ))}
           </div>
-          {products.map((p) => (
-            <article
-              className="inv-product-row"
-              key={p.id + p.source_type}
-              data-testid={"product-" + p.sku + "-" + p.source_type}
-            >
-              <div>
-                <button className="link" onClick={() => open(p)}>
-                  {p.name}
-                </button>
-                <small>
-                  {p.sku} · {p.category}
-                </small>
-              </div>
-              <div>
-                <strong>{p.quantity}</strong> {p.unit}
-                <small>Available: {p.available_quantity}</small>
-              </div>
-              <div>
-                <strong>{p.locations.length} locations</strong>
-                <small>
-                  <Chip value={p.source_type} />
-                </small>
-              </div>
-              <div>
-                <Chip value={p.stock_status} />
-                <small>
-                  <Chip value={p.sync_status} />
-                </small>
-              </div>
-              <div>
-                <small>{date(p.last_updated)}</small>
-                <button className="link" onClick={() => open(p)}>
-                  Chi tiết →
-                </button>
-              </div>
-            </article>
-          ))}
+          {sortedProducts
+            .slice(currentProductPage * 20, (currentProductPage + 1) * 20)
+            .map((p) => (
+              <article
+                className="inv-product-row"
+                key={p.id + p.source_type}
+                data-testid={"product-" + p.sku + "-" + p.source_type}
+              >
+                <div>
+                  <button className="link" onClick={() => open(p)}>
+                    {p.name}
+                  </button>
+                  <small>
+                    {p.sku} · {p.category}
+                  </small>
+                </div>
+                <div>
+                  <strong>{p.quantity}</strong> {p.unit}
+                  <small>{uiText("Available:")} {p.available_quantity}</small>
+                </div>
+                <div>
+                  <strong>{p.locations.length} {uiText("locations")}</strong>
+                  <small>
+                    <Chip value={p.source_type} />
+                  </small>
+                </div>
+                <div>
+                  <Chip value={p.stock_status} />
+                  <small>
+                    <Chip value={p.sync_status} />
+                  </small>
+                </div>
+                <div>
+                  <small>{date(p.last_updated)}</small>
+                  <button className="link" onClick={() => open(p)}> {uiText("Chi tiết →")} </button>
+                </div>
+              </article>
+            ))}
+          {products.length > 20 && (
+            <Pagination
+              page={currentProductPage}
+              total={products.length}
+              size={20}
+              onChange={setProductPage}
+            />
+          )}
           {!products.length && (
-            <p className="empty">Không có sản phẩm phù hợp. Hãy đổi bộ lọc.</p>
+            <p className="empty">{uiText("Không có sản phẩm phù hợp. Hãy đổi bộ lọc.")}</p>
           )}
         </section>
       ) : (
@@ -388,15 +445,16 @@ export default function Inventory({
                   <summary>{rs[0].cabinet || `Cabinet ${String(rs[0].cabinet_index).padStart(2, "0")}`}</summary>
                   {Object.entries(groups(rs, "rack_id")).map(([rack, bins]) => (
                     <details key={rack} open>
-                      <summary>{bins[0].rack_index ? `Rack ${String(bins[0].rack_index).padStart(2, "0")}` : bins[0].rack}</summary>
+                      <summary>
+                        {bins[0].rack_index ? `Rack ${String(bins[0].rack_index).padStart(2, "0")}` : bins[0].rack}
+                      </summary>
                       {bins.map((l) => (
                         <div className="inv-location" key={l.id}>
                           <div>
                             <strong>{l.location_code}</strong>{" "}
                             <Chip value={l.status} />{" "}
                             <Chip value={l.sync_status} />
-                            <small>
-                              Capacity: {l.quantity} / {l.capacity || "—"}
+                            <small> {uiText("Capacity:")} {l.quantity} / {(l.capacity || "—")}
                             </small>
                           </div>
                           {l.goods
@@ -425,7 +483,7 @@ export default function Inventory({
                               </button>
                             ))}
                           {!l.goods.length && (
-                            <span className="muted">Rack trống</span>
+                            <span className="muted">{uiText("Rack trống")}</span>
                           )}
                         </div>
                       ))}
@@ -436,7 +494,7 @@ export default function Inventory({
             </details>
           ))}
           {!locations.length && (
-            <p className="empty">Không có vị trí phù hợp.</p>
+            <p className="empty">{uiText("Không có vị trí phù hợp.")}</p>
           )}
         </section>
       )}
@@ -444,10 +502,12 @@ export default function Inventory({
         <dialog
           ref={dialog}
           className="inv-drawer"
+          aria-label={product.name}
           onCancel={close}
           onClose={close}
         >
           <div className="toolbar">
+            <LanguageSelector />
             <div>
               <h2>{product.name}</h2>
               <Chip value={product.source_type} />
@@ -455,10 +515,8 @@ export default function Inventory({
             <button
               className="secondary"
               onClick={close}
-              aria-label="Đóng chi tiết"
-            >
-              Đóng ×
-            </button>
+              aria-label={uiText("Đóng chi tiết")}
+            > {uiText("Đóng ×")} </button>
           </div>
           <dl className="inv-overview">
             {Object.entries({
@@ -472,7 +530,7 @@ export default function Inventory({
               "Max Stock": product.max_stock || "—",
             }).map(([k, v]) => (
               <div key={k}>
-                <dt>{k}</dt>
+                <dt>{uiText(k)}</dt>
                 <dd>{v}</dd>
               </div>
             ))}
@@ -480,7 +538,7 @@ export default function Inventory({
           <Chip value={product.stock_status} />
           {session.grants?.["inventory.update"]?.includes("ALL") && (
             <details className="inv-catalog">
-              <summary>Cập nhật thông tin sản phẩm</summary>
+              <summary>{uiText("Cập nhật thông tin sản phẩm")}</summary>
               <CatalogForm
                 key={product.id}
                 api={api}
@@ -502,7 +560,7 @@ export default function Inventory({
                   setHistoryOffset(0);
                 }}
               >
-                {t}
+                {uiText(t)}
               </button>
             ))}
           </div>
@@ -517,12 +575,11 @@ export default function Inventory({
                   <Chip value={l.source_type} /> <Chip value={l.status} />{" "}
                   <Chip value={l.sync_status} />
                 </div>
-                <p>
-                  Quantity: <b>{l.quantity}</b> · Available:{" "}
-                  {l.available_quantity} · Capacity: {l.occupied_quantity} /{" "}
-                  {l.capacity || "—"}
+                <p> {uiText("Quantity:")} <b>{l.quantity}</b> {uiText("· Available:")}{" "}
+                  {l.available_quantity} {uiText("· Capacity:")} {l.occupied_quantity} /{" "}
+                  {(l.capacity || "—")}
                 </p>
-                <small>Last Updated: {date(l.last_updated)}</small>
+                <small>{uiText("Last Updated:")} {date(l.last_updated)}</small>
                 {can("inventory.move", l.source_type) && (
                   <button
                     className="secondary"
@@ -536,22 +593,17 @@ export default function Inventory({
                       setSaveError("");
                       requestKey.current = crypto.randomUUID();
                     }}
-                  >
-                    Inventory Adjustment
-                  </button>
+                  > {uiText("Inventory Adjustment")} </button>
                 )}
               </article>
             ))
           ) : (
             <>
-              <p className="muted">
-                Sync Status phản ánh xác nhận dataset hiện tại của IPC; Failed
-                là giao dịch offline cần đối soát.
-              </p>
-              {historyBusy && <p role="status">Đang tải giao dịch…</p>}
+              <p className="muted"> {uiText("Sync Status phản ánh xác nhận dataset hiện tại của IPC; Failed là giao dịch offline cần đối soát.")} </p>
+              {historyBusy && <p role="status">{uiText("Đang tải giao dịch…")}</p>}
               {historyError && (
                 <p role="alert" className="error">
-                  {historyError}
+                  {errorText(historyError)}
                 </p>
               )}
               <History rows={historyRows} />
@@ -559,14 +611,12 @@ export default function Inventory({
                 <button
                   disabled={historyBusy}
                   onClick={() => setHistoryOffset((v) => v + 100)}
-                >
-                  Tải thêm giao dịch
-                </button>
+                > {uiText("Tải thêm giao dịch")} </button>
               )}
             </>
           )}
           {tab === "Locations" && !product.locations.length && (
-            <p className="empty">Sản phẩm chưa có vị trí trong nguồn này.</p>
+            <p className="empty">{uiText("Sản phẩm chưa có vị trí trong nguồn này.")}</p>
           )}
           {adjust && (
             <form
@@ -591,26 +641,19 @@ export default function Inventory({
                   );
                   setAdjust(null);
                 } catch (e) {
-                  setSaveError(e.message);
+                  setSaveError(e);
                 } finally {
                   setSaving(false);
                 }
               }}
             >
-              <h3>Inventory Adjustment</h3>
+              <h3>{uiText("Inventory Adjustment")}</h3>
               <p>{adjust.path}</p>
-              <p>
-                Current Quantity: <b>{adjust.quantity}</b> · Difference:{" "}
+              <p> {uiText("Current Quantity:")} <b>{adjust.quantity}</b> {uiText("· Difference:")}{" "}
                 <b>{Number(quantity) - adjust.quantity}</b>
               </p>
-              <p>
-                User: {session.username} · Timestamp: {date(adjust.reviewed_at)}{" "}
-                (thời điểm kiểm đếm; Server lưu thời điểm xác nhận trong lịch
-                sử)
-              </p>
-              <label>
-                New Quantity
-                <input
+              <p> {uiText("User:")} {session.username} {uiText("· Timestamp:")} {date(adjust.reviewed_at)}{" "} {uiText("(thời điểm kiểm đếm; Server lưu thời điểm xác nhận trong lịch sử)")} </p>
+              <label> {uiText("New Quantity")} <input
                   type="number"
                   min="0"
                   step="1"
@@ -622,9 +665,7 @@ export default function Inventory({
                   }}
                 />
               </label>
-              <label>
-                Reason
-                <textarea
+              <label> {uiText("Reason")} <textarea
                   required
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
@@ -632,7 +673,7 @@ export default function Inventory({
               </label>
               {saveError && (
                 <p role="alert" className="error">
-                  {saveError}
+                  {errorText(saveError)}
                 </p>
               )}
               <button
@@ -643,16 +684,14 @@ export default function Inventory({
                   Number(quantity) === adjust.quantity
                 }
               >
-                {saving ? "Đang lưu…" : "Xác nhận adjustment"}
+                {saving ? uiText("Đang lưu…") : uiText("Xác nhận adjustment")}
               </button>{" "}
               <button
                 type="button"
                 className="secondary"
                 disabled={saving}
                 onClick={() => setAdjust(null)}
-              >
-                Hủy
-              </button>
+              > {uiText("Hủy")} </button>
             </form>
           )}
         </dialog>
@@ -660,22 +699,23 @@ export default function Inventory({
     </div>
   );
 }
-function Select({ label, value, onChange, options }) {
+function Select({ label, value, onChange, options, translateOptions = false }) {
+  useLanguage();
   return (
     <label>
-      {label}
+      {uiText(label)}
       <select
-        aria-label={label}
+        aria-label={uiText(label)}
         value={value || ""}
         onChange={(e) => onChange(e.target.value)}
       >
-        <option value="">Tất cả</option>
+        <option value="">{uiText("Tất cả")}</option>
         {options.map((o) => (
           <option
             key={Array.isArray(o) ? o[0] : o}
             value={Array.isArray(o) ? o[0] : o}
           >
-            {Array.isArray(o) ? o[1] : o}
+            {translateOptions ? uiText(Array.isArray(o) ? o[1] : o) : Array.isArray(o) ? o[1] : o}
           </option>
         ))}
       </select>
@@ -683,13 +723,14 @@ function Select({ label, value, onChange, options }) {
   );
 }
 function History({ rows, compact = false }) {
+  useLanguage();
   return rows.length ? (
     <div className={"inv-history" + (compact ? " compact" : "")}>
       {rows.map((t) => (
         <article key={t.id}>
           <div>
             <strong>
-              {t.kind} · {t.product} × {t.quantity}
+              {uiText(t.kind)} · {t.product} × {t.quantity}
             </strong>
             {!compact && <small>{t.id}</small>}
           </div>
@@ -701,8 +742,7 @@ function History({ rows, compact = false }) {
             {t.ipc_id} / {t.cabinet} / {t.rack}
           </p>
           {!compact && (
-            <small>
-              User: {t.user} · Created: {date(t.created_at)} · Completed:{" "}
+            <small> {uiText("User:")} {t.user} {uiText("· Created:")} {date(t.created_at)} {uiText("· Completed:")}{" "}
               {date(t.completed_at)}
             </small>
           )}
@@ -712,10 +752,11 @@ function History({ rows, compact = false }) {
       ))}
     </div>
   ) : (
-    <p className="empty">Chưa có giao dịch trong nguồn đã chọn.</p>
+    <p className="empty">{uiText("Chưa có giao dịch trong nguồn đã chọn.")}</p>
   );
 }
 function CatalogForm({ api, source, product, onSave }) {
+  useLanguage();
   const [categories, setCategories] = useState([]),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -727,7 +768,7 @@ function CatalogForm({ api, source, product, onSave }) {
         if (live) setCategories(v);
       })
       .catch((e) => {
-        if (live) setError(e.message);
+        if (live) setError(e);
       });
     return () => {
       live = false;
@@ -753,17 +794,14 @@ function CatalogForm({ api, source, product, onSave }) {
           await onSave();
           setNotice("Đã lưu thông tin sản phẩm.");
         } catch (e) {
-          setError(e.message);
+          setError(e);
         } finally {
           setBusy(false);
         }
       }}
     >
       <fieldset disabled={busy}>
-        <p>
-          Danh mục dùng chung giữa REAL và SIMULATION. Số lượng chỉ thay đổi qua
-          Inventory Adjustment hoặc giao dịch.
-        </p>
+        <p> {uiText("Danh mục dùng chung giữa REAL và SIMULATION. Số lượng chỉ thay đổi qua Inventory Adjustment hoặc giao dịch.")} </p>
         {[
           ["name", "Product Name", product?.name],
           ["code", "SKU", product?.sku],
@@ -773,7 +811,7 @@ function CatalogForm({ api, source, product, onSave }) {
           ["max_qty", "Max Stock", product?.max_stock || 0],
         ].map(([name, label, value]) => (
           <label key={name}>
-            {label}
+            {uiText(label)}
             <input
               name={name}
               defaultValue={value ?? ""}
@@ -783,10 +821,8 @@ function CatalogForm({ api, source, product, onSave }) {
             />
           </label>
         ))}
-        <label>
-          Category
-          <select name="category_id" defaultValue={product?.category_id || ""}>
-            <option value="">Uncategorized</option>
+        <label> {uiText("Category")} <select name="category_id" defaultValue={product?.category_id || ""}>
+            <option value="">{uiText("Uncategorized")}</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -794,31 +830,27 @@ function CatalogForm({ api, source, product, onSave }) {
             ))}
           </select>
         </label>
-        <label>
-          Catalog Status
-          <select
+        <label> {uiText("Catalog Status")} <select
             name="is_active"
             defaultValue={String(product?.is_active ?? true)}
           >
-            <option value="true">Active</option>
-            <option value="false">Inactive</option>
+            <option value="true">{uiText("Active")}</option>
+            <option value="false">{uiText("Inactive")}</option>
           </select>
         </label>
-        <label>
-          Description
-          <textarea
+        <label> {uiText("Description")} <textarea
             name="description"
             defaultValue={product?.description || ""}
           />
         </label>
-        <button>{busy ? "Đang lưu…" : "Lưu danh mục"}</button>
+        <button>{busy ? uiText("Đang lưu…") : uiText("Lưu danh mục")}</button>
       </fieldset>
       {error && (
         <p className="error" role="alert">
-          {error}
+          {errorText(error)}
         </p>
       )}
-      {notice && <p role="status">{notice}</p>}
+      {notice && <p role="status">{uiText(notice)}</p>}
     </form>
   );
 }

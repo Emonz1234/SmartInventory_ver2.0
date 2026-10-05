@@ -1,9 +1,43 @@
+import { t as sharedText, getLanguage, errorText, useLanguage, LanguageSelector } from '../i18n';
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, LinearProgress, Paper, Stack, Typography } from '@mui/material'
-import { Air, CheckCircle, Home, Lightbulb } from '@mui/icons-material'
+import { Air, CheckCircle, Home, Lightbulb, StopCircle } from '@mui/icons-material'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '@api/client'
 import { systemAPI } from '@api/system'
+
+// Additional UI copy for mechanical state, recovery and rack locations.
+const mergedCopy: Record<string, [string, string]> = {
+  "Check faults": ["Kiểm tra lỗi", "Check faults"],
+  "Checking faults…": ["Đang kiểm tra…", "Checking faults…"],
+  "Không có lỗi": ["Không có lỗi", "No faults"],
+  "Resume operation": ["Tiếp tục thao tác", "Resume operation"],
+  "Abort operation": ["Hủy thao tác", "Abort operation"],
+  "Run homing": ["Chạy về gốc", "Run homing"],
+  "Resume interrupted command": ["Tiếp tục lệnh bị gián đoạn", "Resume interrupted command"],
+  "Verify reference before homing": ["Xác minh vị trí gốc trước khi homing", "Verify reference before homing"],
+  "Abort interrupted command": ["Hủy lệnh bị gián đoạn", "Abort interrupted command"],
+  "Confirm inspected obstacles, limit sensors and actual reference position.": ["Xác nhận đã kiểm tra vật cản, cảm biến giới hạn và vị trí gốc thực tế.", "Confirm inspected obstacles, limit sensors and actual reference position."],
+  "Homing moves from the current position. Do not confirm an unverified reference.": ["Homing di chuyển từ vị trí hiện tại. Chỉ xác nhận sau khi đã kiểm tra vị trí gốc.", "Homing moves from the current position. Do not confirm an unverified reference."],
+  "The same command continues from its saved position.": ["Lệnh hiện tại tiếp tục từ vị trí đã lưu.", "The same command continues from its saved position."],
+  "The cabinet stops in place; homing is required before a new command.": ["Tủ dừng tại chỗ; cần homing trước khi gửi lệnh mới.", "The cabinet stops in place; homing is required before a new command."],
+  "Confirm inspection": ["Xác nhận đã kiểm tra", "Confirm inspection"],
+  "Waiting for Simulation snapshot": ["Đang chờ trạng thái Simulation", "Waiting for Simulation snapshot"],
+  "RECOVERING": ["Đang phục hồi", "Recovering"],
+  "STOPPED": ["Đã dừng", "Stopped"],
+  "COMMUNICATION_LOST": ["Mất liên lạc", "Communication lost"],
+  "OBSTRUCTED": ["Có vật cản", "Obstructed"],
+  "REFERENCE_LOST": ["Mất vị trí gốc", "Reference lost"],
+  "Movement interrupted at Rack {0}": ["Di chuyển bị gián đoạn tại rack {0}", "Movement interrupted at Rack {0}"],
+  "Current:": ["Hiện tại:", "Current:"],
+  "Target:": ["Đích:", "Target:"],
+  "Command:": ["Lệnh:", "Command:"]
+}
+const uiText = (value: string, ...args: any[]) => {
+  const pair = mergedCopy[value]
+  return pair ? pair[getLanguage() === 'en' ? 1 : 0].replace(/\{(\d+)\}/g, (_, index) => String(args[index] ?? '')) : sharedText(value, ...args)
+}
+
 
 type Rack = { rack_index?: number; id: number; rack_code: string; rack_name?: string; cabinet_index?: number }
 type Step = { rack: Rack; direction: 'LEFT' | 'RIGHT'; fromGap: number; toGap: number }
@@ -19,9 +53,9 @@ type Command = {
   phase: 'QUEUED' | 'SENDING' | 'WAITING' | 'ERROR'
   baselineId?: number
   startedAt?: number
-  error?: string
+  error?: any
 }
-type LogEntry = { id: string; time: string; message: string; tone?: 'error' | 'success' }
+type LogEntry = { id: string; time: string; message: string; tone?: 'error' | 'success'; failure?: any }
 
 const STEP_ESTIMATE_MS = 4500
 const TELEMETRY_TIMEOUT_MS = 90000
@@ -54,8 +88,8 @@ function makeSteps(racks: Rack[], fromGap: number | null, toGap: number): Step[]
 }
 
 function formatGap(gap: number | null) {
-  if (!gap) return 'Chưa xác định'
-  return gap === 6 ? 'HOME · bên phải R6' : `R${gap} ↔ R${gap + 1}`
+  if (!gap) return uiText('Chưa xác định')
+  return gap === 6 ? uiText('HOME · bên phải R6') : `R${gap} ↔ R${gap + 1}`
 }
 
 interface RackOperationPanelProps {
@@ -76,6 +110,7 @@ interface RackOperationPanelProps {
 }
 
 export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, permissions, onSessionExpired, onLightRequest, lightBusy = false, ventilation = null, externalVentilated = false, onBusyChange, onSimulationRestart, onVentilatedChange, externalGapInvalidation = '', blocked = false }: RackOperationPanelProps) => {
+  useLanguage();
   const queryClient = useQueryClient()
   const racks = useMemo(() => [...sourceRacks].sort((a, b) => rackOrder(a) - rackOrder(b)), [sourceRacks])
   const [currentGap, setCurrentGap] = useState<number | null>(null)
@@ -105,6 +140,7 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
   const isSimulation = device?.device_type === 'IPCSIM' || device?.simulation_online === true
   const connected = !!device?.serial_connected
   const canOperate = permissions.includes('inventory.add_operation')
+  const canRecover = permissions.includes('cabinet.control')
   const simulationAvailable = !isSimulation || device?.simulation_online === true
   const mechanical = (device?.simulation_states || []).find((entry: any) => entry.cabinet_index === (racks[0]?.cabinet_index ?? Math.floor((Number(racks[0]?.rack_code) - 1) / 6) + 1))
   const fault = mechanical?.fault_context
@@ -117,7 +153,7 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
   const mechanicalLocked = isSimulation && (!mechanical?.online || ['ERROR', 'RECOVERING', 'STOPPED', 'COMMUNICATION_LOST'].includes(mechanical?.system_state))
   const [recoveryAction, setRecoveryAction] = useState<string | null>(null)
   const [recoveryBusy, setRecoveryBusy] = useState(false)
-  const [recoveryError, setRecoveryError] = useState('')
+  const [recoveryError, setRecoveryError] = useState<any>('')
   const bootSeen = useRef<string | null>(null)
   const [checkBusy, setCheckBusy] = useState(false)
   const checkFaults = async () => {
@@ -129,11 +165,11 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
       await health.refetch()
     } catch (error: any) {
       if (error?.response?.status === 403) onSessionExpired()
-      setRecoveryError(error?.response?.data?.detail || 'Không lấy được trạng thái Simulation.')
+      setRecoveryError(error)
     } finally { setCheckBusy(false) }
   }
   const performRecovery = async () => {
-    if (!mechanical || !recoveryAction) return
+    if (!mechanical || !recoveryAction || !canRecover || recoveryBusy) return
     setRecoveryBusy(true)
     setRecoveryError('')
     try {
@@ -145,14 +181,14 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
       await health.refetch()
     } catch (error: any) {
       if (error?.response?.status === 403) onSessionExpired()
-      setRecoveryError(error?.response?.data?.detail || 'Không gửi được yêu cầu phục hồi.')
+      setRecoveryError(error)
     } finally { setRecoveryBusy(false) }
   }
   const ready = !!cabinetId && racks.length === 6 && connected && simulationAvailable && canOperate && !blocked && !health.isError && !telemetry.isError && !current?.error && !mechanicalLocked
 
-  const addLog = (message: string, tone?: LogEntry['tone']) => {
+  const addLog = (message: string, tone?: LogEntry['tone'], failure?: any) => {
     const now = new Date()
-    setLogs(previous => [...previous, { id: `${now.getTime()}-${Math.random()}`, time: now.toLocaleTimeString(), message, tone }].slice(-50))
+    setLogs(previous => [...previous, { id: `${now.getTime()}-${Math.random()}`, time: now.toLocaleTimeString(), message, tone, failure }].slice(-50))
   }
 
   useEffect(() => {
@@ -279,8 +315,8 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
       } catch (error: any) {
         if (error?.response?.status === 403) onSessionExpired()
         const message = error?.response?.data?.detail || error?.message || 'Command could not be confirmed.'
-        setCurrent(previous => previous?.id === current.id ? { ...previous, phase: 'ERROR', error: message } : previous)
-        addLog(`ERROR · ${message}`, 'error')
+        setCurrent(previous => previous?.id === current.id ? { ...previous, phase: 'ERROR', error: error || message } : previous)
+        addLog(`ERROR · ${message}`, 'error', error)
       }
     }
     void send()
@@ -326,6 +362,21 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
     }, Math.max(0, TELEMETRY_TIMEOUT_MS - (Date.now() - current.startedAt)))
     return () => window.clearTimeout(timer)
   }, [current?.id, current?.phase, current?.startedAt, isSimulation, session])
+
+  const resetLocalOperation = () => {
+    if (isSimulation) return
+    setQueue([])
+    setCurrent(null)
+    gapRef.current = null
+    activeRackRef.current = null
+    setCurrentGap(null)
+    setActiveRackId(null)
+    initialStateResolved.current = true
+    setLastCompleted(null)
+    setExecutionDialogOpen(false)
+    addLog('Operator checked the cabinet · GAP marked unknown; pending commands cleared')
+
+  }
 
   const hasPendingOpen = (rackId: number) => current?.kind === 'OPEN' && current.rack.id === rackId ||
     queue.some(command => command.kind === 'OPEN' && command.rack.id === rackId)
@@ -427,48 +478,51 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
 
   return <Stack className="rack-operation-panel" spacing={2}>
     <Dialog open={!!recoveryAction} onClose={() => !recoveryBusy && setRecoveryAction(null)} maxWidth="xs" fullWidth>
-      <DialogTitle>{recoveryAction === 'RESUME' ? 'Resume interrupted command' : recoveryAction === 'HOME' ? 'Verify reference before homing' : 'Abort interrupted command'}</DialogTitle>
-      <DialogContent><Typography variant="body2">Confirm inspected obstacles, limit sensors and actual reference position. {recoveryAction === 'HOME' ? 'Homing moves from the current position. Do not confirm an unverified reference.' : recoveryAction === 'RESUME' ? 'The same command continues from its saved position.' : 'The cabinet stops in place; homing is required before a new command.'}</Typography>{recoveryError && <Alert severity="error">{recoveryError}</Alert>}</DialogContent>
-      <DialogActions><Button disabled={recoveryBusy} onClick={() => setRecoveryAction(null)}>Cancel</Button><Button disabled={recoveryBusy} onClick={() => void performRecovery()}>Confirm inspection</Button></DialogActions>
+      <Box sx={{ position: 'absolute', top: 16, right: 18 }}><LanguageSelector /></Box>
+      <DialogTitle sx={{ pr: 8 }}>{recoveryAction === 'RESUME' ? uiText('Resume interrupted command') : recoveryAction === 'HOME' ? uiText('Verify reference before homing') : uiText('Abort interrupted command')}</DialogTitle>
+      <DialogContent><Typography variant="body2">{uiText('Confirm inspected obstacles, limit sensors and actual reference position.')} {recoveryAction === 'HOME' ? uiText('Homing moves from the current position. Do not confirm an unverified reference.') : recoveryAction === 'RESUME' ? uiText('The same command continues from its saved position.') : uiText('The cabinet stops in place; homing is required before a new command.')}</Typography>{recoveryError && <Alert severity="error">{errorText(recoveryError)}</Alert>}</DialogContent>
+      <DialogActions><Button disabled={recoveryBusy} onClick={() => setRecoveryAction(null)}>{uiText("Cancel")}</Button><Button disabled={recoveryBusy || !canRecover} onClick={() => void performRecovery()}>{uiText("Confirm inspection")}</Button></DialogActions>
     </Dialog>
     <Paper className="rack-operation-main" variant="outlined" sx={{ p: { xs: 2, md: 2 }, borderRadius: 4 }}>
       <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={1.25} sx={{ mb: 1.25 }}>
         <Box>
-          <Typography variant="h6" fontWeight={750}>Rack operation</Typography>
-          <Typography variant="body2" color="text.secondary">Mỗi lần di chuyển một rack · Rack 1 và 2 dùng chung lối đi.</Typography>
+          <Typography variant="h6" fontWeight={750}>{uiText("Rack operation")}</Typography>
+          <Typography variant="body2" color="text.secondary">{uiText("Mỗi lần di chuyển một rack · Rack 1 và 2 dùng chung lối đi.")}</Typography>
         </Box>
         <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
-          {isSimulation && <Button size="small" variant="outlined" disabled={checkBusy || !connected} onClick={() => void checkFaults()}>{checkBusy ? 'Đang kiểm tra…' : 'Kiểm tra lỗi'}</Button>}
-          {isSimulation && mechanical?.online && !mechanicalLocked && !fault && <Chip size="small" label="Không có lỗi" color="success" variant="outlined" />}
-          <Chip size="small" label={device?.device_type || 'Mode unknown'} color={isSimulation ? 'info' : 'primary'} variant="outlined" />
-          <Chip size="small" label={`Serial ${connected ? 'ONLINE' : 'OFFLINE'}`} color={connected ? 'success' : 'error'} />
-          <Chip size="small" label={`SIM ${device?.simulation_online ? 'READY' : isSimulation ? 'UNAVAILABLE' : 'N/A'}`} color={device?.simulation_online ? 'success' : isSimulation ? 'warning' : 'default'} variant="outlined" />
+          {isSimulation && <Button size="small" variant="outlined" disabled={checkBusy || !connected} onClick={() => void checkFaults()}>{checkBusy ? uiText('Checking faults…') : uiText('Check faults')}</Button>}
+          {isSimulation && mechanical?.online && !mechanicalLocked && !fault && <Chip size="small" label={uiText("Không có lỗi")} color="success" variant="outlined" />}
+          <Chip size="small" label={device?.device_type || uiText('Mode unknown')} color={isSimulation ? 'info' : 'primary'} variant="outlined" />
+          <Chip size="small" label={`Serial ${connected ? uiText('ONLINE') : uiText('OFFLINE')}`} color={connected ? 'success' : 'error'} />
+          <Chip size="small" label={`SIM ${device?.simulation_online ? uiText('READY') : isSimulation ? uiText('UNAVAILABLE') : uiText('N/A')}`} color={device?.simulation_online ? 'success' : isSimulation ? 'warning' : 'default'} variant="outlined" />
         </Stack>
       </Stack>
-      {(health.isError || telemetry.isError) && <Alert severity="error" sx={{ mb: 1.5 }}>Không đọc được trạng thái local/telemetry. Lệnh vận hành đã bị khóa.</Alert>}
-      {recoveryError && !recoveryAction && <Alert severity="error" sx={{ mb: 1.5 }}>{recoveryError}</Alert>}
-      {!connected && <Alert severity="warning" sx={{ mb: 1.5 }}>Serial offline. Không thể gửi lệnh tới rack.</Alert>}
-      {isSimulation && !simulationAvailable && <Alert severity="error" sx={{ mb: 1.5 }}>Simulation unavailable. GAP commands are disabled.</Alert>}
-      {racks.length !== 6 && <Alert severity="warning" sx={{ mb: 1.5 }}>Cần đúng 6 rack theo thứ tự địa chỉ để dùng sơ đồ GAP. Cabinet hiện có {racks.length} rack.</Alert>}
-      {blocked && <Alert severity="info" sx={{ mb: 1.5 }}>Điều khiển GAP tạm khóa trong khi thao tác cabinet khác đang chạy.</Alert>}
-      {(mechanicalLocked || fault || current?.phase === 'ERROR') && <Alert severity={!mechanicalLocked && fault?.resumed ? 'info' : mechanical?.system_state === 'RECOVERING' ? 'warning' : 'error'} sx={{ mb: 1.5 }}>
-        <Typography variant="body2" fontWeight={700}>Cabinet {mechanical?.cabinet_index} · Rack {fault?.rack_id ? (fault.rack_id - 1) % 6 + 1 : '—'} · {mechanical?.system_state || 'ERROR'}</Typography>
-        <Typography variant="caption" display="block">{fault?.previous_state} · {fault?.error_code || current?.error || 'Waiting for Simulation snapshot'} · Current: {fault?.current_position ?? '—'} mm → Target: {fault?.target_position ?? '—'} mm · {fault?.progress !== undefined ? Math.round(fault.progress) + '%' : ''}</Typography>
-        {fault?.command_id && <Typography variant="caption" display="block" sx={{ overflowWrap: 'anywhere' }}>Command: {fault.command_id}</Typography>}
-        {fault?.moving_rack_id && fault.moving_rack_id !== fault.rack_id && <Typography variant="caption" display="block">Movement interrupted at Rack {(fault.moving_rack_id - 1) % 6 + 1}</Typography>}
+      {(health.isError || telemetry.isError) && <Alert severity="error" sx={{ mb: 1.5 }}>{uiText("Không đọc được trạng thái local/telemetry. Lệnh vận hành đã bị khóa.")}</Alert>}
+      {recoveryError && !recoveryAction && <Alert severity="error" sx={{ mb: 1.5 }}>{errorText(recoveryError)}</Alert>}
+      {!connected && <Alert severity="warning" sx={{ mb: 1.5 }}>{uiText("Serial offline. Không thể gửi lệnh tới rack.")}</Alert>}
+      {isSimulation && !simulationAvailable && <Alert severity="error" sx={{ mb: 1.5 }}>{uiText("Simulation unavailable. GAP commands are disabled.")}</Alert>}
+      {racks.length !== 6 && <Alert severity="warning" sx={{ mb: 1.5 }}>{uiText("Cần đúng 6 rack theo thứ tự địa chỉ để dùng sơ đồ GAP. Cabinet hiện có")} {racks.length} rack.</Alert>}
+      {blocked && <Alert severity="info" sx={{ mb: 1.5 }}>{uiText("Điều khiển GAP tạm khóa trong khi thao tác cabinet khác đang chạy.")}</Alert>}
+      {(isSimulation && (mechanicalLocked || fault || current?.phase === 'ERROR')) && <Alert severity={!mechanicalLocked && fault?.resumed ? 'info' : mechanical?.system_state === 'RECOVERING' ? 'warning' : 'error'} sx={{ mb: 1.5 }}>
+        <Typography variant="body2" fontWeight={700}>{uiText('Cabinet')} {mechanical?.cabinet_index} · Rack {fault?.rack_id ? (fault.rack_id - 1) % 6 + 1 : '—'} · {uiText(mechanical?.system_state || 'ERROR')}</Typography>
+        <Typography variant="caption" display="block">{uiText(fault?.previous_state || '')} · {fault?.error_code ? `${uiText(fault.error_code)} (${fault.error_code})` : current?.error ? errorText(current.error) : uiText('Waiting for Simulation snapshot')} · {uiText('Current:')} {fault?.current_position ?? '—'} mm → {uiText('Target:')} {fault?.target_position ?? '—'} mm · {fault?.progress !== undefined ? Math.round(fault.progress) + '%' : ''}</Typography>
+        {fault?.command_id && <Typography variant="caption" display="block" sx={{ overflowWrap: 'anywhere' }}>{uiText('Command:')} {fault.command_id}</Typography>}
+        {fault?.moving_rack_id && fault.moving_rack_id !== fault.rack_id && <Typography variant="caption" display="block">{uiText('Movement interrupted at Rack {0}', (fault.moving_rack_id - 1) % 6 + 1)}</Typography>}
         <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 0.5 }}>
-          {(mechanical?.allowed_actions || []).map((action: string) => <Button key={action} size="small" disabled={!canOperate || recoveryBusy} onClick={() => setRecoveryAction(action)}>{action === 'RESUME' ? 'Resume operation' : action === 'ABORT' ? 'Abort operation' : 'Run homing'}</Button>)}
+          {(mechanical?.allowed_actions || []).map((action: string) => <Button key={action} size="small" disabled={!canRecover || recoveryBusy} onClick={() => setRecoveryAction(action)}>{action === 'RESUME' ? uiText('Resume operation') : action === 'ABORT' ? uiText('Abort operation') : uiText('Run homing')}</Button>)}
         </Stack>
-        {recoveryError && <Typography variant="caption" color="error">{recoveryError}</Typography>}
+        {recoveryError && <Typography variant="caption" color="error">{errorText(recoveryError)}</Typography>}
       </Alert>}
+      {!isSimulation && current?.phase === 'ERROR' && <Alert severity="error" sx={{ mb: 1.5 }} action={<Button color="inherit" size="small" startIcon={<StopCircle />} onClick={resetLocalOperation}>{uiText("I checked · reset")}</Button>}>
+        {errorText(current.error)} {uiText("Các lệnh đang chờ không được tự gửi tiếp.")} </Alert>}
 
       <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2}>
         <Box className="rack-operation-map" sx={{ flex: 1.6, minWidth: 0, p: { xs: 1.5, sm: 2 }, borderRadius: 3, bgcolor: '#f7fafb', border: '1px solid', borderColor: 'divider' }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-            <Typography variant="subtitle2" fontWeight={750}>{ventilationMode ? 'Thông gió · 5 khoảng hở' : 'Sơ đồ rack & lối đi'}</Typography>
-            <Chip size="small" color={stateColor as any} label={stateLabel} />
+            <Typography variant="subtitle2" fontWeight={750}>{ventilationMode ? uiText('Thông gió · 5 khoảng hở') : uiText('Sơ đồ rack & lối đi')}</Typography>
+            <Chip size="small" color={stateColor as any} label={uiText(stateLabel)} />
           </Stack>
-          <Box aria-label="Six-rack GAP arrangement" sx={{ position: 'relative', width: '100%', height: { xs: 90, sm: 116 }, mb: 1.5 }}>
+          <Box aria-label={uiText("Six-rack GAP arrangement")} sx={{ position: 'relative', width: '100%', height: { xs: 90, sm: 116 }, mb: 1.5 }}>
             {racks.map((rack, index) => {
               const physical = mechanical?.racks?.[String(rack.rack_code)]
               const isMoving = physical ? !mechanicalLocked && physical.is_moving : displayMovingRack?.id === rack.id
@@ -483,7 +537,7 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
               const rackState = physical ? mechanical.online ? physical.access_state : 'Offline' : isError ? 'ERROR' : isMoving ? `MOVING ${displayDirection || ''} · ${Math.round(movementProgress)}%` : isSpread ? 'SPREAD' : ventilationMode ? 'WAITING' : isActive ? 'ACTIVE' : 'IDLE'
               const rackWidth = physical ? 100 / 7 : ventilationMode ? 500 / 35 : 200 / 13
               const rackLeftPercent = physical ? physical.position_mm / 700 * 100 : ventilationMode ? index * 6 / 35 * 100 : rackLeft / 13 * 100
-              return <Box key={rack.id} title={`Rack ${index + 1}: ${rackState}${isLightOn ? ' · LIGHT ON' : ''}`} sx={{
+              return <Box key={rack.id} title={`Rack ${index + 1}: ${uiText(rackState)}${isLightOn ? uiText(' · LIGHT ON') : ''}`} sx={{
                 position: 'absolute', left: `${rackLeftPercent}%`, top: 0, width: `${rackWidth}%`, height: '100%',
                 px: { xs: 0.35, sm: 0.7 }, py: { xs: 0.45, sm: 0.65 }, border: '1px solid', borderRadius: 2,
                 borderColor: isError ? 'error.main' : isMoving ? 'warning.main' : isActive ? 'success.main' : isTarget ? 'primary.main' : 'divider',
@@ -491,150 +545,149 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
                 transition: 'left 120ms linear, border-color 160ms ease, background-color 160ms ease',
                 boxShadow: isMoving ? 1 : 0, zIndex: isMoving ? 2 : 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', overflow: 'hidden'
               }}>
-                {isLightOn && <Box aria-label={`Rack ${index + 1} light on`} sx={{ position: 'absolute', top: 4, right: 4, width: 7, height: 7, borderRadius: '50%', bgcolor: 'warning.main', boxShadow: '0 0 0 2px rgba(237, 108, 2, 0.16)' }} />}
+                {isLightOn && <Box aria-label={uiText("Rack {0} light on", index + 1)} sx={{ position: 'absolute', top: 4, right: 4, width: 7, height: 7, borderRadius: '50%', bgcolor: 'warning.main', boxShadow: '0 0 0 2px rgba(237, 108, 2, 0.16)' }} />}
                 <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: { xs: 14, sm: 19 }, lineHeight: 1.1 }}>R{index + 1}</Typography>
                 <Typography variant="caption" color={isError ? 'error.main' : isMoving ? 'warning.dark' : isActive ? 'success.dark' : 'text.secondary'} noWrap sx={{ fontSize: { xs: 7, sm: 9 }, lineHeight: 1.1, mt: 0.35 }}>
-                  {rackState}
+                  {uiText(rackState)}
                 </Typography>
               </Box>
             })}
-            {ventilationMode ? racks.slice(0, 5).map((rack, index) => <Box key={`vent-gap-${rack.id}`} title={`Ventilation gap ${index + 1} · 20 mm`} aria-label={`Ventilation gap ${index + 1}`} sx={{
+            {ventilationMode ? racks.slice(0, 5).map((rack, index) => <Box key={`vent-gap-${rack.id}`} title={uiText("Ventilation gap {0} · 20 mm", index + 1)} aria-label={uiText("Ventilation gap {0}", index + 1)} sx={{
               position: 'absolute', left: `${(index * 6 + 5) / 35 * 100}%`, top: 0, bottom: 0, width: `${100 / 35}%`,
               border: '1px dashed', borderColor: 'info.main', bgcolor: 'rgba(2, 136, 209, 0.10)', borderRadius: 0.5,
               zIndex: 3, display: 'grid', placeItems: 'center', pointerEvents: 'none'
-            }}><Typography variant="caption" fontWeight={750} color="info.dark" sx={{ fontSize: { xs: 6, sm: 8 }, writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>GAP</Typography></Box>)
-              : gapLeftPercent !== null && <Box title={`ACCESS GAP · ${formatGap(currentGap)}`} aria-label={`Current access gap: ${formatGap(currentGap)}`} sx={{
+            }}><Typography variant="caption" fontWeight={750} color="info.dark" sx={{ fontSize: { xs: 6, sm: 8 }, writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>{uiText("GAP")}</Typography></Box>)
+              : gapLeftPercent !== null && <Box title={uiText("ACCESS GAP · {0}", uiText(formatGap(currentGap)))} aria-label={uiText("Current access gap: {0}", uiText(formatGap(currentGap)))} sx={{
                 position: 'absolute', left: `${gapLeftPercent}%`, top: 0, bottom: 0, width: `${mechanical ? 100 / 7 : 100 / 13}%`,
                 border: '1px dashed', borderColor: 'info.main', borderRadius: 0.6, bgcolor: 'rgba(2, 136, 209, 0.10)',
                 transition: 'left 120ms linear', zIndex: 3, display: 'grid', placeItems: 'center', pointerEvents: 'none'
-              }}><Typography variant="caption" fontWeight={800} color="info.dark" sx={{ fontSize: { xs: 7, sm: 9 }, writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>GAP</Typography></Box>}
+              }}><Typography variant="caption" fontWeight={800} color="info.dark" sx={{ fontSize: { xs: 7, sm: 9 }, writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>{uiText("GAP")}</Typography></Box>}
           </Box>
           <Stack direction="row" spacing={{ xs: 0.75, sm: 1.5 }} useFlexGap flexWrap="wrap" alignItems="center" sx={{ minHeight: 24, px: 0.5, py: 0.35, borderRadius: 0.75, bgcolor: 'action.hover' }}>
-            <Typography variant="caption" noWrap><b>Active:</b> {ventilationMode ? '—' : activeRackId ? `R${currentActiveOrder + 1}` : '—'}</Typography>
-            <Typography variant="caption" noWrap><b>GAP:</b> {ventilationMode ? '5 × 20 mm · even spacing' : formatGap(currentGap)}</Typography>
-            <Typography variant="caption" noWrap><b>State:</b> {stateLabel}</Typography>
-            {displayMovingRack && <Typography variant="caption" noWrap color="warning.dark"><b>Moving:</b> R{rackNumber(displayMovingRack)} {displayDirection} · {Math.round(movementProgress)}%</Typography>}
+            <Typography variant="caption" noWrap><b>{uiText("Active:")}</b> {ventilationMode ? '—' : activeRackId ? `R${currentActiveOrder + 1}` : '—'}</Typography>
+            <Typography variant="caption" noWrap><b>{uiText("GAP:")}</b> {ventilationMode ? uiText('5 × 20 mm · even spacing') : uiText(formatGap(currentGap))}</Typography>
+            <Typography variant="caption" noWrap><b>{uiText("State:")}</b> {uiText(stateLabel)}</Typography>
+            {displayMovingRack && <Typography variant="caption" noWrap color="warning.dark"><b>{uiText("Moving:")}</b> R{rackNumber(displayMovingRack)} {uiText(displayDirection)} · {Math.round(movementProgress)}%</Typography>}
             {current && <Typography variant="caption" noWrap color="text.secondary">
-              {remainingSeconds !== null ? `~${remainingSeconds.toFixed(1)} s left` : current.sourceGap === current.targetGap ? 'No movement' : 'Awaiting telemetry'}
-              {movingEvent ? ` · ${speedMmPerSecond !== null ? `~${speedMmPerSecond.toFixed(1)} mm/s · 100 mm` : `speed ${wireSpeed.toFixed(1)}`}` : ''}
+              {remainingSeconds !== null ? uiText("~{0} s left", remainingSeconds.toFixed(1)) : current.sourceGap === current.targetGap ? uiText('No movement') : uiText('Awaiting telemetry')}
+              {movingEvent ? ` · ${speedMmPerSecond !== null ? `~${speedMmPerSecond.toFixed(1)} mm/s · 100 mm` : uiText("speed {0}", wireSpeed.toFixed(1))}` : ''}
             </Typography>}
           </Stack>
           {current && <LinearProgress variant="determinate" value={overallProgress} sx={{ mt: 0.45, height: 3, borderRadius: 3 }} />}
           {ventilation && <Box sx={{ mt: 0.75 }}>
             <Stack direction="row" justifyContent="space-between" spacing={1}>
               <Typography variant="caption" fontWeight={750} noWrap>
-                {ventilation.phase === 'success' ? 'All racks evenly spaced' : ventilation.phase === 'uncertain' ? 'Ventilation needs inspection' : ventilationMovingRack ? `Moving R${rackNumber(ventilationMovingRack)} ${displayDirection} · ${Math.round(movementProgress)}%` : 'Distributing racks for ventilation'}
+                {ventilation.phase === 'success' ? uiText('All racks evenly spaced') : ventilation.phase === 'uncertain' ? uiText('Ventilation needs inspection') : ventilationMovingRack ? uiText("Moving R{0} {1} · {2}%", rackNumber(ventilationMovingRack), uiText(displayDirection), Math.round(movementProgress)) : uiText('Distributing racks for ventilation')}
               </Typography>
-              <Typography variant="caption" color="text.secondary" noWrap>{ventilation.completedRackIds.length}/6 rack commands complete</Typography>
+              <Typography variant="caption" color="text.secondary" noWrap>{ventilation.completedRackIds.length}{uiText("/6 rack commands complete")}</Typography>
             </Stack>
-            <Typography variant="caption" color="text.secondary" display="block">Target: six racks · five 20 mm gaps · access aisle unavailable during ventilation{ventilationMovingEvent && wireSpeed > 0 ? ` · ${speedMmPerSecond !== null ? `~${speedMmPerSecond.toFixed(1)} mm/s` : `speed ${wireSpeed.toFixed(1)}`}` : ''}</Typography>
+            <Typography variant="caption" color="text.secondary" display="block">{uiText("Target: six racks · five 20 mm gaps · access aisle unavailable during ventilation")}{ventilationMovingEvent && wireSpeed > 0 ? ` · ${speedMmPerSecond !== null ? `~${speedMmPerSecond.toFixed(1)} mm/s` : uiText("speed {0}", wireSpeed.toFixed(1))}` : ''}</Typography>
             <LinearProgress variant="determinate" value={ventilation.completedRackIds.length / 6 * 100} sx={{ mt: 0.35, height: 3, borderRadius: 3 }} />
           </Box>}
         </Box>
 
         <Box className="rack-operation-controls" sx={{ flex: 1, minWidth: { xs: 0, lg: 290 }, borderLeft: { lg: '1px solid' }, borderColor: { lg: 'divider' }, pl: { lg: 2 } }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-            <Typography variant="subtitle2" fontWeight={750}>Mở rack</Typography>
-            <Typography variant="caption" color="text.secondary">Queue {queue.length}</Typography>
+            <Typography variant="subtitle2" fontWeight={750}>{uiText("Mở rack")}</Typography>
+            <Typography variant="caption" color="text.secondary">{uiText("Queue")} {queue.length}</Typography>
           </Stack>
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 0.75 }}>
             {racks.map((rack, index) => {
               const duplicateOpen = hasPendingOpen(rack.id)
               const alreadyActive = isRackAlreadyActive(rack.id)
               const disabled = !ready || !!current?.error || !!confirmation || duplicateOpen || alreadyActive
-              return <Button key={rack.id} size="small" aria-label={`Open R${index + 1}`} title={duplicateOpen ? `Rack ${index + 1} already has an open command pending` : alreadyActive ? `Rack ${index + 1} is already active` : `Open Rack ${index + 1}`} variant={activeRackId === rack.id ? 'contained' : 'outlined'} disabled={disabled} onClick={() => requestCommand('OPEN', rack)} sx={{ minWidth: 0, minHeight: 36, px: 0.25, py: 0, fontSize: 14, fontWeight: 700, borderRadius: 2, boxShadow: 'none' }}>
+              return <Button key={rack.id} size="small" aria-label={uiText("Open R{0}", index + 1)} title={duplicateOpen ? uiText("Rack {0} already has an open command pending", index + 1) : alreadyActive ? uiText("Rack {0} is already active", index + 1) : uiText("Open Rack {0}", index + 1)} variant={activeRackId === rack.id ? 'contained' : 'outlined'} disabled={disabled} onClick={() => requestCommand('OPEN', rack)} sx={{ minWidth: 0, minHeight: 36, px: 0.25, py: 0, fontSize: 14, fontWeight: 700, borderRadius: 2, boxShadow: 'none' }}>
                 R{index + 1}
               </Button>
             })}
           </Box>
           <Stack className="rack-operation-lights" direction="row" spacing={0.5} alignItems="center" sx={{ mt: 1.5 }}>
-            <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>Đèn</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>{uiText("Đèn")}</Typography>
             {racks.map((rack, index) => {
               const lightOn = lightOnRackIds.has(Number(rack.id))
               const action = lightOn ? 'LIGHT_OFF' : 'LIGHT'
-              return <IconButton key={rack.id} size="small" title={`Turn light ${lightOn ? 'off' : 'on'} for Rack ${index + 1}`} aria-label={`Turn light ${lightOn ? 'off' : 'on'} for Rack ${index + 1}`} color={lightOn ? 'warning' : 'default'} disabled={!ready || !!current || queue.length > 0 || lightBusy || !!confirmation} onClick={() => onLightRequest(rack, action)} sx={{ width: 36, height: 46, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+              return <IconButton key={rack.id} size="small" title={uiText("Turn light {0} for Rack {1}", lightOn ? uiText('off') : uiText('on'), index + 1)} aria-label={uiText("Turn light {0} for Rack {1}", lightOn ? uiText('off') : uiText('on'), index + 1)} color={lightOn ? 'warning' : 'default'} disabled={!ready || !!current || queue.length > 0 || lightBusy || !!confirmation} onClick={() => onLightRequest(rack, action)} sx={{ width: 36, height: 46, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
                 <Lightbulb fontSize="small" />
                 <Typography component="span" sx={{ fontSize: 9, fontWeight: 650, color: 'inherit', lineHeight: 1 }}>R{index + 1}</Typography>
               </IconButton>
             })}
           </Stack>
-          <Button fullWidth variant="outlined" color="inherit" startIcon={<Home />} title={isAlreadyHome() ? 'The cabinet is already at HOME' : hasPendingHome() ? 'A HOME command is already pending' : 'Return Home'} disabled={!ready || !!current?.error || !!confirmation || hasPendingHome() || isAlreadyHome()} onClick={() => requestCommand('HOME')} sx={{ mt: 1.5, minHeight: 36, borderRadius: 2.5 }}>
-            Return Home · GAP right of R6
-          </Button>
-          {!canOperate && <Typography variant="caption" color="warning.main" display="block" sx={{ mt: 1 }}>Operator permission is required.</Typography>}
+          <Button fullWidth variant="outlined" color="inherit" startIcon={<Home />} title={isAlreadyHome() ? uiText('The cabinet is already at HOME') : hasPendingHome() ? uiText('A HOME command is already pending') : uiText('Return Home')} disabled={!ready || !!current?.error || !!confirmation || hasPendingHome() || isAlreadyHome()} onClick={() => requestCommand('HOME')} sx={{ mt: 1.5, minHeight: 36, borderRadius: 2.5 }}> {uiText("Return Home · GAP right of R6")} </Button>
+          {!canOperate && <Typography variant="caption" color="warning.main" display="block" sx={{ mt: 1 }}>{uiText("Operator permission is required.")}</Typography>}
         </Box>
       </Stack>
     </Paper>
 
     <Dialog className="cabinet-operation-dialog" open={!!confirmation} onClose={() => setConfirmation(null)} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ pb: 0.5, fontWeight: 750 }}>Confirm rack movement</DialogTitle>
+      <Box sx={{ position: 'absolute', top: 16, right: 18 }}><LanguageSelector /></Box>
+      <DialogTitle sx={{ pb: 0.5, pr: 8, fontWeight: 750 }}>{uiText("Confirm rack movement")}</DialogTitle>
       <DialogContent>
         <Stack spacing={1.25} sx={{ pt: 0.5 }}>
           <Typography variant="body1" fontWeight={700}>
-            {confirmation?.kind === 'HOME' ? 'Return GAP to HOME' : `Open Rack ${confirmation ? rackNumber(confirmation.rack) : ''}`}
+            {confirmation?.kind === 'HOME' ? uiText('Return GAP to HOME') : uiText("Open Rack {0}", confirmation ? rackNumber(confirmation.rack) : '')}
           </Typography>
           <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-            <Chip size="small" variant="outlined" label={`Current: ${formatGap(confirmation?.sourceGap ?? null)}`} />
-            <Chip size="small" color="info" variant="outlined" label={`Target: ${formatGap(confirmation?.targetGap ?? null)}`} />
+            <Chip size="small" variant="outlined" label={uiText("Current: {0}", formatGap(confirmation?.sourceGap ?? null))} />
+            <Chip size="small" color="info" variant="outlined" label={uiText("Target: {0}", formatGap(confirmation?.targetGap ?? null))} />
           </Stack>
           {confirmation?.sourceGap === confirmation?.targetGap ? (
-            <Alert severity="info">No rack movement is needed. Only the active rack will change.</Alert>
+            <Alert severity="info">{uiText("No rack movement is needed. Only the active rack will change.")}</Alert>
           ) : confirmation?.sourceGap === null ? (
-            <Alert severity="warning">Current GAP is unknown. Confirm only after checking the cabinet state.</Alert>
+            <Alert severity="warning">{uiText("Current GAP is unknown. Confirm only after checking the cabinet state.")}</Alert>
           ) : confirmation?.steps.length ? (
             <Box>
-              <Typography variant="caption" color="text.secondary">MOVEMENT PLAN · {confirmation.steps.length} step{confirmation.steps.length === 1 ? '' : 's'} · approximately {confirmation.steps.length * 4.5}s</Typography>
+              <Typography variant="caption" color="text.secondary">{uiText("MOVEMENT PLAN ·")} {confirmation.steps.length} {uiText("step")}{confirmation.steps.length === 1 ? '' : 's'} {uiText("· approximately")} {confirmation.steps.length * 4.5}s</Typography>
               <Stack spacing={0.5} sx={{ mt: 0.5 }}>
                 {confirmation.steps.map((step, index) => <Typography key={`${step.rack.id}-${step.fromGap}`} variant="body2">
-                  {index + 1}. Rack {rackNumber(step.rack)} {step.direction} · GAP {step.fromGap} → {step.toGap}
+                  {index + 1}. Rack {rackNumber(step.rack)} {uiText(step.direction)} · GAP {step.fromGap} → {step.toGap}
                 </Typography>)}
               </Stack>
             </Box>
-          ) : <Typography variant="body2" color="text.secondary">No rack movement is expected.</Typography>}
+          ) : <Typography variant="body2" color="text.secondary">{uiText("No rack movement is expected.")}</Typography>}
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 2, pb: 2 }}>
-        <Button onClick={() => setConfirmation(null)}>Cancel</Button>
-        <Button variant="contained" disabled={!ready} onClick={confirmCommand}>
-          Confirm {confirmation?.kind === 'HOME' ? 'Return Home' : `Open Rack ${confirmation ? rackNumber(confirmation.rack) : ''}`}
+        <Button onClick={() => setConfirmation(null)}>{uiText("Cancel")}</Button>
+        <Button variant="contained" disabled={!ready} onClick={confirmCommand}> {uiText("Confirm")} {confirmation?.kind === 'HOME' ? uiText('Return Home') : uiText("Open Rack {0}", confirmation ? rackNumber(confirmation.rack) : '')}
         </Button>
       </DialogActions>
     </Dialog>
 
     <Dialog className="cabinet-operation-dialog" open={executionDialogOpen} onClose={() => setExecutionDialogOpen(false)} maxWidth="sm" fullWidth>
-      <DialogTitle sx={{ fontWeight: 750 }}>
-        {current?.phase === 'ERROR' ? 'Operation needs attention' : current ? current.kind === 'HOME' ? 'Returning GAP to HOME' : `Opening Rack ${rackNumber(current.rack)}` : 'Operation complete'}
+      <Box sx={{ position: 'absolute', top: 16, right: 18 }}><LanguageSelector /></Box>
+      <DialogTitle sx={{ pr: 8, fontWeight: 750 }}>
+        {current?.phase === 'ERROR' ? uiText('Operation needs attention') : current ? current.kind === 'HOME' ? uiText('Returning GAP to HOME') : uiText("Opening Rack {0}", rackNumber(current.rack)) : uiText('Operation complete')}
       </DialogTitle>
       <DialogContent>
-        {current?.phase === 'ERROR' ? <Alert severity="error">{current.error} Check the cabinet before retrying.</Alert> : current ? (
+        {current?.phase === 'ERROR' ? <Alert severity="error">{errorText(current.error)} {uiText("Check the cabinet before retrying.")}</Alert> : current ? (
           <Stack spacing={1.25} sx={{ py: 0.5 }}>
             <Stack direction="row" spacing={1.25} alignItems="center">
               <CircularProgress size={24} />
               <Box>
                 <Typography variant="body2" fontWeight={700}>
-                  {current.phase === 'SENDING' ? 'Sending command to IPCSIM…' : displayMovingRack ? `Moving Rack ${rackNumber(displayMovingRack)} ${displayDirection}` : 'Waiting for simulation telemetry…'}
+                  {current.phase === 'SENDING' ? uiText('Sending command to IPCSIM…') : displayMovingRack ? uiText("Moving Rack {0} {1}", rackNumber(displayMovingRack), uiText(displayDirection)) : uiText('Waiting for simulation telemetry…')}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {current.phase === 'SENDING' ? 'The command is being delivered over Serial.' : displayMovingRack ? `${Math.round(movementProgress)}% · ${remainingSeconds !== null ? `~${remainingSeconds.toFixed(1)} s remaining` : 'movement in progress'}` : 'Success appears after the target endpoint is confirmed.'}
+                  {current.phase === 'SENDING' ? uiText('The command is being delivered over Serial.') : displayMovingRack ? `${Math.round(movementProgress)}% · ${remainingSeconds !== null ? uiText("~{0} s remaining", remainingSeconds.toFixed(1)) : uiText('movement in progress')}` : uiText('Success appears after the target endpoint is confirmed.')}
                 </Typography>
               </Box>
             </Stack>
             <LinearProgress variant="determinate" value={current.phase === 'SENDING' ? 0 : current.steps.length ? Math.min(99, ((Math.max(0, stepIndex) + movementProgress / 100) / current.steps.length) * 100) : 90} sx={{ height: 6, borderRadius: 4 }} />
             <Typography variant="caption" color="text.secondary">
-              {current.kind === 'HOME' ? `Target: ${formatGap(6)}` : `Target: Rack ${rackNumber(current.rack)} · ${formatGap(current.targetGap)}`}
-              {queue.length ? ` · ${queue.length} command${queue.length === 1 ? '' : 's'} waiting` : ''}
+              {current.kind === 'HOME' ? uiText("Target: {0}", formatGap(6)) : uiText("Target: Rack {0} · {1}", rackNumber(current.rack), formatGap(current.targetGap))}
+              {queue.length ? uiText(" · {0} command{1} waiting", queue.length, queue.length === 1 ? '' : 's') : ''}
             </Typography>
           </Stack>
         ) : lastCompleted ? (
           <Stack alignItems="center" spacing={1.25} sx={{ py: 2, textAlign: 'center' }}>
             <CheckCircle color="success" sx={{ fontSize: 48 }} />
-            <Typography variant="h6" fontWeight={750}>{lastCompleted.kind === 'HOME' ? 'Returned Home successfully' : `Rack ${rackNumber(lastCompleted.rack)} opened successfully`}</Typography>
-            <Typography variant="body2" color="text.secondary">Simulation endpoint telemetry confirmed the operation.</Typography>
+            <Typography variant="h6" fontWeight={750}>{lastCompleted.kind === 'HOME' ? uiText('Returned Home successfully') : uiText("Rack {0} opened successfully", rackNumber(lastCompleted.rack))}</Typography>
+            <Typography variant="body2" color="text.secondary">{uiText("Simulation endpoint telemetry confirmed the operation.")}</Typography>
           </Stack>
-        ) : <Typography variant="body2" color="text.secondary">Command queued and waiting to start.</Typography>}
+        ) : <Typography variant="body2" color="text.secondary">{uiText("Command queued and waiting to start.")}</Typography>}
       </DialogContent>
       <DialogActions>
-        <Button onClick={() => setExecutionDialogOpen(false)}>{current ? 'Continue in background' : 'Done'}</Button>
+        {!isSimulation && current?.phase === 'ERROR' ? <Button color="error" onClick={resetLocalOperation}>{uiText("I checked · reset")}</Button> : <Button onClick={() => setExecutionDialogOpen(false)}>{current ? uiText('Continue in background') : uiText('Done')}</Button>}
       </DialogActions>
     </Dialog>
 
@@ -642,29 +695,29 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
         <Box sx={{ flex: 1 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-            <Typography variant="subtitle2" fontWeight={750}>Hàng đợi lệnh</Typography>
-            <Chip size="small" label={`${queue.length} waiting`} color={queue.length ? 'warning' : 'default'} variant="outlined" />
+            <Typography variant="subtitle2" fontWeight={750}>{uiText("Hàng đợi lệnh")}</Typography>
+            <Chip size="small" label={uiText("{0} waiting", queue.length)} color={queue.length ? 'warning' : 'default'} variant="outlined" />
           </Stack>
           <Stack spacing={0.5} sx={{ maxHeight: 140, overflowY: 'auto' }}>
             {current && <Stack direction="row" justifyContent="space-between" sx={{ px: 1, py: 0.6, bgcolor: 'action.hover', borderRadius: 0.75 }}>
-              <Typography variant="body2">{current.kind === 'HOME' ? 'RETURN_HOME' : `OPEN_RACK ${rackNumber(current.rack)}`}</Typography>
-              <Chip size="small" label={current.phase} color={current.phase === 'ERROR' ? 'error' : 'info'} />
+              <Typography variant="body2">{current.kind === 'HOME' ? uiText('RETURN_HOME') : `OPEN_RACK ${rackNumber(current.rack)}`}</Typography>
+              <Chip size="small" label={uiText(current.phase)} color={current.phase === 'ERROR' ? 'error' : 'info'} />
             </Stack>}
             {queue.map((command, index) => <Stack key={command.id} direction="row" justifyContent="space-between" sx={{ px: 1, py: 0.6 }}>
-              <Typography variant="body2">{index + 1}. {command.kind === 'HOME' ? 'RETURN_HOME' : `OPEN_RACK ${rackNumber(command.rack)}`}</Typography>
-              <Chip size="small" label={command.steps.length ? `${command.steps.length} movement step${command.steps.length === 1 ? '' : 's'}` : command.sourceGap === command.targetGap ? 'No movement' : 'GAP unknown'} variant="outlined" />
+              <Typography variant="body2">{index + 1}. {command.kind === 'HOME' ? uiText('RETURN_HOME') : `OPEN_RACK ${rackNumber(command.rack)}`}</Typography>
+              <Chip size="small" label={command.steps.length ? uiText("{0} movement step{1}", command.steps.length, command.steps.length === 1 ? '' : 's') : command.sourceGap === command.targetGap ? uiText('No movement') : uiText('GAP unknown')} variant="outlined" />
             </Stack>)}
-            {!current && !queue.length && <Typography variant="body2" color="text.secondary">No command waiting.</Typography>}
+            {!current && !queue.length && <Typography variant="body2" color="text.secondary">{uiText("No command waiting.")}</Typography>}
           </Stack>
         </Box>
         <Box sx={{ flex: 1, borderLeft: { md: '1px solid' }, borderColor: { md: 'divider' }, pl: { md: 2 } }}>
-          <Typography variant="subtitle2" fontWeight={750} sx={{ mb: 1 }}>Nhật ký thao tác</Typography>
+          <Typography variant="subtitle2" fontWeight={750} sx={{ mb: 1 }}>{uiText("Nhật ký thao tác")}</Typography>
           <Box sx={{ maxHeight: 140, overflowY: 'auto', fontFamily: 'monospace' }}>
-            {(recoveryHistory.data || []).filter((entry: any) => entry.cabinet_index === mechanical?.cabinet_index).slice(0, 30).map((entry: any) => <Typography key={`recovery-${entry.id}`} variant="caption" display="block" color={entry.event.includes('error') || entry.event.includes('fault') ? 'error.main' : 'text.secondary'}>[{new Date(entry.timestamp * 1000).toLocaleTimeString()}] {entry.event}</Typography>)}
+            {(recoveryHistory.data || []).filter((entry: any) => entry.cabinet_index === mechanical?.cabinet_index).slice(0, 30).map((entry: any) => <Typography key={`recovery-${entry.id}`} variant="caption" display="block" color={entry.event.includes('error') || entry.event.includes('fault') ? 'error.main' : 'text.secondary'}>[{new Date(entry.timestamp * 1000).toLocaleTimeString()}] {uiText(entry.event)}</Typography>)}
             {logs.map(entry => <Typography key={entry.id} variant="caption" display="block" color={entry.tone === 'error' ? 'error.main' : entry.tone === 'success' ? 'success.dark' : 'text.secondary'}>
-              [{entry.time}] {entry.message}
+              [{entry.time}] {entry.tone === 'error' ? entry.message.startsWith('ERROR · ') ? `${uiText('ERROR')} · ${errorText(entry.failure || entry.message.slice(8))}` : errorText(entry.failure || entry.message) : uiText(entry.message)}
             </Typography>)}
-            {!logs.length && <Typography variant="body2" color="text.secondary">Operation events will appear here.</Typography>}
+            {!logs.length && <Typography variant="body2" color="text.secondary">{uiText("Operation events will appear here.")}</Typography>}
             <div ref={logEnd} />
           </Box>
         </Box>

@@ -262,7 +262,14 @@ class Store:
                 raise ValueError("Command Serial address differs from assigned rack")
             db.execute("INSERT INTO edge_operations VALUES(?,?,?,NULL)", (command_id, canonical(body), "uncertain"))
         # Intent is durable BEFORE the side effect. A failed/partial write stays uncertain.
-        send({**body, 'command_id': command_id})
+        try:
+            send({**body, 'command_id': command_id})
+        except Exception as exc:
+            # Preserve uncertainty after a durable intent; never infer no physical effect.
+            reason = str(exc) if isinstance(exc, ValueError) else 'Serial delivery could not be confirmed'
+            with self.transaction() as db:
+                db.execute('UPDATE edge_operations SET result=? WHERE id=?', (canonical({'state': 'uncertain', 'error': reason}), command_id))
+            raise
         with self.transaction() as db:
             db.execute("UPDATE edge_operations SET state='sent' WHERE id=?", (command_id,))
         return "sent"

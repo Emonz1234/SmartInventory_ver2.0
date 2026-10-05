@@ -1,3 +1,4 @@
+import { t as uiText, useLanguage } from '../i18n';
 import { useState, useEffect } from 'react'
 import {
   Dialog,
@@ -40,6 +41,7 @@ export const OperationModal = ({
   racks = [],
   onClose
 }: OperationModalProps) => {
+  useLanguage();
   const [isComplete, setIsComplete] = useState(false)
   const [hasError, setHasError] = useState(false)
   const [completionTime, setCompletionTime] = useState<number | null>(null)
@@ -146,7 +148,7 @@ export const OperationModal = ({
       }}
     >
       <DialogTitle sx={{ fontWeight: 'bold', pb: 1 }}>
-        {getTitle()}
+        {uiText(getTitle())}
       </DialogTitle>
 
       <DialogContent sx={{ pt: 2 }}>
@@ -154,21 +156,15 @@ export const OperationModal = ({
           <Box sx={{ textAlign: 'center', py: 3 }}>
             <CheckCircle sx={{ fontSize: 80, color: 'green', mb: 2 }} />
             <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 1 }}>
-              {operation === 'open' ? 'Rack Opened Successfully!' : operation === 'close' ? 'Rack Closed Successfully!' : 'Ventilation Complete!'}
+              {operation === 'open' ? uiText('Rack Opened Successfully!') : operation === 'close' ? uiText('Rack Closed Successfully!') : uiText('Ventilation Complete!')}
             </Typography>
-            <Typography variant="body2" color="textSecondary">
-              Simulation ACK confirmed. The rack reached the endpoint successfully.
-            </Typography>
+            <Typography variant="body2" color="textSecondary"> {uiText("Simulation ACK confirmed. The rack reached the endpoint successfully.")} </Typography>
           </Box>
         ) : hasError ? (
           <Box sx={{ textAlign: 'center', py: 3 }}>
             <Error sx={{ fontSize: 80, color: 'red', mb: 2 }} />
-            <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 1 }}>
-              Operation Failed
-            </Typography>
-            <Typography variant="body2" color="error">
-              An error occurred during the operation
-            </Typography>
+            <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 1 }}> {uiText("Operation Failed")} </Typography>
+            <Typography variant="body2" color="error"> {uiText("An error occurred during the operation")} </Typography>
           </Box>
         ) : (
           <Stack spacing={3}>
@@ -176,9 +172,7 @@ export const OperationModal = ({
             {cabinetCode && (
               <Card variant="outlined">
                 <CardContent>
-                  <Typography variant="subtitle2" color="textSecondary" sx={{ mb: 1 }}>
-                    Cabinet
-                  </Typography>
+                  <Typography variant="subtitle2" color="textSecondary" sx={{ mb: 1 }}> {uiText("Cabinet")} </Typography>
                   <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
                     {cabinetCode}
                   </Typography>
@@ -189,8 +183,7 @@ export const OperationModal = ({
             {/* Affected racks */}
             {affectedRacks.length > 0 && (
               <Box>
-                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                  Affected Racks ({affectedRacks.length})
+                <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}> {uiText("Affected Racks (")}{affectedRacks.length})
                 </Typography>
                 <List dense sx={{ bgcolor: '#f5f5f5', borderRadius: 1 }}>
                   {affectedRacks.map((rack) => (
@@ -208,18 +201,14 @@ export const OperationModal = ({
               <CircularProgress size={40} sx={{ mr: 2 }} />
               <Stack spacing={0.5}>
                 <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                  {operation === 'open' ? 'Opening...' : operation === 'close' ? 'Closing...' : 'Ventilating...'}
+                  {operation === 'open' ? uiText('Opening...') : operation === 'close' ? uiText('Closing...') : uiText('Ventilating...')}
                 </Typography>
-                <Typography variant="caption" color="textSecondary">
-                  Waiting for simulation ACK and endpoint confirmation...
-                </Typography>
+                <Typography variant="caption" color="textSecondary"> {uiText("Waiting for simulation ACK and endpoint confirmation...")} </Typography>
               </Stack>
             </Box>
 
             {/* Info message */}
-            <Alert severity="info" sx={{ fontSize: '0.85rem' }}>
-              The popup will only switch to success after the simulation confirms the rack reached the target endpoint.
-            </Alert>
+            <Alert severity="info" sx={{ fontSize: '0.85rem' }}> {uiText("The popup will only switch to success after the simulation confirms the rack reached the target endpoint.")} </Alert>
           </Stack>
         )}
       </DialogContent>
@@ -229,13 +218,9 @@ export const OperationModal = ({
           <Button onClick={() => {
             resetStatuses()
             onClose()
-          }} variant="contained" fullWidth>
-            Close
-          </Button>
+          }} variant="contained" fullWidth> {uiText("Close")} </Button>
         ) : (
-          <Button onClick={onClose}>
-            Cancel
-          </Button>
+          <Button onClick={onClose}> {uiText("Cancel")} </Button>
         )}
       </DialogActions>
     </Dialog>
