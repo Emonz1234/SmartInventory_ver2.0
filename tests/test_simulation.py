@@ -39,7 +39,7 @@ def test_actual_simulator_accepts_adapter_commands_and_emits_shared_model():
 def test_simulator_environment_and_breakdown_are_normalized():
     controller = MasterCom(rack_group_id=0, port="test-only")
     writes = []
-    controller.ser = type("SerialCapture", (), {"write":lambda self, raw:writes.append(raw)})()
+    controller.ser = type("SerialCapture", (), {"write":lambda self, raw: (writes.append(raw), len(raw))[1]})()
     controller.create_environmentStatusData(0)
     assert len(writes) == 6
     assert all(SimulationAdapter().parse(raw.decode()).msg_type == "telemetry" for raw in writes)
@@ -49,7 +49,7 @@ def test_simulator_environment_and_breakdown_are_normalized():
     assert parsed.payload["is_overload_motor"] == 1
 
 
-@pytest.mark.parametrize('group', range(21))
+@pytest.mark.parametrize('group', range(22))
 def test_start_initializes_all_six_racks_without_serial(group):
     controller = MasterCom(group, port='')
     controller.start()
@@ -81,7 +81,7 @@ def test_environment_and_breakdown_publish_at_configured_interval():
             controller.messages.get_nowait()
 
         controller.poll(now=due - 0.1)
-        assert controller.messages.empty()
+        assert all(controller.messages.get_nowait().startswith('SIMSTT|') for _ in range(controller.messages.qsize()))
 
         controller.poll(now=due)
         assert controller.messages.qsize() == 12
@@ -115,7 +115,7 @@ def test_multirack_motion_fault_clear_and_ventilation_cycle():
 
 
 @pytest.mark.parametrize('message', ['0|0|1', '0|7|1', '0|-1|1', '0|x|1', '1|1|1',
-                                      '0|1|5', '0|1|10', '0|1|1|2', '', '0|1'])
+                                      '0|1|6', '0|1|10', '0|1|1|2', '', '0|1'])
 def test_reject_malformed_or_wrong_group_commands(message):
     c = MasterCom(0, port='')
     assert not c.determine_operationInformation(message)

@@ -68,7 +68,7 @@ class MyGroupBox:
         self.rackGroup.setMinimumSize(850, 660)
         root = QtWidgets.QVBoxLayout(self.rackGroup)
         root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(8)
+        root.setSpacing(6)
         heading = QtWidgets.QHBoxLayout()
         titles = QtWidgets.QVBoxLayout()
         titles.setSpacing(0)
@@ -192,6 +192,24 @@ class MyGroupBox:
         self.simulatorErrorButton = QtWidgets.QPushButton('Apply / clear faults')
         options.addWidget(self.simulatorErrorButton)
         fault_layout.addLayout(options)
+        advanced = QtWidgets.QHBoxLayout()
+        self.faultKind = QtWidgets.QComboBox()
+        for title, value in (
+            ('Physical checkboxes', None), ('Temporary stop', ('TEMPORARY_STOP', 'RECOVERABLE', True)),
+            ('Limit sensor inconsistent', ('LIMIT_SENSOR_ERROR', 'REQUIRES_CONFIRMATION', True)),
+            ('Sensor confirmation timeout', ('SENSOR_TIMEOUT', 'REQUIRES_CONFIRMATION', True)),
+            ('Reference lost', ('REFERENCE_LOST', 'REQUIRES_HOME', False)),
+            ('Fatal drive error', ('DRIVE_FATAL', 'FATAL', False)),
+        ):
+            self.faultKind.addItem(title, value)
+        advanced.addWidget(self.faultKind)
+        self.injectFaultButton = QtWidgets.QPushButton('Inject fault')
+        self.clearFaultButton = QtWidgets.QPushButton('Fault fixed')
+        self.resumeFaultButton = QtWidgets.QPushButton('Resume (standalone)')
+        advanced.addWidget(self.injectFaultButton)
+        advanced.addWidget(self.clearFaultButton)
+        advanced.addWidget(self.resumeFaultButton)
+        fault_layout.addLayout(advanced)
         self.rackGroupErrorLineEdit = label('', 'muted')
         self.rackGroupErrorLineEdit.setWordWrap(True)
         fault_title = fault_layout.takeAt(0).widget()

@@ -11,6 +11,14 @@ class SimulationAdapter:
 
     def parse(self, raw):
         from ipc_core.app.serial.protocol.parser import ProtocolParser
+        if raw.startswith('SIMSTT|'):
+            import base64
+            import zlib
+            decoder = zlib.decompressobj()
+            data = decoder.decompress(base64.b64decode(raw.split('|', 1)[1], validate=True), 65537)
+            if len(data) > 65536 or decoder.unconsumed_tail or not decoder.eof:
+                raise ValueError('Invalid or oversized Simulation snapshot')
+            raw = data.decode('utf-8')
         return ProtocolParser.parse(raw)
 
 

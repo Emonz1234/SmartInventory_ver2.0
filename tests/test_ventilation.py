@@ -77,7 +77,7 @@ def test_serial_fanout_ventilates_group_once_and_light_preserves_layout():
     payloads = [SimulationAdapter().parse(master.messages.get_nowait()).payload
                 for _ in range(master.messages.qsize())]
     for rack in range(7, 13):
-        rows = [row for row in payloads if row['rack_id'] == rack]
+        rows = [row for row in payloads if row.get('rack_id') == rack]
         start = next(i for i, row in enumerate(rows) if row['state'] == 3 and not row['is_endpoint'])
         assert any(row['state'] == -1 and row['is_endpoint'] for row in rows[start + 1:])
     positions = [r.position_mm for r in master.gap_controller.racks.values()]

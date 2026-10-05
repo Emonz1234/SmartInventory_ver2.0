@@ -220,7 +220,7 @@ def test_local_device_commands_work_offline_and_are_idempotent(store):
     assert store.execute_local("local-op-1", 1, "OPEN", sent.append) == "local_sent"
     restarted = Store(store.path, "sim-a", "IPCSIM")
     assert restarted.execute_local("local-op-1", 1, "OPEN", sent.append) == "local_sent"
-    assert sent == [{"rack_id": 1, "address": 7, "action": "OPEN"}]
+    assert sent == [{"rack_id": 1, "address": 7, "action": "OPEN", "command_id": "local-op-1"}]
 
 
 def test_local_device_command_resolves_serial_address_when_primary_key_differs(store):
@@ -231,7 +231,7 @@ def test_local_device_command_resolves_serial_address_when_primary_key_differs(s
     sent = []
 
     assert store.execute_local("local-address-op", 1, "OPEN", sent.append) == "local_sent"
-    assert sent == [{"rack_id": 259, "address": 1, "action": "OPEN"}]
+    assert sent == [{"rack_id": 259, "address": 1, "action": "OPEN", "command_id": "local-address-op"}]
 
 
 def test_local_uncertain_command_is_not_replayed_after_restart(store):
@@ -295,7 +295,7 @@ def test_local_device_command_api_needs_no_server_but_checks_permission(store):
     try:
         assert device_command(request_for("local-command-test"), command)["state"] == "local_sent"
         assert device_command(request_for("local-command-test"), command)["state"] == "local_sent"
-        assert sent == [{"rack_id": 1, "address": 7, "action": "OPEN"}]
+        assert sent == [{"rack_id": 1, "address": 7, "action": "OPEN", "command_id": "local-api-op"}]
         with pytest.raises(HTTPException) as error:
             device_command(request_for("local-command-viewer-test"), command)
         assert error.value.status_code == 403

@@ -1,6 +1,8 @@
 """Logical six-rack mobile-rack state and sequential gap movement."""
 from collections import deque
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from uuid import uuid4
 import math
 
 
@@ -62,6 +64,10 @@ class GapMovementController:
         self.current_step = None
         self.step_progress = 0.0
         self.last_error = None
+        self.fault_context = None
+        self.command_id = None
+        self.command_ids = deque()
+        self.lifecycle = deque(maxlen=100)
         self.racks = {
             rack_id: RackState(
                 rack_id=rack_id, order=order, slot=order - 1,
@@ -73,12 +79,12 @@ class GapMovementController:
             for order, rack_id in enumerate(self.rack_ids, 1)
         }
 
-    def enqueue(self, rack_id, action):
+    def enqueue(self, rack_id, action, command_id=None):
         if type(rack_id) is not int or rack_id not in self.rack_order:
             raise ValueError('Rack ID is outside this six-rack group')
         if type(action) is not int or action not in VALID_ACTIONS:
             raise ValueError('Unsupported simulation action')
-        if self.system_state == 'ERROR':
+        if self.system_state in {'ERROR', 'RECOVERING', 'STOPPED'}:
             raise ValueError('Simulation is in ERROR state; clear the fault before sending commands')
         command = (rack_id, action)
         # Only adjacent retries are duplicates: OPEN, CLOSE, OPEN is valid FIFO.
@@ -87,6 +93,7 @@ class GapMovementController:
         if command == last_command:
             return False
         self.pending_commands.append(command)
+        self.command_ids.append(command_id or str(uuid4()))
         return True
 
     def move_gap_to(self, target_gap):
@@ -142,7 +149,7 @@ class GapMovementController:
 
     def advance(self, elapsed, blocked_racks=(), speed=None):
         """Advance the active rack animation and return state transition events."""
-        if self.system_state == 'ERROR':
+        if self.system_state in {'ERROR', 'RECOVERING', 'STOPPED'}:
             return []
 
         events = []
@@ -159,8 +166,6 @@ class GapMovementController:
                 return events
             self.current_step = self.movement_steps.popleft()
             moving_rack = self.current_step['rack_id']
-            if moving_rack in blocked_racks:
-                return events + [self._fail_movement(moving_rack, 'Active hardware breakdown')]
             rack = self.racks[moving_rack]
             step_speed = self.speed_mm_s if speed is None else speed
             if not math.isfinite(step_speed) or step_speed <= 0:
@@ -175,11 +180,14 @@ class GapMovementController:
             rack.movement_state = f"MOVING_{rack.direction}"
             rack.is_moving = True
             self.step_progress = 0.0
+            if moving_rack in blocked_racks:
+                return events + [self._fail_movement(moving_rack, 'Active hardware breakdown')]
             events.append({
                 'type': 'step_started',
                 **self.current_step,
                 'current_gap': self.current_gap,
             })
+            self._log('movement_started')
             return events
 
         if elapsed <= 0:
@@ -228,18 +236,87 @@ class GapMovementController:
         return events
 
     def recover(self):
+        """Clearing the physical fault never restarts a suspended command."""
         if self.system_state != 'ERROR':
             return False
-        self.system_state = 'OPEN' if self.active_rack is not None else 'IDLE'
-        self.last_error = None
-        for rack in self.racks.values():
-            if rack.movement_state == 'ERROR':
-                rack.movement_state = 'IDLE'
-                rack.direction = None
-                rack.is_moving = False
-                rack.target_position_mm = rack.position_mm
+        self.system_state = 'RECOVERING'
+        self.fault_context['cleared'] = True
+        self._log('error_cleared')
         self._assert_invariants()
         return True
+
+    def resume(self, fault_id, confirmed=False):
+        context = self.fault_context
+        if self.system_state != 'RECOVERING' or not context or context['fault_id'] != fault_id:
+            raise ValueError('Reconcile the current cleared fault before resuming')
+        if context['classification'] in {'REQUIRES_HOME', 'FATAL'} or not context['position_trusted']:
+            raise ValueError('Position is unreliable; direct resume is forbidden')
+        if context['classification'] == 'REQUIRES_CONFIRMATION' and not confirmed:
+            raise ValueError('Operator confirmation required')
+        self._assert_invariants()
+        self._log('state_reconciliation')
+        self.system_state = context.get('resume_state', context['previous_state'])
+        if self.current_step:
+            rack = self.racks[self.current_step['rack_id']]
+            rack.speed_mm_s = self.speed_mm_s
+            rack.is_moving = True
+            rack.movement_state = f'MOVING_{rack.direction}'
+        else:
+            for rack in self.racks.values():
+                if rack.movement_state == 'ERROR':
+                    rack.movement_state = 'IDLE'
+        context['resumed'] = True
+        self._log('operation_resumed')
+        if self.current_command is None:
+            self.fault_context = None
+            self.last_error = None
+
+    def abort(self, fault_id):
+        if not self.fault_context or self.fault_context['fault_id'] != fault_id:
+            raise ValueError('Fault identity mismatch')
+        if self.fault_context['classification'] == 'FATAL':
+            raise ValueError('Fatal fault locks the cabinet')
+        self.current_command = self.current_step = None
+        self.pending_commands.clear()
+        self.command_ids.clear()
+        self.movement_steps.clear()
+        # The partially travelled gap must never be used to plan a fresh move.
+        self.current_gap = self.gap_position = None
+        self.system_state = 'STOPPED'
+        self._log('operation_aborted')
+
+    def home_recovery(self, fault_id, confirmed=False):
+        context = self.fault_context
+        if not context or context['fault_id'] != fault_id or not context['cleared'] or not confirmed:
+            raise ValueError('Clear the fault and confirm verified reference/sensors before homing')
+        if context['classification'] == 'FATAL':
+            raise ValueError('Fatal fault locks the cabinet')
+        # Simulation positions are authoritative, but an operator must verify the
+        # reference before allowing a fresh path; never teleport racks to home.
+        self._assert_invariants()
+        self.current_command = self.current_step = None
+        self.movement_steps.clear()
+        self.pending_commands.clear()
+        self.command_ids.clear()
+        self.current_gap = self.gap_position = None
+        self.active_rack = None
+        self.system_state = 'IDLE'
+        context['position_trusted'] = True
+        self.enqueue(self.rack_ids[0], 4, self.command_id)
+        self._log('recovery_started')
+
+    def inject_fault(self, rack_id, error_code, classification='REQUIRES_CONFIRMATION', position_trusted=True):
+        if classification not in {'RECOVERABLE', 'REQUIRES_CONFIRMATION', 'REQUIRES_HOME', 'FATAL'}:
+            raise ValueError('Unknown recovery classification')
+        return self._fail_movement(rack_id, error_code, classification, position_trusted)
+
+    def _log(self, event):
+        self.lifecycle.append({'timestamp': datetime.now(timezone.utc).isoformat(),
+                               'command_id': self.command_id, 'state': self.system_state,
+                               'event': event, 'fault_id': (self.fault_context or {}).get('fault_id'),
+                               'rack_id': (self.current_step or {}).get('rack_id'),
+                               'position': {rid: r.position_mm for rid, r in self.racks.items()},
+                               'error_code': (self.fault_context or {}).get('error_code')})
 
     def snapshot(self):
         command = None
@@ -247,7 +324,7 @@ class GapMovementController:
             rack_id, action, target_gap = self.current_command
             command = {'rack_id': rack_id, 'action': ACTION_NAMES[action], 'target_gap': target_gap}
         moving = None
-        if self.current_step is not None:
+        if self.current_step is not None and self.racks[self.current_step['rack_id']].is_moving:
             moving = {
                 'rack_id': self.current_step['rack_id'],
                 'direction': self.current_step['direction'],
@@ -257,7 +334,9 @@ class GapMovementController:
             'current_gap': self.current_gap,
             'gap_position': self.gap_position,
             'active_rack': self.active_rack,
-            'system_state': self.system_state,
+            'system_state': ('OPENING' if self.system_state == 'MOVING' and self.current_command and self.current_command[1] == 1 else
+                             'CLOSING' if self.system_state == 'MOVING' and self.current_command and self.current_command[1] == 2 else
+                             'MOVING' if self.system_state in {'VENTILATING', 'RETURNING_HOME'} else self.system_state),
             'current_command': command,
             'moving': moving,
             'pending_commands': [
@@ -265,8 +344,12 @@ class GapMovementController:
                 for rack_id, action in self.pending_commands
             ],
             'last_error': self.last_error,
+            'fault_context': self.fault_context,
+            'active_command_id': self.command_id if self.current_command else None,
+            'last_command_id': self.command_id,
+            'history': list(self.lifecycle),
             'racks': {rack_id: {**asdict(state), 'access_state': (
-                'ERROR' if state.movement_state == 'ERROR' else
+                self.system_state if self.system_state in {'ERROR', 'RECOVERING', 'STOPPED'} else
                 'MOVING' if state.is_moving else
                 'VENTILATING' if self.system_state == 'VENTILATING' else
                 'VENTILATED' if self.system_state == 'VENTILATED' else
@@ -276,6 +359,7 @@ class GapMovementController:
 
     def _start_next_command(self):
         rack_id, action = self.pending_commands.popleft()
+        self.command_id = self.command_ids.popleft() if self.command_ids else str(uuid4())
         order = self.rack_order[rack_id]
         target_gap = self.current_gap
         if action == 1:
@@ -296,6 +380,7 @@ class GapMovementController:
             target_gap = RACK_COUNT
 
         self.current_command = (rack_id, action, target_gap)
+        self._log('command_started')
         if action == 4:
             self.system_state = 'RETURNING_HOME'
         elif action == 3:
@@ -333,33 +418,60 @@ class GapMovementController:
             self.current_gap = target_gap
             self.gap_position = float(target_gap) if target_gap is not None else None
         self.current_command = None
+        self._log('operation_completed')
+        self.fault_context = None
+        self.last_error = None
+        for rack in self.racks.values():
+            if rack.movement_state == 'ERROR':
+                rack.movement_state = 'IDLE'
         self._assert_invariants()
         return {
             'type': 'command_completed', 'rack_id': rack_id, 'action': action,
             'current_gap': self.current_gap, 'target_gap': target_gap,
         }
 
-    def _fail_movement(self, rack_id, reason):
+    def _fail_movement(self, rack_id, reason, classification='REQUIRES_CONFIRMATION', position_trusted=True):
+        if self.system_state in {'ERROR', 'RECOVERING', 'STOPPED'} and self.fault_context:
+            rank = {'RECOVERABLE': 0, 'REQUIRES_CONFIRMATION': 1, 'REQUIRES_HOME': 2, 'FATAL': 3}
+            if rank[classification] > rank[self.fault_context['classification']] or not position_trusted:
+                if rank[classification] >= rank[self.fault_context['classification']]:
+                    self.fault_context.update(classification=classification, error_code=reason)
+                self.fault_context.update(position_trusted=self.fault_context['position_trusted'] and position_trusted,
+                                          cleared=False)
+                self.system_state = 'ERROR'
+            return {'type': 'movement_error', 'rack_id': rack_id,
+                    'command_rack_id': self.current_command[0] if self.current_command else None,
+                    'reason': reason, 'current_gap': self.current_gap}
+        command = self.current_command
+        rack = self.racks[(self.current_step or {}).get('rack_id', rack_id)]
+        self.fault_context = {
+            'fault_id': str(uuid4()), 'rack_id': rack_id,
+            'moving_rack_id': rack.rack_id, 'command_id': self.command_id,
+            'command': list(command) if command else None,
+            'previous_state': self.snapshot()['system_state'], 'resume_state': self.system_state,
+            'operation': ACTION_NAMES[command[1]] if command else None, 'failed_state': 'ERROR',
+            'current_position': rack.position_mm, 'target_position': rack.target_position_mm,
+            'direction': rack.direction, 'progress': rack.progress_percent,
+            'error_code': reason, 'classification': classification,
+            'position_trusted': position_trusted, 'recoverable': classification == 'RECOVERABLE',
+            'timestamp': datetime.now(timezone.utc).isoformat(), 'cleared': False,
+            'racks': {rid: asdict(r) for rid, r in self.racks.items()},
+        }
+        self._log('error_detected')
         for moving in self.racks.values():
             if moving.is_moving:
                 moving.is_moving = False
                 moving.speed_mm_s = 0.0
-                moving.direction = None
                 moving.movement_state = 'ERROR'
-                moving.target_position_mm = moving.position_mm
         rack = self.racks[rack_id]
         rack.movement_state = 'ERROR'
         rack.is_moving = False
-        rack.direction = None
-        rack.target_position_mm = rack.position_mm
         rack.speed_mm_s = 0.0
-        command = self.current_command
-        self.current_step = None
-        self.movement_steps.clear()
         self.pending_commands.clear()
-        self.current_command = None
+        self.command_ids.clear()
         self.system_state = 'ERROR'
         self.last_error = reason
+        self._log('movement_stopped')
         self._assert_invariants()
         return {
             'type': 'movement_error',

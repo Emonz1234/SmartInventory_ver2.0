@@ -135,3 +135,64 @@ def confirm(request: Request, operation_id: str, data: dict):
                                 data.get('success', True), data.get('note', ''), data.get('keep_open', False)))
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from None
+
+
+@router.get('/simulation-state')
+def simulation_state(request: Request):
+    session(request)
+    runtime = request.app.state.runtime
+    if not runtime.recovery:
+        raise HTTPException(409, 'Simulation recovery is unavailable for this hardware')
+    with runtime.store.transaction() as db:
+        history = [dict(row) for row in db.execute('SELECT * FROM simulation_history ORDER BY id DESC LIMIT 100')]
+    return {'states': runtime.recovery.states(), 'history': history}
+
+
+@router.post('/simulation-recovery')
+def simulation_recovery(request: Request, data: dict):
+    identity = session(request)['identity']
+    runtime = request.app.state.runtime
+    try:
+        runtime.auth.authorize(identity['id'], 'cabinet.control')
+        if not runtime.recovery:
+            raise ValueError('Simulation only')
+        if type(data.get('cabinet_index')) is not int or type(data.get('confirmed', False)) is not bool:
+            raise ValueError('Invalid recovery request')
+        with runtime.operation_lock:
+            request_id = runtime.recovery.recover(data['cabinet_index'], data.get('action'),
+                                                  data.get('fault_id'), data.get('confirmed', False))
+        return {'request_id': request_id, 'state': 'RECOVERING'}
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(409, str(exc)) from None
+
+
+@router.post('/simulation-check')
+def simulation_check(request: Request, data: dict):
+    session(request)
+    runtime = request.app.state.runtime
+    try:
+        group = data.get('cabinet_index')
+        if not runtime.recovery or type(group) is not int or group not in runtime.recovery.groups():
+            raise ValueError('Simulation cabinet outside assignment')
+        with runtime.operation_lock:
+            request_id = runtime.recovery.send(group, 'REQUEST_STATE')
+        return {'request_id': request_id, 'state': 'REQUESTED'}
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from None
+
+
+@router.post('/simulation-stop')
+def simulation_stop(request: Request, data: dict):
+    identity = session(request)['identity']
+    runtime = request.app.state.runtime
+    try:
+        runtime.auth.authorize(identity['id'], 'cabinet.control')
+        if not runtime.recovery or type(data.get('address')) is not int:
+            raise ValueError('Simulation address required')
+        group = (data['address']-1)//6+1
+        if group not in runtime.recovery.groups():
+            raise ValueError('Cabinet outside assignment')
+        runtime.recovery.send(group, 'STOP', address=data['address'], error_code='SENSOR_TIMEOUT')
+        return {'state': 'ERROR'}
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(409, str(exc)) from None

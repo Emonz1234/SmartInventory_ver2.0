@@ -55,6 +55,9 @@ class MainWindow(QMainWindow):
             self.uic.rackGroupList[i].runButton.clicked.connect(partial(self.start_master_controller, i))
             self.uic.rackGroupList[i].stopButton.clicked.connect(partial(self.stop_master_controller, i))
             self.uic.rackGroupList[i].simulatorErrorButton.clicked.connect(partial(self.start_simulate_error, i))
+            group.injectFaultButton.clicked.connect(partial(self.inject_extended_fault, i))
+            group.clearFaultButton.clicked.connect(partial(self.clear_extended_fault, i))
+            group.resumeFaultButton.clicked.connect(partial(self.resume_standalone, i))
             self.uic.rackGroupList[i].homeButton.clicked.connect(partial(self.send_local_command, i, 4))
             for rack_button in self.uic.rackGroupList[i].rackButtons:
                 rack_button.clicked.connect(partial(self.select_rack, i, rack_button))
@@ -206,6 +209,22 @@ class MainWindow(QMainWindow):
                                             group.OverloadMotorCheckBox), 1) if box.isChecked()]
         worker.master_controller.requests.put(('fault', (group.selected_rack_id, errors)))
 
+    def inject_extended_fault(self, index):
+        group, worker = self.uic.rackGroupList[index], self.rack_group.get(index)
+        value = group.faultKind.currentData()
+        if worker and worker.isRunning() and value:
+            worker.master_controller.requests.put(('inject_fault', (group.selected_rack_id, *value)))
+
+    def clear_extended_fault(self, index):
+        worker = self.rack_group.get(index)
+        if worker and worker.isRunning():
+            worker.master_controller.requests.put(('recover', ()))
+
+    def resume_standalone(self, index):
+        worker = self.rack_group.get(index)
+        if worker and worker.isRunning() and not worker.master_controller.port:
+            worker.master_controller.requests.put(('resume', ()))
+
     def closeEvent(self, event):
         for worker in self.rack_group.values():
             worker.stop()
@@ -258,6 +277,7 @@ class MainWindow(QMainWindow):
         busy = bool(state.get('current_command') or state.get('pending_commands'))
         healthy = state.get('system_state') != 'ERROR' and not any(any(v) for v in self.breakdown_data[index].values())
         available = ready and not busy and healthy
+        group.resumeFaultButton.setEnabled(ready and state.get('system_state') == 'RECOVERING')
         ventilated = state.get('system_state') == 'VENTILATED'
         active = state.get('active_rack') == group.selected_rack_id
         rack_id = group.selected_rack_id
@@ -472,7 +492,9 @@ class ThreadClass(QtCore.QThread):
                         message = controller.messages.get_nowait()
                     except Empty:
                         break
-                    signals[message.split('|', 1)[0]].emit(message)
+                    signal = signals.get(message.split('|', 1)[0])
+                    if signal:
+                        signal.emit(message)
                 while True:
                     try:
                         sample = controller.operation_samples.get_nowait()

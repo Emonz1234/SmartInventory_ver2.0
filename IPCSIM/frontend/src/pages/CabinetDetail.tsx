@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { cabinetAPI } from '@api/cabinet'
@@ -36,6 +36,16 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
   const [cabinetVentilated, setCabinetVentilated] = useState(false)
   const [lightCommandBusy, setLightCommandBusy] = useState(false)
   const [lightFeedback, setLightFeedback] = useState<{ severity: 'success' | 'warning' | 'error'; message: string } | null>(null)
+  const resetSimulationOperation = useCallback(() => {
+    setOperation(null)
+    setOperationBusy(false)
+    setOperationPhase('confirm')
+    setOperationError('')
+    setSentRackIds([])
+    setCompletedRackIds([])
+    setFailedRacks([])
+    setCabinetVentilated(false)
+  }, [])
   const canOperate = permissions.includes('inventory.add_operation')
   const query = useQuery({ queryKey: ['cabinet', id, 'racks'], queryFn: async () => (await cabinetAPI.getRacks(Number(id))).data, refetchInterval: 2000 })
   const racks: any[] = query.data || []
@@ -242,7 +252,7 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
     </Box>
     {query.isError && <Alert severity="error">Could not load cabinet racks. Check the local IPC connection and retry.</Alert>}
     {!query.isLoading && !query.data?.length && <Alert severity="warning">No racks are configured for this cabinet.</Alert>}
-    <RackOperationPanel cabinetId={id} racks={racks} session={session} permissions={permissions} onSessionExpired={onSessionExpired} onLightRequest={sendLightCommand} lightBusy={lightCommandBusy} ventilation={operation?.kind === 'VENTILATE' ? { phase: operationPhase, baselineId: baselineOperationId, sentRackIds, completedRackIds } : null} externalVentilated={operation?.kind === 'VENTILATE' && operationPhase === 'success'} onBusyChange={setRackPanelBusy} onVentilatedChange={setCabinetVentilated} externalGapInvalidation={operation?.kind === 'VENTILATE' && ['success', 'uncertain'].includes(operationPhase) ? operation.requestKey : ''} blocked={!!operation} />
+    <RackOperationPanel cabinetId={id} racks={racks} session={session} permissions={permissions} onSessionExpired={onSessionExpired} onLightRequest={sendLightCommand} lightBusy={lightCommandBusy} ventilation={operation?.kind === 'VENTILATE' ? { phase: operationPhase, baselineId: baselineOperationId, sentRackIds, completedRackIds } : null} externalVentilated={operation?.kind === 'VENTILATE' && operationPhase === 'success'} onBusyChange={setRackPanelBusy} onSimulationRestart={resetSimulationOperation} onVentilatedChange={setCabinetVentilated} externalGapInvalidation={operation?.kind === 'VENTILATE' && ['success', 'uncertain'].includes(operationPhase) ? operation.requestKey : ''} blocked={!!operation} />
     <Snackbar open={!!lightFeedback} autoHideDuration={3500} onClose={() => setLightFeedback(null)} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
       {lightFeedback ? <Alert severity={lightFeedback.severity} variant="filled" onClose={() => setLightFeedback(null)}>{lightFeedback.message}</Alert> : <span />}
     </Snackbar>

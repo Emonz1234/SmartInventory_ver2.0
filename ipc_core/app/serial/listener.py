@@ -35,9 +35,15 @@ class SerialListener:
             try:
                 if not link.connected:
                     await asyncio.to_thread(link.connect)
+                runtime = getattr(serial_manager.observer, '__self__', None)
+                if runtime and runtime.recovery:
+                    await asyncio.to_thread(runtime.recovery.poll, group)
                 raw = await asyncio.to_thread(link.read)
             except Exception:
                 link.disconnect()
+                runtime = getattr(serial_manager.observer, '__self__', None)
+                if runtime and runtime.recovery:
+                    runtime.recovery.lost(group)
                 await asyncio.sleep(2)
                 try:
                     await asyncio.to_thread(link.connect)
@@ -56,6 +62,8 @@ class SerialListener:
     async def process(self, raw: str, group=None):
         try:
             message = serial_manager.adapter.parse(raw)
+            if message.msg_type == 'simulation_state' and group is not None and message.payload.get('cabinet_index') != group:
+                raise ValueError('State snapshot outside configured Serial group')
             if group is not None and 'rack_id' in message.payload:
                 from Simulation.topology import RACKS_PER_GROUP
                 if (int(message.payload['rack_id']) - 1) // RACKS_PER_GROUP + 1 != group:

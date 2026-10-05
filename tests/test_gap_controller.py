@@ -132,7 +132,7 @@ def test_movement_error_keeps_last_completed_gap_and_stops_queue():
     assert simulation.snapshot()['racks'][5]['movement_state'] == 'ERROR'
 
 
-@pytest.mark.parametrize('rack_id,action', [(0, 1), (7, 1), (None, 1), (True, 1), (1, 5), (1, 'OPEN')])
+@pytest.mark.parametrize('rack_id,action', [(0, 1), (7, 1), (None, 1), (True, 1), (1, 6), (1, 'OPEN')])
 def test_invalid_serial_command_fields_are_rejected(rack_id, action):
     with pytest.raises(ValueError):
         controller().enqueue(rack_id, action)

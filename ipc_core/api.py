@@ -102,8 +102,11 @@ def health():
         has_auth = db.execute("SELECT 1 FROM edge_records WHERE key LIKE 'auth:%' LIMIT 1").fetchone() is not None
     if fault or runtime.hardware_fault:
         hardware_status = 'FAULT'
+    if runtime.recovery and any(s['system_state'] in {'ERROR', 'RECOVERING', 'STOPPED', 'COMMUNICATION_LOST'} for s in runtime.recovery.states()):
+        hardware_status = 'FAULT'
     available = initialized and has_auth and hardware_status == 'ONLINE' and serial_manager.adapter.supports_commands
     return {**local_state, 'hardware_status': hardware_status,
+            'simulation_states': runtime.recovery.states() if runtime.recovery else [],
             'server_connection_status': ('CONNECTED' if runtime.synced else 'SYNCING') if runtime.online else 'DISCONNECTED',
             'offline_mode': not runtime.online, 'local_operation_available': available,
             "device_id": settings.DEVICE_ID, "device_type": settings.DEVICE_TYPE,

@@ -81,6 +81,10 @@ def test_selected_rack_commands_fault_clear_stop_restart(window):
     group.ObstructCheckBox.setChecked(False)
     group.simulatorErrorButton.click()
     until(app, lambda: win.breakdown_data[1][9] == [0, 0, 0])
+    until(app, lambda: win.rack_group[1].master_controller.system_state == 'RECOVERING')
+    win.resume_standalone(1)
+    until(app, lambda: win.rack_group[1].master_controller.system_state == 'IDLE')
+    until(app, group.localButtons[0].isEnabled)
     group.localButtons[0].click()
     until(app, lambda: win.rack_group[1].master_controller.opening_racks == [9])
     group.rackButtons[0].click()
@@ -175,8 +179,9 @@ def test_connected_groups_route_every_rack_and_recover_disconnect(window, monkey
         group.runButton.click()
     until(app, lambda: all(win.uic.rackGroupList[i].simulatorErrorButton.isEnabled() for i in (0, 1)))
     for index, wire in enumerate(wires.values()):
-        assert len(wire.writes) == 18
-        assert {int(f.split('|')[1]) for f in wire.writes} == set(range(index * 6 + 1, index * 6 + 7))
+        legacy = [f for f in wire.writes if not f.startswith('SIMSTT|')]
+        assert len(legacy) == 18
+        assert {int(f.split('|')[1]) for f in legacy} == set(range(index * 6 + 1, index * 6 + 7))
         assert not any(b.isEnabled() for b in win.uic.rackGroupList[index].localButtons)
     for address in (1, 2, 6):
         wires['TEST-A'].inject(SimulationAdapter().encode({'address': address, 'action': 'OPEN'}))
@@ -198,15 +203,19 @@ def test_connected_groups_route_every_rack_and_recover_disconnect(window, monkey
     assert 2 not in win.rack_group
     wires['TEST-A'].disconnected = True
     group = win.uic.rackGroupList[0]
-    until(app, group.runButton.isEnabled)
-    assert 'test cable disconnected' in group.connectionStatus.toolTip()
+    until(app, lambda: first_controller.system_state == 'ERROR')
+    fault_position = first_controller.gap_controller.racks[6].position_mm
     assert wires['TEST-A'].closed
     assert win.rack_group[1].isRunning()
     wires['TEST-A'] = SerialWire()
-    group.runButton.click()
-    until(app, group.simulatorErrorButton.isEnabled)
-    assert len(wires['TEST-A'].writes) == 18
-    assert win.operation_data[0][6][1] == 0
+    until(app, lambda: first_controller.ser is wires['TEST-A'])
+    assert win.rack_group[0].master_controller is first_controller
+    assert first_controller.gap_controller.racks[6].position_mm == fault_position
+    assert first_controller.system_state == 'ERROR'
+    import json
+    wires['TEST-A'].inject(json.dumps({'protocol_version': 2, 'cabinet_index': 1, 'peer_session': 'test-edge', 'operation': 'REQUEST_STATE'}))
+    until(app, lambda: first_controller.system_state == 'RECOVERING')
+    assert first_controller.gap_controller.racks[6].position_mm == fault_position
 
 
 def test_chart_history_isolated_and_retained_until_restart(window):
@@ -370,8 +379,8 @@ def test_ventilation_light_and_close_controls_follow_group_state(window):
     group.localButtons[3].click()
     until(app, lambda: group.light.value() == 1)
     assert group.rackGroupImage.gap_state['lights'][1]
-    assert group.localButtons[3].text() == 'Light is on'
-    assert not group.localButtons[3].isEnabled()
+    until(app, lambda: group.localButtons[3].text() == 'Turn light off')
+    assert group.localButtons[3].isEnabled()
     assert controller.system_state == 'VENTILATED'
     group.localButtons[1].click()
     until(app, lambda: controller.system_state == 'IDLE')

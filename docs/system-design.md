@@ -189,7 +189,7 @@ Simulator phát môi trường mỗi 10 giây, lặp snapshot breakdown theo chu
 
 Mỗi group gồm 6 rack trên 7 vị trí logic, với một khe tiếp cận. Bộ điều khiển lập chuỗi bước di chuyển để đưa khe tới vị trí cần mở; các bước được thực hiện tuần tự. Queue lệnh theo FIFO và loại bỏ lệnh trùng liền kề; OPEN → CLOSE → OPEN vẫn là chuỗi hợp lệ.
 
-Trong mô hình nội bộ, pitch và quãng bước là 100 mm, vận tốc mặc định 25 mm/s, các mức cấu hình là 20/25/33 mm/s. Thông gió phân bố khoảng giãn 20 mm giữa các rack. Controller kiểm tra phạm vi đường ray và thứ tự rack; lỗi chuyển động dừng bước, xóa queue và chuyển sang ERROR.
+Trong mô hình nội bộ, pitch và quãng bước là 100 mm, vận tốc mặc định 25 mm/s, các mức cấu hình là 20/25/33 mm/s. Thông gió phân bố khoảng giãn 20 mm giữa các rack. Controller kiểm tra phạm vi đường ray và thứ tự rack. Khi lỗi, controller giữ vị trí, command, bước dang dở và target; chỉ xóa lệnh chờ chưa thực thi. Clear fault chuyển RECOVERING trước reconcile/resume. Xem [thiết kế phục hồi Simulation–IPCSIM](simulation-fault-recovery.md) cho protocol v2 và journal lỗi.
 
 **Đơn vị ở biên Serial khác mô hình nội bộ:** `virtual_master_controller.py` chuyển một bước 100 mm sang độ dịch chuyển wire tối đa 64,0. Vì vậy `displacement=64.0` biểu diễn endpoint OPEN logic hiện tại, không được viết trong report là rack di chuyển 64 mm. Vận tốc wire cũng được nhân hệ số 64/100.
 
@@ -375,7 +375,7 @@ PREPARED
    → COMPLETED + sync_status=PENDING
 
 Lỗi truyền không rõ kết quả / restart khi đang làm → UNCERTAIN
-Breakdown trong lúc thực hiện                     → FAILED
+Breakdown trong lúc thực hiện ở IPCSIM v2         → UNCERTAIN, chờ reconcile/recovery
 Người vận hành xác nhận không thành công          → CANCELLED
 ```
 
@@ -496,7 +496,7 @@ Hướng dẫn thực hành: [cài đặt lần đầu](first-time-setup.md), [k
 | Snapshot thiếu batch | Staging giữ lại, chưa thay read model |
 | Delta đứt revision / digest sai | Xin full sync |
 | Địa chỉ chưa assigned | Bỏ snapshot nghiệp vụ; không đưa telemetry ngoài assignment lên Server |
-| Vật cản / lệch / quá tải motor | Chặn OPEN/CLOSE/VENTILATE theo snapshot breakdown; lỗi active có thể làm transaction FAILED |
+| Vật cản / lệch / quá tải motor | Chặn OPEN/CLOSE/VENTILATE; IPCSIM v2 giữ journal UNCERTAIN và fault context để reconcile/resume |
 | Replay vượt tồn/capacity | Lưu CONFLICT/FAILED và đối soát, không áp dụng một phần |
 | DHT lỗi | Không có mẫu mới; không tạo số liệu thay thế |
 | Lệnh đến quá hạn | Ghi expired, không phát Serial |

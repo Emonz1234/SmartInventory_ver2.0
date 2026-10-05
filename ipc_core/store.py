@@ -230,7 +230,7 @@ class Store:
             db.execute("INSERT INTO edge_operations(id,body,state,result) VALUES(?,?,?,NULL)",
                        (operation_id, canonical(body), "local_uncertain"))
 
-        command = {"rack_id": resolved_rack_id, "address": address, "action": action}
+        command = {"rack_id": resolved_rack_id, "address": address, "action": action, "command_id": operation_id}
         try:
             send(command)
         except ValueError:
@@ -262,7 +262,7 @@ class Store:
                 raise ValueError("Command Serial address differs from assigned rack")
             db.execute("INSERT INTO edge_operations VALUES(?,?,?,NULL)", (command_id, canonical(body), "uncertain"))
         # Intent is durable BEFORE the side effect. A failed/partial write stays uncertain.
-        send(body)
+        send({**body, 'command_id': command_id})
         with self.transaction() as db:
             db.execute("UPDATE edge_operations SET state='sent' WHERE id=?", (command_id,))
         return "sent"

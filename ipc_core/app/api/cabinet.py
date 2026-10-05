@@ -1,7 +1,7 @@
 from datetime import timedelta
 from typing import List
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi import Depends
 from fastapi import HTTPException
 from sqlalchemy import func
@@ -25,7 +25,7 @@ service = CommandService()
 
 
 @router.get("/cabinets")
-def list_cabinets(db: Session = Depends(get_db)):
+def list_cabinets(db: Session = Depends(get_db), request: Request = None):
     cabinets = db.query(Cabinet).all()
     active_since = get_current_time() - TELEMETRY_ACTIVE_TIMEOUT
     result = []
@@ -45,6 +45,12 @@ def list_cabinets(db: Session = Depends(get_db)):
             "status": "ACTIVE" if is_active else "INACTIVE",
             "rack_count": rack_count
         })
+    runtime = getattr(getattr(getattr(request, 'app', None), 'state', None), 'runtime', None)
+    if runtime and runtime.recovery:
+        states = {s['cabinet_index']: s for s in runtime.recovery.states()}
+        for cabinet in result:
+            state = states.get(cabinet['cabinet_index'])
+            cabinet['mechanical'] = state
     return result
 
 
@@ -100,7 +106,7 @@ def delete_cabinet(cabinet_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/cabinets/{cabinet_id}/racks")
-def get_cabinet_racks(cabinet_id: int, db: Session = Depends(get_db)):
+def get_cabinet_racks(cabinet_id: int, db: Session = Depends(get_db), request: Request = None):
     cabinet = db.query(Cabinet).filter(Cabinet.id == cabinet_id).first()
     if cabinet is None:
         raise HTTPException(status_code=404, detail="Cabinet not found")
@@ -141,6 +147,16 @@ def get_cabinet_racks(cabinet_id: int, db: Session = Depends(get_db)):
             "last_updated": last_updated
         })
 
+    runtime = getattr(getattr(getattr(request, 'app', None), 'state', None), 'runtime', None)
+    if runtime and runtime.recovery:
+        state = next((s for s in runtime.recovery.states() if s['cabinet_index'] == cabinet.cabinet_index), None)
+        if state:
+            for rack in result:
+                physical = state['racks'].get(rack['rack_code'], {})
+                rack.update(status=physical.get('access_state', 'Unknown') if state['online'] else 'Offline',
+                            position=physical.get('position_mm'), target_position=physical.get('target_position_mm'),
+                            position_unit='mm', fault_context=state.get('fault_context'),
+                            active_command_id=state.get('active_command_id'))
     return result
 
 

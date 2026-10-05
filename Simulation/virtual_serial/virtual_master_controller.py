@@ -3,6 +3,10 @@ import os
 import random
 import threading
 import time
+import json
+import zlib
+import base64
+from uuid import uuid4
 from queue import Queue, Empty
 
 import serial
@@ -34,6 +38,14 @@ class MasterCom:
         self.requests, self.messages = Queue(), Queue()
         self.operation_samples = Queue()
         self.session_started = time.monotonic()
+        self.boot_id = str(uuid4())
+        self.snapshot_sequence = 0
+        self.peer_session = None
+        self.peer_seen = 0
+        self.last_snapshot = 0
+        self.last_wire_progress = 0
+        self.known_commands = {}
+        self.known_recovery_requests = set()
         self.reset_state()
 
     @property
@@ -72,7 +84,7 @@ class MasterCom:
         try:
             if self.port:
                 self.ser = serial.serial_for_url(self.port, baudrate=self.baudrate,
-                                                 timeout=self.timeout, write_timeout=0.5)
+                                                 timeout=self.timeout, write_timeout=2)
             self.is_run = True
             self.is_reading = self.ser is not None
             self.create_environmentStatusData()
@@ -98,7 +110,16 @@ class MasterCom:
     def _publish(self, message):
         captured_at = time.monotonic() - self.session_started
         if self.ser is not None:
-            self.ser.write((message + '\n').encode('utf-8'))
+            try:
+                data = (message + '\n').encode('utf-8')
+                if self.ser.write(data) != len(data):
+                    raise IOError('Partial simulation Serial write')
+            except (OSError, serial.SerialException):
+                # Preserve the mechanical controller even if the link disappears.
+                self.ser.close()
+                self.ser = None
+                if self.gap_controller.current_command and self.gap_controller.system_state not in {'ERROR', 'RECOVERING', 'STOPPED'}:
+                    self.gap_controller.inject_fault(self.gap_controller.current_command[0], 'COMMUNICATION_LOST')
         self.messages.put(message)
         if message.startswith('OPRSTT|'):
             index = self._local_index(int(message.split('|')[1]))
@@ -158,6 +179,9 @@ class MasterCom:
                 self._publish_operation(event['rack_id'], 0, 0, 0, state,
                                         1 if event['direction'] == 'LEFT' else -1)
             elif kind == 'step_progress':
+                if time.monotonic() - self.last_wire_progress < .2:
+                    continue
+                self.last_wire_progress = time.monotonic()
                 state = 1 if event['direction'] == 'LEFT' else 2
                 # Keep legacy IPC wire units at this boundary only; GUI uses mm snapshots.
                 physical = self.gap_controller.racks[event['rack_id']]
@@ -193,27 +217,37 @@ class MasterCom:
                 print(f"[SIM] {ACTION_NAMES[action]}_RACK completed rack={rack_id} current_gap={event['current_gap']}")
             elif kind == 'movement_error':
                 command_rack = event['command_rack_id'] or event['rack_id']
-                self._publish_operation(command_rack, 0, 0, 1, -2)
+                previous = self.opr_messages[self._local_index(command_rack)].split('|')
+                self._publish_operation(command_rack, 0, float(previous[3]), 0, -2)
                 print(f"[SIM] MOVEMENT_ERROR rack={event['rack_id']} current_gap={event['current_gap']} reason={event['reason']}")
             elif kind == 'command_rejected':
                 self._publish_operation(event['rack_id'], 0, 0, 1, -2)
                 print(f"[SIM] Command rejected rack={event['rack_id']} reason={event['reason']}")
         self._sync_legacy_activity()
         self.gap_dirty = True
+        if any(event['type'] != 'step_progress' for event in events):
+            self.publish_state()
 
     def gap_snapshot(self):
         return {**self.gap_controller.snapshot(),
                 'lights': dict(zip(self.rack_ids, self.lights)),
                 'captured_at': time.monotonic() - self.session_started}
 
-    def _complete_action(self, rack_id, action):
+    def _complete_action(self, rack_id, action, command_id=None):
         index = self._local_index(rack_id)
         if (action in (1, 2) and self.error_racks[index]) or (action == 3 and any(self.error_racks)):
             self._publish_operation(rack_id, 0, 0, 1, -2)
             print(f'[SIM] Command rejected rack={rack_id}: active hardware breakdown')
             return False
         try:
-            queued = self.gap_controller.enqueue(rack_id, action)
+            if command_id and command_id in self.known_commands:
+                if self.known_commands[command_id] != (rack_id, action):
+                    raise ValueError('Command identity collision')
+                self.publish_state()
+                return True
+            queued = self.gap_controller.enqueue(rack_id, action, command_id)
+            if command_id:
+                self.known_commands[command_id] = (rack_id, action)
         except ValueError as exc:
             self._publish_operation(rack_id, 0, 0, 1, -2)
             print(f'[SIM] Command rejected rack={rack_id} action={action}: {exc}')
@@ -244,8 +278,91 @@ class MasterCom:
             parts = self.opr_messages[index].split('|')
             parts[2] = '0.0'
             self._publish(self._cache(self.opr_messages, '|'.join(parts)))
+            if not self.gap_controller.fault_context:
+                code = {1: 'OBSTRUCTED', 2: 'SKEWED', 3: 'MOTOR_OVERLOAD'}[errors[0]]
+                event = self.gap_controller.inject_fault(rack_id, code)
+                self._handle_gap_events([event])
+        elif not any(self.error_racks) and self.gap_controller.system_state == 'ERROR':
+            self.gap_controller.recover()
+        self.gap_dirty = True
+        self.publish_state('DEVICE_ERROR' if errors else 'ERROR_CLEARED')
+
+    def publish_state(self, event='STATE_SNAPSHOT', request_id=None):
+        self.snapshot_sequence += 1
+        state = self.gap_snapshot()
+        state['history'] = state['history'][-6:]
+        if state.get('fault_context'):
+            state['fault_context'] = {k: v for k, v in state['fault_context'].items() if k != 'racks'}
+        state.update(cabinet_index=self.rack_group_id + 1, boot_id=self.boot_id,
+                     sequence=self.snapshot_sequence, peer_session=self.peer_session,
+                     request_id=request_id, event=event,
+                     sensors={'position_trusted': (state.get('fault_context') or {}).get('position_trusted', True),
+                              'faults': {rid: errors for rid, errors in zip(self.rack_ids, self.error_racks)}})
+        # Compact extension fits low-baud links; legacy ENV/OPR/BRK stay unchanged.
+        raw = json.dumps({'type': 'simulation_state', **state}, separators=(',', ':')).encode()
+        self._publish('SIMSTT|' + base64.b64encode(zlib.compress(raw)).decode('ascii'))
+        self.last_snapshot = time.monotonic()
+
+    def control(self, data):
+        """Versioned extension; old three-field commands remain supported."""
+        if data.get('protocol_version') != 2 or data.get('cabinet_index') != self.rack_group_id + 1:
+            return False
+        session = data.get('peer_session')
+        if not isinstance(session, str) or not session:
+            return False
+        operation = data.get('operation')
+        if operation != 'REQUEST_STATE' and session != self.peer_session:
+            return False
+        self.peer_session, self.peer_seen = session, time.monotonic()
+        try:
+            if operation == 'REQUEST_STATE':
+                context = self.gap_controller.fault_context
+                if context and context['error_code'] == 'COMMUNICATION_LOST' and self.gap_controller.system_state == 'ERROR' and not any(self.error_racks):
+                    self.gap_controller.recover()
+                self.publish_state(request_id=data.get('request_id'))
+                return True
+            if operation == 'EXECUTE':
+                action = {name: code for code, name in ACTION_NAMES.items()}[data['action']]
+                return self._complete_action(int(data['address']), action, data['command_id'])
+            if data.get('request_id') in self.known_recovery_requests:
+                self.publish_state(request_id=data.get('request_id'))
+                return True
+            if operation == 'STOP':
+                address = int(data['address'])
+                self._local_index(address)
+                if not self.gap_controller.fault_context:
+                    self._handle_gap_events([self.gap_controller.inject_fault(address, data.get('error_code', 'OPERATOR_STOP'))])
+                return True
+            if any(self.error_racks):
+                raise ValueError('Physical faults remain active')
+            context = self.gap_controller.fault_context
+            if not context or data.get('fault_id') != context['fault_id']:
+                raise ValueError('Fault identity mismatch')
+            if operation == 'RESUME':
+                if self.gap_controller.system_state == 'ERROR' and context['error_code'] == 'COMMUNICATION_LOST':
+                    self.gap_controller.recover()
+                self.gap_controller.resume(data['fault_id'], data.get('confirmed') is True)
+            elif operation == 'ABORT':
+                self.gap_controller.abort(data['fault_id'])
+            elif operation == 'HOME':
+                self.gap_controller.home_recovery(data['fault_id'], data.get('confirmed') is True)
+            else:
+                raise ValueError('Unknown recovery action')
+            self.gap_dirty = True
+            self.known_recovery_requests.add(data.get('request_id'))
+            self.publish_state('RECOVERY_STARTED', data.get('request_id'))
+            return True
+        except (KeyError, TypeError, ValueError) as exc:
+            self.publish_state('CONTROL_REJECTED', data.get('request_id'))
+            print(f'[SIM] Recovery rejected: {exc}')
+            return False
 
     def determine_operationInformation(self, message):
+        if message.lstrip().startswith('{'):
+            try:
+                return self.control(json.loads(message))
+            except (ValueError, TypeError):
+                return False
         parts = message.strip().split('|')
         if len(parts) != 3 or parts[0] != '0' or parts[2] not in ('0', '1', '2', '3', '4', '5'):
             return False
@@ -281,14 +398,29 @@ class MasterCom:
                 self._discard_line = False
             elif not self._discard_line:
                 self._rx.append(byte)
-                if len(self._rx) > 256:
+                if len(self._rx) > 8192:
                     self._rx.clear()
                     self._discard_line = True
 
     def poll(self, now=None):
         if not self.is_run or self.stop_event.is_set():
             return False
-        self.read_serial_once()
+        if self.port and self.ser is None:
+            try:
+                self.ser = serial.serial_for_url(self.port, baudrate=self.baudrate,
+                                                 timeout=self.timeout, write_timeout=2)
+            except (OSError, serial.SerialException):
+                pass
+        try:
+            self.read_serial_once()
+        except (OSError, serial.SerialException):
+            if self.ser:
+                self.ser.close()
+            self.ser = None
+            if self.gap_controller.current_command and self.gap_controller.system_state not in {'ERROR', 'RECOVERING', 'STOPPED'}:
+                self._handle_gap_events([self.gap_controller.inject_fault(self.gap_controller.current_command[0], 'COMMUNICATION_LOST')])
+        if self.peer_session and time.monotonic() - self.peer_seen > 8 and self.gap_controller.current_command and self.gap_controller.system_state not in {'ERROR', 'RECOVERING', 'STOPPED'}:
+            self._handle_gap_events([self.gap_controller.inject_fault(self.gap_controller.current_command[0], 'COMMUNICATION_LOST')])
         for _ in range(100):
             try:
                 kind, args = self.requests.get_nowait()
@@ -298,6 +430,20 @@ class MasterCom:
                 self.set_errors(*args)
             elif kind == 'command':
                 self.determine_operationInformation(*args)
+            elif kind == 'inject_fault':
+                self._handle_gap_events([self.gap_controller.inject_fault(*args)])
+            elif kind == 'recover':
+                if not any(self.error_racks):
+                    self.gap_controller.recover()
+                    self.publish_state('ERROR_CLEARED')
+            elif kind == 'resume':
+                context = self.gap_controller.fault_context
+                if not self.port and context and not any(self.error_racks):
+                    try:
+                        self.gap_controller.resume(context['fault_id'], True)
+                    except ValueError as exc:
+                        print(f'[SIM] Resume rejected: {exc}')
+                    self.gap_dirty = True
         now = time.monotonic() if now is None else now
         if now >= self._next_env:
             self.create_environmentStatusData()
@@ -309,6 +455,8 @@ class MasterCom:
             self.step_operations(elapsed)
             self._last_operation_update = now
             self._next_operation = now + OPR_DATA_SEND_INTERVAL
+        if time.monotonic() - self.last_snapshot >= 2:
+            self.publish_state()
         changed = self.gap_dirty
         self.gap_dirty = False
         return changed

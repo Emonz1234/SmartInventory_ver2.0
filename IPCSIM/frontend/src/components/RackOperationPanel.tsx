@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, LinearProgress, Paper, Stack, Typography } from '@mui/material'
-import { Air, CheckCircle, Home, Lightbulb, StopCircle } from '@mui/icons-material'
+import { Air, CheckCircle, Home, Lightbulb } from '@mui/icons-material'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '@api/client'
 import { systemAPI } from '@api/system'
 
-type Rack = { rack_index?: number; id: number; rack_code: string; rack_name?: string }
+type Rack = { rack_index?: number; id: number; rack_code: string; rack_name?: string; cabinet_index?: number }
 type Step = { rack: Rack; direction: 'LEFT' | 'RIGHT'; fromGap: number; toGap: number }
 type CommandRequest = { kind: Command['kind']; rack: Rack; targetGap: number; sourceGap: number | null; steps: Step[] }
 type VentilationView = { phase: string; baselineId: number; sentRackIds: number[]; completedRackIds: number[] }
@@ -69,12 +69,13 @@ interface RackOperationPanelProps {
   ventilation?: VentilationView | null
   externalVentilated?: boolean
   onBusyChange?: (busy: boolean) => void
+  onSimulationRestart?: () => void
   onVentilatedChange?: (ventilated: boolean) => void
   externalGapInvalidation?: string
   blocked?: boolean
 }
 
-export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, permissions, onSessionExpired, onLightRequest, lightBusy = false, ventilation = null, externalVentilated = false, onBusyChange, onVentilatedChange, externalGapInvalidation = '', blocked = false }: RackOperationPanelProps) => {
+export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, permissions, onSessionExpired, onLightRequest, lightBusy = false, ventilation = null, externalVentilated = false, onBusyChange, onSimulationRestart, onVentilatedChange, externalGapInvalidation = '', blocked = false }: RackOperationPanelProps) => {
   const queryClient = useQueryClient()
   const racks = useMemo(() => [...sourceRacks].sort((a, b) => rackOrder(a) - rackOrder(b)), [sourceRacks])
   const [currentGap, setCurrentGap] = useState<number | null>(null)
@@ -105,7 +106,49 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
   const connected = !!device?.serial_connected
   const canOperate = permissions.includes('inventory.add_operation')
   const simulationAvailable = !isSimulation || device?.simulation_online === true
-  const ready = !!cabinetId && racks.length === 6 && connected && simulationAvailable && canOperate && !blocked && !health.isError && !telemetry.isError && !current?.error
+  const mechanical = (device?.simulation_states || []).find((entry: any) => entry.cabinet_index === (racks[0]?.cabinet_index ?? Math.floor((Number(racks[0]?.rack_code) - 1) / 6) + 1))
+  const fault = mechanical?.fault_context
+  const recoveryHistory = useQuery({
+    queryKey: ['simulation-recovery-history', cabinetId, session],
+    enabled: isSimulation && !!session,
+    queryFn: async () => (await api.get('/operator/simulation-state', { headers: { 'X-Operator-Session': session } })).data.history || [],
+    refetchInterval: 5000
+  })
+  const mechanicalLocked = isSimulation && (!mechanical?.online || ['ERROR', 'RECOVERING', 'STOPPED', 'COMMUNICATION_LOST'].includes(mechanical?.system_state))
+  const [recoveryAction, setRecoveryAction] = useState<string | null>(null)
+  const [recoveryBusy, setRecoveryBusy] = useState(false)
+  const [recoveryError, setRecoveryError] = useState('')
+  const bootSeen = useRef<string | null>(null)
+  const [checkBusy, setCheckBusy] = useState(false)
+  const checkFaults = async () => {
+    setCheckBusy(true)
+    setRecoveryError('')
+    try {
+      const group = mechanical?.cabinet_index ?? racks[0]?.cabinet_index ?? Math.floor((Number(racks[0]?.rack_code) - 1) / 6) + 1
+      await api.post('/operator/simulation-check', { cabinet_index: group }, { headers: { 'X-Operator-Session': session } })
+      await health.refetch()
+    } catch (error: any) {
+      if (error?.response?.status === 403) onSessionExpired()
+      setRecoveryError(error?.response?.data?.detail || 'Không lấy được trạng thái Simulation.')
+    } finally { setCheckBusy(false) }
+  }
+  const performRecovery = async () => {
+    if (!mechanical || !recoveryAction) return
+    setRecoveryBusy(true)
+    setRecoveryError('')
+    try {
+      await api.post('/operator/simulation-recovery', { cabinet_index: mechanical.cabinet_index, action: recoveryAction, fault_id: fault?.fault_id, confirmed: true }, { headers: { 'X-Operator-Session': session } })
+      setQueue([])
+      if (recoveryAction === 'RESUME') setCurrent(previous => previous ? { ...previous, phase: 'WAITING', error: undefined, startedAt: Date.now() } : null)
+      else setCurrent(null)
+      setRecoveryAction(null)
+      await health.refetch()
+    } catch (error: any) {
+      if (error?.response?.status === 403) onSessionExpired()
+      setRecoveryError(error?.response?.data?.detail || 'Không gửi được yêu cầu phục hồi.')
+    } finally { setRecoveryBusy(false) }
+  }
+  const ready = !!cabinetId && racks.length === 6 && connected && simulationAvailable && canOperate && !blocked && !health.isError && !telemetry.isError && !current?.error && !mechanicalLocked
 
   const addLog = (message: string, tone?: LogEntry['tone']) => {
     const now = new Date()
@@ -122,18 +165,52 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
     logEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [logs])
   useEffect(() => {
-    if (current || !queue.length) return
+    if (current || !queue.length || mechanicalLocked) return
     setCurrent(queue[0])
     setQueue(previous => previous.slice(1))
-  }, [current, queue])
+  }, [current, queue, mechanicalLocked])
   useEffect(() => {
-    onBusyChange?.(!!current || queue.length > 0 || !!confirmation)
-  }, [confirmation, current, onBusyChange, queue.length])
+    onBusyChange?.(!!current || queue.length > 0 || !!confirmation || !!mechanicalLocked || !!mechanical?.active_command_id)
+  }, [confirmation, current, onBusyChange, queue.length, mechanicalLocked, mechanical?.active_command_id])
   useEffect(() => {
     onVentilatedChange?.(groupVentilated)
   }, [groupVentilated, onVentilatedChange])
 
   useEffect(() => {
+    if (mechanicalLocked && fault) {
+      setQueue(previous => previous.length ? [] : previous)
+      setCurrent(previous => previous && previous.phase !== 'ERROR' ? { ...previous, phase: 'ERROR', error: fault.error_code } : previous)
+    } else if (fault?.resumed) {
+      setCurrent(previous => previous?.phase === 'ERROR' && previous.id === mechanical?.active_command_id ? { ...previous, phase: 'WAITING', error: undefined, startedAt: Date.now() } : previous)
+    } else if (mechanical?.online && !mechanicalLocked && !fault && !mechanical.active_command_id && ['IDLE', 'OPEN', 'VENTILATED'].includes(mechanical.system_state)) {
+      setCurrent(previous => previous?.phase === 'ERROR' ? null : previous)
+    }
+  }, [mechanicalLocked, fault?.fault_id, fault?.resumed, mechanical?.active_command_id, mechanical?.online, mechanical?.system_state])
+
+  useEffect(() => {
+    if (mechanical) {
+      if (mechanical.online && mechanical.boot_id) {
+        if (bootSeen.current && bootSeen.current !== mechanical.boot_id) {
+          setQueue([])
+          setCurrent(null)
+          setConfirmation(null)
+          setExecutionDialogOpen(false)
+          setLastCompleted(null)
+          setRecoveryAction(null)
+          setRecoveryError('')
+          onSimulationRestart?.()
+        }
+        bootSeen.current = mechanical.boot_id
+      }
+      setGroupVentilated(mechanical.system_state === 'VENTILATED')
+      setCurrentGap(mechanical.current_gap)
+      gapRef.current = mechanical.current_gap
+      const active = racks.find(rack => Number(rack.rack_code) === mechanical.active_rack)
+      setActiveRackId(active?.id ?? null)
+      activeRackRef.current = active?.id ?? null
+      initialStateResolved.current = true
+      return
+    }
     if (!device || !telemetry.data || !racks.length) return
     const latest = new Map<number, any>()
     for (const entry of telemetry.data) {
@@ -166,10 +243,10 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
         setCurrentGap(6)
       }
     }
-  }, [device, isSimulation, racks, telemetry.data])
+  }, [device, isSimulation, racks, telemetry.data, mechanical])
 
   useEffect(() => {
-    if (!externalGapInvalidation || invalidatedOperation.current === externalGapInvalidation) return
+    if (mechanical || !externalGapInvalidation || invalidatedOperation.current === externalGapInvalidation) return
     invalidatedOperation.current = externalGapInvalidation
     initialStateResolved.current = true
     gapRef.current = null
@@ -180,7 +257,7 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
   }, [externalGapInvalidation])
 
   useEffect(() => {
-    if (externalVentilated) setGroupVentilated(true)
+    if (!mechanical && externalVentilated) setGroupVentilated(true)
   }, [externalVentilated])
 
   useEffect(() => {
@@ -192,7 +269,7 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
         const baselineId = Math.max(0, ...(before.data.data || []).map((entry: any) => Number(entry.id) || 0))
         setCurrent(previous => previous?.id === current.id ? { ...previous, phase: 'SENDING', baselineId, startedAt: Date.now() } : previous)
         addLog(current.kind === 'HOME' ? 'RETURN_HOME requested' : `OPEN_RACK ${racks.findIndex(rack => rack.id === current.rack.id) + 1} requested`)
-        const requestKey = Array.from(crypto.getRandomValues(new Uint8Array(24)), value => value.toString(16).padStart(2, '0')).join('')
+        const requestKey = current.id
         const response = await api.post('/operator/device-commands', {
           rack_id: Number(current.rack.id), kind: current.kind, request_key: requestKey
         }, { headers: { 'X-Operator-Session': session } })
@@ -210,7 +287,7 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
   }, [current?.id, current?.phase, onSessionExpired, racks, session])
 
   useEffect(() => {
-    if (!current || !['SENDING', 'WAITING'].includes(current.phase) || current.baselineId === undefined || !telemetry.data) return
+    if (mechanicalLocked || !current || !['SENDING', 'WAITING'].includes(current.phase) || current.baselineId === undefined || !telemetry.data) return
     const baselineId = current.baselineId
     const recentCommandEvents = telemetry.data
       .filter((entry: any) => Number(entry.id) > baselineId && Number(entry.rack_id) === Number(current.rack.id))
@@ -237,17 +314,18 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
     setLastCompleted(current)
     setCurrent(null)
     void queryClient.invalidateQueries({ queryKey: ['cabinet', cabinetId, 'racks'] })
-  }, [cabinetId, current, queryClient, racks, telemetry.data])
+  }, [cabinetId, current, queryClient, racks, telemetry.data, mechanicalLocked])
 
   useEffect(() => {
     if (!current || current.phase !== 'WAITING' || !current.startedAt) return
     const timer = window.setTimeout(() => {
+      if (isSimulation) void api.post('/operator/simulation-stop', { address: Number(current.rack.rack_code) }, { headers: { 'X-Operator-Session': session } }).catch(() => health.refetch())
       const message = 'No endpoint confirmation received within 90 seconds. Check the rack before any retry.'
       setCurrent(previous => previous?.id === current.id ? { ...previous, phase: 'ERROR', error: message } : previous)
       addLog(`ERROR · ${message}`, 'error')
     }, Math.max(0, TELEMETRY_TIMEOUT_MS - (Date.now() - current.startedAt)))
     return () => window.clearTimeout(timer)
-  }, [current?.id, current?.phase, current?.startedAt])
+  }, [current?.id, current?.phase, current?.startedAt, isSimulation, session])
 
   const hasPendingOpen = (rackId: number) => current?.kind === 'OPEN' && current.rack.id === rackId ||
     queue.some(command => command.kind === 'OPEN' && command.rack.id === rackId)
@@ -300,7 +378,7 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
     .map((entry: any) => Number(entry.rack_id)))
   const activeMotion = [...latestTelemetryByRack.values()].filter((entry: any) => Number(entry.is_endpoint) !== 1 &&
     Number(entry.movement_speed) > 0 && [1, 2].includes(Number(entry.state)))
-  const ventilationMode = groupVentilated || !!ventilation && ['sending', 'waiting', 'success', 'uncertain'].includes(ventilation.phase)
+  const ventilationMode = mechanical ? mechanical.system_state === 'VENTILATED' || mechanical.current_command?.action === 'VENTILATE' : groupVentilated || !!ventilation && ['sending', 'waiting', 'success', 'uncertain'].includes(ventilation.phase)
   const ventilationActive = !!ventilation && ['sending', 'waiting'].includes(ventilation.phase)
   const ventilationMovingEvent = ventilationActive
     ? activeMotion.filter((entry: any) => Number(entry.id) > ventilation.baselineId)
@@ -334,20 +412,25 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
     : measuredStepRemaining + futureStepCount * STEP_ESTIMATE_MS / 1000
   const telemetryMoving = activeMotion.sort((a: any, b: any) => Number(b.id) - Number(a.id))[0]
   const externalMovingRack = telemetryMoving && racks.find(rack => Number(rack.id) === Number(telemetryMoving.rack_id))
-  const displayMovingRack = ventilationMovingRack || movingStep?.rack || observedRack || (!current && externalMovingRack)
+  const displayMovingRack = mechanical ? racks.find(rack => mechanical.racks?.[String(rack.rack_code)]?.is_moving) : ventilationMovingRack || movingStep?.rack || observedRack || (!current && externalMovingRack)
   const displayDirection = ventilationMovingEvent
     ? Number(ventilationMovingEvent.state) === 1 ? 'LEFT' : 'RIGHT'
     : movingStep?.direction || (Number(telemetryMoving?.state) === 1 ? 'LEFT' : Number(telemetryMoving?.state) === 2 ? 'RIGHT' : null)
-  const visualGap = ventilationMode ? null : movingStep && movingEvent ? movingStep.fromGap + (movingStep.toGap - movingStep.fromGap) * movementProgress / 100 : currentGap
+  const visualGap = mechanical ? mechanical.current_gap : ventilationMode ? null : movingStep && movingEvent ? movingStep.fromGap + (movingStep.toGap - movingStep.fromGap) * movementProgress / 100 : currentGap
   const layoutFromGap = movingStep?.fromGap ?? currentGap ?? 6
-  const gapLeftPercent = visualGap === null ? null : visualGap * 2 / 13 * 100
-  const stateLabel = ventilationMode ? groupVentilated || ventilation?.phase === 'success' ? 'VENTILATED' : ventilation?.phase === 'uncertain' ? 'CHECK' : ventilationMovingEvent ? 'MOVING' : 'VENTILATING' : current?.phase === 'ERROR' ? 'ERROR' : current?.phase === 'SENDING' ? movingEvent ? 'MOVING' : 'SENDING' : current?.phase === 'WAITING' ? (current.kind === 'HOME' ? 'RETURNING_HOME' : movingEvent ? 'MOVING' : 'WAITING') : displayMovingRack ? 'MOVING' : activeRackId ? 'OPEN' : 'IDLE'
+  const gapLeftPercent = visualGap == null ? null : mechanical ? visualGap / 7 * 100 : visualGap * 2 / 13 * 100
+  const stateLabel = mechanical ? mechanical.online ? mechanical.system_state : 'Offline' : ventilationMode ? groupVentilated || ventilation?.phase === 'success' ? 'VENTILATED' : ventilation?.phase === 'uncertain' ? 'CHECK' : ventilationMovingEvent ? 'MOVING' : 'VENTILATING' : current?.phase === 'ERROR' ? 'ERROR' : current?.phase === 'SENDING' ? movingEvent ? 'MOVING' : 'SENDING' : current?.phase === 'WAITING' ? (current.kind === 'HOME' ? 'RETURNING_HOME' : movingEvent ? 'MOVING' : 'WAITING') : displayMovingRack ? 'MOVING' : activeRackId ? 'OPEN' : 'IDLE'
   const stateColor = stateLabel === 'ERROR' || stateLabel === 'CHECK' ? 'error' : stateLabel === 'MOVING' || stateLabel === 'RETURNING_HOME' || stateLabel === 'SENDING' || stateLabel === 'VENTILATING' ? 'warning' : stateLabel === 'OPEN' || stateLabel === 'VENTILATED' ? 'success' : 'default'
   const rackNumber = (rack: Rack) => racks.findIndex(item => item.id === rack.id) + 1
   const currentActiveOrder = activeRackId ? racks.findIndex(rack => rack.id === activeRackId) : -1
   const currentOpen = current?.targetGap ?? queue[0]?.targetGap ?? gapRef.current
 
   return <Stack className="rack-operation-panel" spacing={2}>
+    <Dialog open={!!recoveryAction} onClose={() => !recoveryBusy && setRecoveryAction(null)} maxWidth="xs" fullWidth>
+      <DialogTitle>{recoveryAction === 'RESUME' ? 'Resume interrupted command' : recoveryAction === 'HOME' ? 'Verify reference before homing' : 'Abort interrupted command'}</DialogTitle>
+      <DialogContent><Typography variant="body2">Confirm inspected obstacles, limit sensors and actual reference position. {recoveryAction === 'HOME' ? 'Homing moves from the current position. Do not confirm an unverified reference.' : recoveryAction === 'RESUME' ? 'The same command continues from its saved position.' : 'The cabinet stops in place; homing is required before a new command.'}</Typography>{recoveryError && <Alert severity="error">{recoveryError}</Alert>}</DialogContent>
+      <DialogActions><Button disabled={recoveryBusy} onClick={() => setRecoveryAction(null)}>Cancel</Button><Button disabled={recoveryBusy} onClick={() => void performRecovery()}>Confirm inspection</Button></DialogActions>
+    </Dialog>
     <Paper className="rack-operation-main" variant="outlined" sx={{ p: { xs: 2, md: 2 }, borderRadius: 4 }}>
       <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={1.25} sx={{ mb: 1.25 }}>
         <Box>
@@ -355,29 +438,28 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
           <Typography variant="body2" color="text.secondary">Mỗi lần di chuyển một rack · Rack 1 và 2 dùng chung lối đi.</Typography>
         </Box>
         <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
+          {isSimulation && <Button size="small" variant="outlined" disabled={checkBusy || !connected} onClick={() => void checkFaults()}>{checkBusy ? 'Đang kiểm tra…' : 'Kiểm tra lỗi'}</Button>}
+          {isSimulation && mechanical?.online && !mechanicalLocked && !fault && <Chip size="small" label="Không có lỗi" color="success" variant="outlined" />}
           <Chip size="small" label={device?.device_type || 'Mode unknown'} color={isSimulation ? 'info' : 'primary'} variant="outlined" />
           <Chip size="small" label={`Serial ${connected ? 'ONLINE' : 'OFFLINE'}`} color={connected ? 'success' : 'error'} />
           <Chip size="small" label={`SIM ${device?.simulation_online ? 'READY' : isSimulation ? 'UNAVAILABLE' : 'N/A'}`} color={device?.simulation_online ? 'success' : isSimulation ? 'warning' : 'default'} variant="outlined" />
         </Stack>
       </Stack>
       {(health.isError || telemetry.isError) && <Alert severity="error" sx={{ mb: 1.5 }}>Không đọc được trạng thái local/telemetry. Lệnh vận hành đã bị khóa.</Alert>}
+      {recoveryError && !recoveryAction && <Alert severity="error" sx={{ mb: 1.5 }}>{recoveryError}</Alert>}
       {!connected && <Alert severity="warning" sx={{ mb: 1.5 }}>Serial offline. Không thể gửi lệnh tới rack.</Alert>}
       {isSimulation && !simulationAvailable && <Alert severity="error" sx={{ mb: 1.5 }}>Simulation unavailable. GAP commands are disabled.</Alert>}
       {racks.length !== 6 && <Alert severity="warning" sx={{ mb: 1.5 }}>Cần đúng 6 rack theo thứ tự địa chỉ để dùng sơ đồ GAP. Cabinet hiện có {racks.length} rack.</Alert>}
       {blocked && <Alert severity="info" sx={{ mb: 1.5 }}>Điều khiển GAP tạm khóa trong khi thao tác cabinet khác đang chạy.</Alert>}
-      {current?.phase === 'ERROR' && <Alert severity="error" sx={{ mb: 1.5 }} action={<Button color="inherit" size="small" startIcon={<StopCircle />} onClick={() => {
-        setQueue([])
-        setCurrent(null)
-        gapRef.current = null
-        activeRackRef.current = null
-        setCurrentGap(null)
-        setActiveRackId(null)
-        initialStateResolved.current = true
-        setLastCompleted(null)
-        setExecutionDialogOpen(false)
-        addLog('Operator checked the cabinet · GAP marked unknown; pending commands cleared')
-      }}>I checked · reset</Button>}>
-        {current.error} Các lệnh đang chờ không được tự gửi tiếp.
+      {(mechanicalLocked || fault || current?.phase === 'ERROR') && <Alert severity={!mechanicalLocked && fault?.resumed ? 'info' : mechanical?.system_state === 'RECOVERING' ? 'warning' : 'error'} sx={{ mb: 1.5 }}>
+        <Typography variant="body2" fontWeight={700}>Cabinet {mechanical?.cabinet_index} · Rack {fault?.rack_id ? (fault.rack_id - 1) % 6 + 1 : '—'} · {mechanical?.system_state || 'ERROR'}</Typography>
+        <Typography variant="caption" display="block">{fault?.previous_state} · {fault?.error_code || current?.error || 'Waiting for Simulation snapshot'} · Current: {fault?.current_position ?? '—'} mm → Target: {fault?.target_position ?? '—'} mm · {fault?.progress !== undefined ? Math.round(fault.progress) + '%' : ''}</Typography>
+        {fault?.command_id && <Typography variant="caption" display="block" sx={{ overflowWrap: 'anywhere' }}>Command: {fault.command_id}</Typography>}
+        {fault?.moving_rack_id && fault.moving_rack_id !== fault.rack_id && <Typography variant="caption" display="block">Movement interrupted at Rack {(fault.moving_rack_id - 1) % 6 + 1}</Typography>}
+        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 0.5 }}>
+          {(mechanical?.allowed_actions || []).map((action: string) => <Button key={action} size="small" disabled={!canOperate || recoveryBusy} onClick={() => setRecoveryAction(action)}>{action === 'RESUME' ? 'Resume operation' : action === 'ABORT' ? 'Abort operation' : 'Run homing'}</Button>)}
+        </Stack>
+        {recoveryError && <Typography variant="caption" color="error">{recoveryError}</Typography>}
       </Alert>}
 
       <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2}>
@@ -388,18 +470,19 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
           </Stack>
           <Box aria-label="Six-rack GAP arrangement" sx={{ position: 'relative', width: '100%', height: { xs: 90, sm: 116 }, mb: 1.5 }}>
             {racks.map((rack, index) => {
-              const isMoving = displayMovingRack?.id === rack.id
+              const physical = mechanical?.racks?.[String(rack.rack_code)]
+              const isMoving = physical ? !mechanicalLocked && physical.is_moving : displayMovingRack?.id === rack.id
               const isActive = activeRackId === rack.id
-              const isError = errorRackIds.has(Number(rack.id))
+              const isError = physical ? ['ERROR', 'RECOVERING', 'STOPPED'].includes(physical.access_state) : errorRackIds.has(Number(rack.id))
               const isLightOn = lightOnRackIds.has(Number(rack.id))
               const isSpread = groupVentilated || ventilationMode && ventilation?.completedRackIds.includes(Number(rack.id))
               const isTarget = currentOpen !== null && currentOpen !== undefined && currentOpen === gapForRack(index + 1) && current?.kind !== 'HOME'
               const startUnits = rackPositionUnits(index, layoutFromGap)
               const endUnits = movingStep?.rack.id === rack.id ? rackPositionUnits(index, movingStep.toGap) : startUnits
               const rackLeft = startUnits + (endUnits - startUnits) * movementProgress / 100
-              const rackState = isError ? 'ERROR' : isMoving ? `MOVING ${displayDirection || ''} · ${Math.round(movementProgress)}%` : isSpread ? 'SPREAD' : ventilationMode ? 'WAITING' : isActive ? 'ACTIVE' : 'IDLE'
-              const rackWidth = ventilationMode ? 500 / 35 : 200 / 13
-              const rackLeftPercent = ventilationMode ? index * 6 / 35 * 100 : rackLeft / 13 * 100
+              const rackState = physical ? mechanical.online ? physical.access_state : 'Offline' : isError ? 'ERROR' : isMoving ? `MOVING ${displayDirection || ''} · ${Math.round(movementProgress)}%` : isSpread ? 'SPREAD' : ventilationMode ? 'WAITING' : isActive ? 'ACTIVE' : 'IDLE'
+              const rackWidth = physical ? 100 / 7 : ventilationMode ? 500 / 35 : 200 / 13
+              const rackLeftPercent = physical ? physical.position_mm / 700 * 100 : ventilationMode ? index * 6 / 35 * 100 : rackLeft / 13 * 100
               return <Box key={rack.id} title={`Rack ${index + 1}: ${rackState}${isLightOn ? ' · LIGHT ON' : ''}`} sx={{
                 position: 'absolute', left: `${rackLeftPercent}%`, top: 0, width: `${rackWidth}%`, height: '100%',
                 px: { xs: 0.35, sm: 0.7 }, py: { xs: 0.45, sm: 0.65 }, border: '1px solid', borderRadius: 2,
@@ -421,7 +504,7 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
               zIndex: 3, display: 'grid', placeItems: 'center', pointerEvents: 'none'
             }}><Typography variant="caption" fontWeight={750} color="info.dark" sx={{ fontSize: { xs: 6, sm: 8 }, writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>GAP</Typography></Box>)
               : gapLeftPercent !== null && <Box title={`ACCESS GAP · ${formatGap(currentGap)}`} aria-label={`Current access gap: ${formatGap(currentGap)}`} sx={{
-                position: 'absolute', left: `${gapLeftPercent}%`, top: 0, bottom: 0, width: `${100 / 13}%`,
+                position: 'absolute', left: `${gapLeftPercent}%`, top: 0, bottom: 0, width: `${mechanical ? 100 / 7 : 100 / 13}%`,
                 border: '1px dashed', borderColor: 'info.main', borderRadius: 0.6, bgcolor: 'rgba(2, 136, 209, 0.10)',
                 transition: 'left 120ms linear', zIndex: 3, display: 'grid', placeItems: 'center', pointerEvents: 'none'
               }}><Typography variant="caption" fontWeight={800} color="info.dark" sx={{ fontSize: { xs: 7, sm: 9 }, writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>GAP</Typography></Box>}
@@ -551,18 +634,7 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
         ) : <Typography variant="body2" color="text.secondary">Command queued and waiting to start.</Typography>}
       </DialogContent>
       <DialogActions>
-        {current?.phase === 'ERROR' ? <Button color="error" onClick={() => {
-          setQueue([])
-          setCurrent(null)
-          setLastCompleted(null)
-          setExecutionDialogOpen(false)
-          gapRef.current = null
-          activeRackRef.current = null
-          setCurrentGap(null)
-          setActiveRackId(null)
-          initialStateResolved.current = true
-          addLog('Operator checked the cabinet · GAP marked unknown; pending commands cleared')
-        }}>I checked · reset</Button> : <Button onClick={() => setExecutionDialogOpen(false)}>{current ? 'Continue in background' : 'Done'}</Button>}
+        <Button onClick={() => setExecutionDialogOpen(false)}>{current ? 'Continue in background' : 'Done'}</Button>
       </DialogActions>
     </Dialog>
 
@@ -588,6 +660,7 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
         <Box sx={{ flex: 1, borderLeft: { md: '1px solid' }, borderColor: { md: 'divider' }, pl: { md: 2 } }}>
           <Typography variant="subtitle2" fontWeight={750} sx={{ mb: 1 }}>Nhật ký thao tác</Typography>
           <Box sx={{ maxHeight: 140, overflowY: 'auto', fontFamily: 'monospace' }}>
+            {(recoveryHistory.data || []).filter((entry: any) => entry.cabinet_index === mechanical?.cabinet_index).slice(0, 30).map((entry: any) => <Typography key={`recovery-${entry.id}`} variant="caption" display="block" color={entry.event.includes('error') || entry.event.includes('fault') ? 'error.main' : 'text.secondary'}>[{new Date(entry.timestamp * 1000).toLocaleTimeString()}] {entry.event}</Typography>)}
             {logs.map(entry => <Typography key={entry.id} variant="caption" display="block" color={entry.tone === 'error' ? 'error.main' : entry.tone === 'success' ? 'success.dark' : 'text.secondary'}>
               [{entry.time}] {entry.message}
             </Typography>)}

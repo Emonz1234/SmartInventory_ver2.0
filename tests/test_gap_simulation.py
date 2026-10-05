@@ -109,7 +109,7 @@ def test_fault_stops_sequence_at_last_completed_gap():
 
 def test_invalid_wire_commands_are_rejected_without_changing_gap():
     controller = MasterCom(0, port='')
-    for frame in ('0|0|1', '0|7|1', '0|-1|1', '0|x|1', '0|1|5', '1|1|1', '0|1'):
+    for frame in ('0|0|1', '0|7|1', '0|-1|1', '0|x|1', '0|1|6', '1|1|1', '0|1'):
         assert not controller.determine_operationInformation(frame)
     assert controller.current_gap == 6
     assert controller.system_state == 'IDLE'
@@ -124,7 +124,7 @@ def test_command_telemetry_has_fresh_start_before_final_endpoint(rack_id, action
     frames(controller)
     controller.determine_operationInformation(f'0|{rack_id}|{action}')
     events = run_to_idle(controller)
-    payloads = [SimulationAdapter().parse(frame).payload for frame in frames(controller)]
+    payloads = [SimulationAdapter().parse(frame).payload for frame in frames(controller) if frame.startswith('OPRSTT|')]
     target = [row for row in payloads if row['rack_id'] == rack_id]
     assert target[0]['state'] == action and target[0]['is_endpoint'] == 0
     assert target[-1]['state'] == -1 and target[-1]['is_endpoint'] == 1

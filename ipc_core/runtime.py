@@ -15,6 +15,8 @@ class Runtime:
         self.settings, self.serial = settings, serial
         self.operation_lock = threading.RLock()
         self.store = Store(settings.DB_PATH, settings.DEVICE_ID, settings.DEVICE_TYPE)
+        from ipc_core.recovery_service import RecoveryService
+        self.recovery = RecoveryService(self.store, serial) if settings.DEVICE_TYPE == 'IPCSIM' else None
         from ipc_core.auth_service import AuthService
         from ipc_core.transaction_service import TransactionService
         from ipc_core.sync_service import SyncService
@@ -58,6 +60,8 @@ class Runtime:
             self._reported_synced = synced
 
     def send_checked(self, body):
+        if self.recovery:
+            self.recovery.guard(body['address'])
         with self.store.transaction() as db:
             active = self.transactions.repo.active(db)
             if active and active['transaction_id'] != body.get('transaction_id'):
@@ -70,7 +74,12 @@ class Runtime:
                 row = db.execute("SELECT * FROM breakdown_snapshots WHERE rack_id=? ORDER BY id DESC LIMIT 1", (body["rack_id"],)).fetchone() if exists else None
                 if row and any(row[k] for k in ("is_obstructed", "is_skewed", "is_overload_motor")):
                     raise ValueError("Active hardware breakdown; wait for an explicit clear snapshot")
-        self.serial.send_domain(body)
+        if self.recovery:
+            self.recovery.send((int(body['address'])-1)//6+1, 'EXECUTE',
+                               address=body['address'], action=body['action'],
+                               command_id=body.get('transaction_id') or body.get('command_id') or str(__import__('uuid').uuid4()))
+        else:
+            self.serial.send_domain(body)
 
     def receive(self, route, raw):
         cfg = self.settings
@@ -156,9 +165,34 @@ class Runtime:
             raise ValueError("Unsupported downlink")
 
     def record_serial(self, message):
+        if message.msg_type == 'simulation_state':
+            if self.recovery:
+                try:
+                    accepted = self.recovery.receive(message.payload)
+                except (ValueError, KeyError, TypeError):
+                    self.recovery.lost(message.payload.get('cabinet_index'))
+                    raise
+                if accepted:
+                    state = next((s for s in self.recovery.states() if s['cabinet_index'] == message.payload['cabinet_index']), None)
+                    if state and state['system_state'] in {'IDLE', 'OPEN'} and not state.get('active_command_id') and not state.get('fault_context') and state.get('sensors', {}).get('position_trusted') is True and not any(state.get('sensors', {}).get('faults', {}).values()):
+                        with self.store.transaction() as db:
+                            row = db.execute("SELECT * FROM local_transactions WHERE transaction_id=? AND operation_status='UNCERTAIN'", (state.get('last_command_id'),)).fetchone()
+                            if row and (row['phase'] == 'OPEN' and state.get('active_rack') == row['address'] or row['phase'] == 'CLOSE' and state.get('active_rack') is None):
+                                db.execute("UPDATE local_transactions SET operation_status='EXECUTING',moving=1 WHERE transaction_id=?", (row['transaction_id'],))
+                            else:
+                                row = None
+                        if row:
+                            self.transactions.observe({'rack_id': row['address'], 'transaction_id': row['transaction_id'], 'state': -1,
+                                                       'is_endpoint': 1, 'displacement': 64 if row['phase'] == 'OPEN' else 0})
+            return
         if message.msg_type not in {"telemetry", "event", "ack"}:
             return
-        self.transactions.observe(message.payload)
+        # Extended Simulation faults suspend the journal until reconciliation.
+        # Legacy fault frames remain visible but do not destroy resumable context.
+        locked = self.recovery and any(s['cabinet_index'] == (int(message.payload.get('rack_id', 1))-1)//6+1 and
+                                      s['system_state'] in {'ERROR', 'RECOVERING', 'STOPPED', 'COMMUNICATION_LOST'} for s in self.recovery.states())
+        if not locked and not (self.recovery and any(k in message.payload for k in ('is_obstructed', 'is_skewed', 'is_overload_motor'))):
+            self.transactions.observe(message.payload)
         fault_keys = ('is_obstructed', 'is_skewed', 'is_overload_motor')
         if any(key in message.payload for key in fault_keys):
             self.hardware_fault = any(message.payload.get(key) for key in fault_keys)
