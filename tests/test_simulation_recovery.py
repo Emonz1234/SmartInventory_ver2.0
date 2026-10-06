@@ -173,7 +173,7 @@ def test_disconnect_reconnect_requests_state_and_keeps_interrupted_position(tmp_
     assert sim.gap_controller.racks[6].position_mm == 525
 
 
-def test_recoverable_fault_auto_resume_after_matching_snapshot(tmp_path):
+def test_recoverable_fault_waits_for_operator_after_matching_snapshot(tmp_path):
     sim, edge = pair(tmp_path)
     edge.poll()
     deliver(sim, edge)
@@ -184,8 +184,63 @@ def test_recoverable_fault_auto_resume_after_matching_snapshot(tmp_path):
     deliver(sim, edge)
     sim.gap_controller.recover()
     deliver(sim, edge)
+    assert not sim.gap_controller.racks[6].is_moving
+    state = edge.states()[0]
+    assert state['system_state'] == 'RECOVERING'
+    assert 'RESUME' in state['allowed_actions']
+    edge.recover(1, 'RESUME', state['fault_context']['fault_id'], True)
     assert sim.gap_controller.racks[6].is_moving
     assert sim.gap_controller.racks[6].position_mm == 525
+
+
+def test_same_physical_fault_after_clear_revokes_recovery_and_keeps_checkpoint(tmp_path):
+    sim, edge = pair(tmp_path)
+    edge.poll()
+    deliver(sim, edge)
+    edge.send(1, 'EXECUTE', address=3, action='OPEN', command_id='open-3')
+    sim.step_operations(0)
+    sim.step_operations(4)
+    sim.step_operations(0)
+    sim.step_operations(1.6)
+    sim.set_errors(5, [1])
+    deliver(sim, edge)
+    context = dict(edge.states()[0]['fault_context'])
+    assert context['moving_rack_id'] == 5 and context['current_position'] == 440
+    sim.set_errors(5, [])
+    deliver(sim, edge)
+    assert 'RESUME' in edge.states()[0]['allowed_actions']
+    sim.set_errors(5, [1])
+    deliver(sim, edge)
+    state = edge.states()[0]
+    assert state['system_state'] == 'ERROR'
+    assert state['allowed_actions'] == []
+    assert not state['fault_context']['cleared']
+    assert state['fault_context']['fault_id'] == context['fault_id']
+    assert state['fault_context']['command_id'] == 'open-3'
+    assert state['fault_context']['current_position'] == 440
+    with pytest.raises(ValueError):
+        edge.recover(1, 'RESUME', context['fault_id'], True)
+
+
+def test_home_after_clear_cancels_interrupted_command_without_replaying_it(tmp_path):
+    sim, edge = pair(tmp_path)
+    edge.poll()
+    deliver(sim, edge)
+    edge.send(1, 'EXECUTE', address=3, action='OPEN', command_id='open-3')
+    sim.step_operations(0)
+    sim.step_operations(1.6)
+    sim.set_errors(6, [1])
+    sim.set_errors(6, [])
+    deliver(sim, edge)
+    edge.recover(1, 'HOME', edge.states()[0]['fault_context']['fault_id'], True)
+    assert sim.gap_controller.racks[6].position_mm == 540
+    for _ in range(30):
+        sim.step_operations(.5)
+    deliver(sim, edge)
+    state = edge.states()[0]
+    assert state['system_state'] == 'IDLE' and state['current_gap'] == 6
+    assert state['fault_context'] is None and not state['active_command_id']
+    assert not state['pending_commands']
 
 
 def test_reference_lost_only_offers_home_and_abort(tmp_path):

@@ -83,7 +83,7 @@ const wait = milliseconds => new Promise(resolve => setTimeout(resolve, millisec
         return route.fulfill({ json: { state: 'local_sent', id: body.request_key, rack_id: body.rack_id, kind: body.kind } });
       }
       if (body.kind === 'VENTILATE') {
-        pushTelemetry(body.rack_id, 0, 0, 0, 3);
+        for (let rackId = 1; rackId <= 6; rackId++) pushTelemetry(rackId, 0, 0, 0, 3);
         if (!ventilationSimulationStarted) {
           ventilationSimulationStarted = true;
           void (async () => {
@@ -270,7 +270,7 @@ const wait = milliseconds => new Promise(resolve => setTimeout(resolve, millisec
   if (await ventilationDialog.locator('h2').innerText() !== 'Cabinet ventilation complete') {
     throw new Error(`Ventilation did not reach success. commands=${commands.filter(command => command.kind === 'VENTILATE').length}; dialog=${(await ventilationDialog.innerText()).slice(0, 900)}`);
   }
-  if (commands.filter(command => command.kind === 'VENTILATE').length !== 6) throw new Error('Ventilation did not dispatch all six rack commands.');
+  if (commands.filter(command => command.kind === 'VENTILATE').length !== 1) throw new Error('Ventilation must dispatch exactly one group command.');
   await ventilationDialog.getByRole('button', { name: 'Done' }).click();
   if (await page.locator('[aria-label^="Ventilation gap "]').count() !== 5) throw new Error('Ventilation layout did not show all five spaced gaps.');
   if (!(await page.getByRole('button', { name: 'Ventilate cabinet', exact: true }).isDisabled())) throw new Error('Ventilation remained available while the cabinet was already ventilated.');

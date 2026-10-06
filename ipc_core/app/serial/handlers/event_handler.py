@@ -1,4 +1,3 @@
-from sqlalchemy.orm import Session
 from ipc_core.app.database.database import SessionLocal
 from ipc_core.app.database.models.runtime import OperationSnapshot, BreakdownSnapshot
 from ipc_core.app.serial.location import describe_location

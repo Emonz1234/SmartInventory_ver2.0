@@ -23,22 +23,27 @@ class Runtime:
         self.store = Store(settings.DB_PATH, settings.DEVICE_ID, settings.DEVICE_TYPE)
         from ipc_core.recovery_service import RecoveryService
         self.recovery = RecoveryService(self.store, serial) if settings.DEVICE_TYPE == 'IPCSIM' else None
+        from ipc_core.fault_service import FaultService
+        self.faults = FaultService(self.store, settings, self.recovery)
         from ipc_core.auth_service import AuthService
         from ipc_core.transaction_service import TransactionService
         from ipc_core.sync_service import SyncService
         self.auth = AuthService(self.store)
         self.transactions = TransactionService(self.store, self.auth, self.send_checked)
+        self.transactions.recovery = self.recovery
         self.transactions.recover()
         self.sync = SyncService(self.store)
         self.lease_until = 0
         self.connected = False
         self.hardware_fault = False
+        self.hardware_fault_details = {}
         self.remote_revision = None
         self._reported_server_online = None
         self._reported_synced = None
         self.stop_event = threading.Event()
         self.client = None
         self.thread = None
+        self.restore_operation_history()
 
     @property
     def online(self):
@@ -74,7 +79,6 @@ class Runtime:
                 raise ValueError('A local physical transaction owns the hardware')
         # Preserve the existing physical breakdown interlock for open/close.
         if body["action"] in {"OPEN", "CLOSE", "VENTILATE"}:
-            from ipc_core.app.utils.timezone import get_current_time
             with self.store.transaction() as db:
                 exists = db.execute("SELECT 1 FROM sqlite_master WHERE name='breakdown_snapshots'").fetchone()
                 row = db.execute("SELECT * FROM breakdown_snapshots WHERE rack_id=? ORDER BY id DESC LIMIT 1", (body["rack_id"],)).fetchone() if exists else None
@@ -83,7 +87,7 @@ class Runtime:
         if self.recovery:
             self.recovery.send((int(body['address'])-1)//6+1, 'EXECUTE',
                                address=body['address'], action=body['action'],
-                               command_id=body.get('transaction_id') or body.get('command_id') or str(__import__('uuid').uuid4()))
+                               command_id=body.get('command_id') or body.get('transaction_id') or str(__import__('uuid').uuid4()))
         else:
             self.serial.send_domain(body)
 
@@ -187,17 +191,12 @@ class Runtime:
                 if accepted:
                     state = next((s for s in self.recovery.states() if s['cabinet_index'] == message.payload['cabinet_index']), None)
                     if state:
+                        self.faults.observe(state)
+                    if state:
                         self.report_simulation_command(state)
-                    if state and state['system_state'] in {'IDLE', 'OPEN'} and not state.get('active_command_id') and not state.get('fault_context') and state.get('sensors', {}).get('position_trusted') is True and not any(state.get('sensors', {}).get('faults', {}).values()):
-                        with self.store.transaction() as db:
-                            row = db.execute("SELECT * FROM local_transactions WHERE transaction_id=? AND operation_status='UNCERTAIN'", (state.get('last_command_id'),)).fetchone()
-                            if row and (row['phase'] == 'OPEN' and state.get('active_rack') == row['address'] or row['phase'] == 'CLOSE' and state.get('active_rack') is None):
-                                db.execute("UPDATE local_transactions SET operation_status='EXECUTING',moving=1 WHERE transaction_id=?", (row['transaction_id'],))
-                            else:
-                                row = None
-                        if row:
-                            self.transactions.observe({'rack_id': row['address'], 'transaction_id': row['transaction_id'], 'state': -1,
-                                                       'is_endpoint': 1, 'displacement': 64 if row['phase'] == 'OPEN' else 0})
+                    if state:
+                        with self.operation_lock:
+                            self.transactions.reconcile(state)
             return
         if message.msg_type not in {"telemetry", "event", "ack"}:
             return
@@ -205,11 +204,12 @@ class Runtime:
         # Legacy fault frames remain visible but do not destroy resumable context.
         locked = self.recovery and any(s['cabinet_index'] == (int(message.payload.get('rack_id', 1))-1)//6+1 and
                                       s['system_state'] in {'ERROR', 'RECOVERING', 'STOPPED', 'COMMUNICATION_LOST'} for s in self.recovery.states())
-        if not locked and not (self.recovery and any(k in message.payload for k in ('is_obstructed', 'is_skewed', 'is_overload_motor'))):
+        if not self.recovery and not locked:
             self.transactions.observe(message.payload)
         fault_keys = ('is_obstructed', 'is_skewed', 'is_overload_motor')
         if any(key in message.payload for key in fault_keys):
             self.hardware_fault = any(message.payload.get(key) for key in fault_keys)
+            self.hardware_fault_details = dict(message.payload) if self.hardware_fault else {}
         kind = "telemetry.sample" if message.msg_type == "telemetry" else "events.serial"
         channel = kind.split(".")[0]
         outgoing = envelope(self.settings.DEVICE_ID, self.settings.DEVICE_TYPE, kind, message.payload)
@@ -221,48 +221,45 @@ class Runtime:
             if assigned:
                 self.store.enqueue(db, channel, outgoing)
 
-    def report_simulation_command(self, snapshot):
-        """Bridge reconciled Simulation evidence to the existing MQTT command result."""
+    def report_simulation_command(self, snapshot, observed_at=None, publish=True):
+        """Persist actual local/Server execution independently of delivery state."""
+        from ipc_core.operation_history import execution_result
         command_id = snapshot.get('active_command_id') or snapshot.get('last_command_id')
         if not command_id:
             return
+        timestamp = datetime.fromtimestamp(observed_at, timezone.utc).isoformat() if observed_at is not None else datetime.now(timezone.utc).isoformat()
         with self.store.transaction() as db:
             row = db.execute('SELECT * FROM edge_operations WHERE id=?', (command_id,)).fetchone()
-            if not row or row['state'] != 'sent':
-                return
-            if row['result'] and json.loads(row['result']).get('execution_state') == 'completed':
+            if not row or row['state'] in {'rejected','expired','failed'}:
                 return
             body = json.loads(row['body'])
-            address, action = body['address'], body['action']
-            if snapshot['cabinet_index'] != (int(address)-1)//6+1:
+            result = execution_result(snapshot, command_id, body['address'], body.get('action') or body.get('kind'))
+            if not result:
                 return
-            sensors = snapshot.get('sensors', {})
-            fault = snapshot.get('fault_context')
-            execution = None
-            if fault or snapshot['system_state'] in {'ERROR', 'RECOVERING', 'STOPPED', 'COMMUNICATION_LOST'}:
-                execution = 'fault'
-            elif snapshot.get('active_command_id') == command_id:
-                execution = 'moving'
-            elif (snapshot.get('last_command_id') == command_id and not snapshot.get('active_command_id')
-                  and not snapshot.get('pending_commands') and sensors.get('position_trusted') is True
-                  and not any(sensors.get('faults', {}).values())
-                  and all(not r.get('is_moving') for r in snapshot.get('racks', {}).values())):
-                if (action == 'OPEN' and snapshot['system_state'] == 'OPEN' and snapshot.get('active_rack') == address
-                    or action == 'CLOSE' and snapshot['system_state'] == 'IDLE' and snapshot.get('active_rack') is None
-                    or action == 'VENTILATE' and snapshot['system_state'] == 'VENTILATED'):
-                    execution = 'completed'
-            if not execution:
-                return
-            result = dict(state='sent', execution_state=execution, address=address, action=action,
-                          cabinet_index=snapshot['cabinet_index'])
-            if fault:
-                result['error'] = fault.get('error_code', 'Simulation fault')
-            if row['result'] == canonical(result):
+            db.execute('INSERT OR IGNORE INTO edge_operation_times(id,created_at,updated_at) VALUES(?,?,?)', (command_id,timestamp,timestamp))
+            previous = json.loads(row['result'] or '{}')
+            if result['execution_state'] == 'completed':
+                db.execute('UPDATE edge_operation_times SET completed_at=COALESCE(completed_at,?) WHERE id=?', (timestamp,command_id))
+            if previous.get('execution_state') == 'completed' or row['result'] == canonical(result):
                 return
             db.execute('UPDATE edge_operations SET result=? WHERE id=?', (canonical(result), command_id))
-            outgoing = envelope(self.settings.DEVICE_ID, self.settings.DEVICE_TYPE, 'events.command_result', result, command_id=command_id)
-            self.store.enqueue(db, 'events', outgoing)
-        log.info('command.execution device=%s command=%s execution=%s address=%s', self.settings.DEVICE_ID, command_id, execution, address)
+            db.execute('UPDATE edge_operation_times SET updated_at=? WHERE id=?', (timestamp,command_id))
+            if publish and row['state'] == 'sent':
+                # MQTT retains its existing moving/completed/fault vocabulary.
+                wire_result = {**result,'execution_state':'fault'} if result['execution_state']=='paused' else result
+                outgoing = envelope(self.settings.DEVICE_ID, self.settings.DEVICE_TYPE, 'events.command_result', wire_result, command_id=command_id)
+                self.store.enqueue(db, 'events', outgoing)
+        log.info('command.execution device=%s command=%s execution=%s address=%s', self.settings.DEVICE_ID, command_id, result['execution_state'],body['address'])
+
+    def restore_operation_history(self):
+        if not self.recovery:
+            return
+        with self.store.transaction() as db:
+            history = [(row['timestamp'],json.loads(row['body'])) for row in db.execute('SELECT timestamp,body FROM simulation_history ORDER BY id')]
+            history += [(row['received_at'],json.loads(row['body'])) for row in db.execute('SELECT received_at,body FROM simulation_state')]
+        for timestamp,snapshot in history:
+            if 'cabinet_index' in snapshot and 'racks' in snapshot and snapshot.get('system_state') != 'COMMUNICATION_LOST':
+                self.report_simulation_command(snapshot,observed_at=timestamp,publish=False)
 
     def start(self):
         if not self.settings.MQTT_HOST:

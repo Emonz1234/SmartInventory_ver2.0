@@ -52,10 +52,32 @@ if ($ActiveEdgePorts.Count -gt 0) {
 }
 
 $ComposeBase = @('--env-file', 'deploy/.env', '-f', 'deploy/compose.yaml')
+if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+    throw 'Docker CLI not found. Install/start Docker Desktop and open a new PowerShell terminal.'
+}
+& docker info --format '{{.ServerVersion}}'
+if ($LASTEXITCODE -ne 0) {
+    throw 'Docker engine is unavailable. Start Docker Desktop and wait until the engine is running.'
+}
+
 function Invoke-Compose([string[]]$Arguments) {
-    & docker compose @ComposeBase @Arguments
-    if ($LASTEXITCODE -ne 0) {
-        throw "docker compose failed: $($Arguments -join ' ')"
+    $LogDirectory = Join-Path $ProjectRoot 'runtime'
+    New-Item -ItemType Directory -Path $LogDirectory -Force | Out-Null
+    $LogPath = Join-Path $LogDirectory 'reset-development-compose.log'
+    # Native stderr contains normal build progress too; preserve it without
+    # letting Windows PowerShell turn it into a terminating error.
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & docker compose --progress plain @ComposeBase @Arguments 2>&1 |
+            Tee-Object -FilePath $LogPath
+        $ComposeExitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $PreviousErrorActionPreference
+    }
+    if ($ComposeExitCode -ne 0) {
+        throw "docker compose failed (exit $ComposeExitCode): $($Arguments -join ' '). See the Docker error above or $LogPath"
     }
 }
 

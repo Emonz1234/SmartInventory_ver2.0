@@ -137,6 +137,7 @@ def console(request, resource, pk=None):
         )
     if resource == "ipcs":
         if method == "GET":
+            from .overview import pending_sync_for_device
             rows = Device.objects.filter(device_type__in=domains).order_by(
                 "device_type", "pk"
             )
@@ -159,6 +160,10 @@ def console(request, resource, pk=None):
                         cabinet_group_count=d.cabinet_set.count(),
                         cabinet_groups=list(d.cabinet_set.values("id", "name", "code")),
                         racks=Rack.objects.filter(cabinet__device=d).count(),
+                        active_errors=(Alarm.objects.filter(device=d, active=True).count()
+                                       if allowed(request.user, 'alarm.view', source(d.device_type)) else None),
+                        pending_sync=(pending_sync_for_device(d)
+                                      if allowed(request.user, 'inventory.view', source(d.device_type)) else None),
                     )
                     for d in rows
                 ],
@@ -366,15 +371,12 @@ def console(request, resource, pk=None):
             entry = transact(request.user, data)
             return JsonResponse({"id": entry.pk}, status=201)
     if resource == "audit-logs" and method == "GET":
-        return JsonResponse(
-            values(
-                AuditLog.objects.filter(
-                    source_type__in=scopes + (["ALL"] if len(scopes) == 2 else [])
-                ).order_by("-pk"),
-                request,
-            ),
-            safe=False,
-        )
+        rows = AuditLog.objects.filter(source_type__in=scopes + (["ALL"] if len(scopes) == 2 else []))
+        if request.GET.get('resource'):
+            rows = rows.filter(resource=request.GET['resource'])
+        if request.GET.get('object_id'):
+            rows = rows.filter(object_id=request.GET['object_id'])
+        return JsonResponse(values(rows.order_by('-pk'), request), safe=False)
     if resource in ["users", "roles", "permissions", "settings"]:
         if not (
             resource == "roles"

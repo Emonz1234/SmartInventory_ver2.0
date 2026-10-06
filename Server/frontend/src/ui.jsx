@@ -1,4 +1,10 @@
-import { t as uiText, errorText, statusText, useLanguage, fieldText } from './i18n';
+import {
+  t as uiText,
+  errorText,
+  statusText,
+  useLanguage,
+  fieldText,
+} from "./i18n";
 import React, { useState, useRef, useEffect } from "react";
 
 export function Icon({ name = "grid" }) {
@@ -35,7 +41,7 @@ export function StatusBadge({ value }) {
   const text = String(value);
   return (
     <span className={"inv-chip " + text.toLowerCase().replaceAll(" ", "-")}>
-      {statusText(text)}
+      {["REAL", "SIMULATION"].includes(text) ? text : statusText(text)}
     </span>
   );
 }
@@ -64,7 +70,10 @@ export function ErrorState({ children, retry }) {
     <div className="error" role="alert">
       {uiText(children)}
       {retry && (
-        <button className="secondary" onClick={retry}> {uiText("Thử lại")} </button>
+        <button className="secondary" onClick={retry}>
+          {" "}
+          {uiText("Thử lại")}{" "}
+        </button>
       )}
     </div>
   );
@@ -78,13 +87,60 @@ export function KpiCard({ label, value }) {
     </article>
   );
 }
-export function PageHeader({ title, children }) {
+export function PageHeader({ title, description, children }) {
   useLanguage();
   return (
     <header className="page-header">
-      <h1>{uiText(title)}</h1>
+      <div>
+        <h1>{uiText(title)}</h1>
+        {description && <p className="muted">{description}</p>}
+      </div>
       {children}
     </header>
+  );
+}
+export function TechnicalDetails({ children, title }) {
+  const language = useLanguage();
+  return (
+    <details className="technical-details">
+      <summary>
+        {title ||
+          (language === "en" ? "Technical information" : "Thông tin kỹ thuật")}
+      </summary>
+      <div>{children}</div>
+    </details>
+  );
+}
+export function DetailDrawer({ title, children, onClose }) {
+  const language = useLanguage(),
+    ref = useRef(null),
+    opener = useRef(document.activeElement);
+  useEffect(() => {
+    ref.current.show();
+    ref.current.querySelector("button")?.focus();
+    return () => opener.current?.focus();
+  }, []);
+  return (
+    <dialog
+      ref={ref}
+      className="detail-drawer"
+      aria-label={title}
+      onCancel={onClose}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          onClose();
+        }
+      }}
+    >
+      <div className="drawer-heading">
+        <h2>{title}</h2>
+        <button className="secondary" onClick={onClose}>
+          {language === "en" ? "Close" : "Đóng"} ×
+        </button>
+      </div>
+      {children}
+    </dialog>
   );
 }
 export function SearchBar({
@@ -122,7 +178,10 @@ export function ConfirmDialog({ message, onCancel, onConfirm }) {
       <h2 id="confirm-title">{uiText("Xác nhận thao tác")}</h2>
       <p>{uiText(message)}</p>
       <div className="actions">
-        <button className="secondary" onClick={onCancel} autoFocus> {uiText("Hủy")} </button>
+        <button className="secondary" onClick={onCancel} autoFocus>
+          {" "}
+          {uiText("Hủy")}{" "}
+        </button>
         <button onClick={onConfirm}>{uiText("Xác nhận")}</button>
       </div>
     </dialog>
@@ -162,12 +221,18 @@ export function Pagination({ page, total, size, onChange }) {
           className="secondary"
           disabled={!page}
           onClick={() => onChange(page - 1)}
-        > {uiText("Trước")} </button>
+        >
+          {" "}
+          {uiText("Trước")}{" "}
+        </button>
         <button
           className="secondary"
           disabled={page + 1 >= count}
           onClick={() => onChange(page + 1)}
-        > {uiText("Sau")} </button>
+        >
+          {" "}
+          {uiText("Sau")}{" "}
+        </button>
       </div>
     </div>
   );
@@ -203,15 +268,22 @@ export function DataTable({
               });
         return order * sort.direction;
       })
-    : filtered;
+    : [...filtered].sort(
+        (a, b) =>
+          (a.source_type === "SIMULATION" ? 1 : 0) -
+          (b.source_type === "SIMULATION" ? 1 : 0),
+      );
   const current = Math.min(
     page,
     Math.max(0, Math.ceil(sorted.length / size) - 1),
   );
   const label = (c) => fieldText(c);
   const value = (r, c) => {
-    if (['error', 'error_message', 'sync_error', 'message'].includes(c) && r[c]) return errorText(r[c]);
+    if (["error", "error_message", "sync_error", "message"].includes(c) && r[c])
+      return errorText(r[c]);
     if (c === "source_type") return <SourceBadge source={r[c]} />;
+    if (c === "active" && typeof r[c] === "boolean")
+      return <StatusBadge value={r[c] ? "Active" : "Cleared"} />;
     if (
       ["online", "mqtt_connected", "serial_connected", "synchronized"].includes(
         c,
@@ -236,7 +308,16 @@ export function DataTable({
         />
       );
     if (
-      ["state", "status", "severity", "result", "kind", "execution_state", "operation_status", "sync_status"].includes(c) &&
+      [
+        "state",
+        "status",
+        "severity",
+        "result",
+        "kind",
+        "execution_state",
+        "operation_status",
+        "sync_status",
+      ].includes(c) &&
       typeof r[c] === "string"
     )
       return <StatusBadge value={r[c]} />;
@@ -269,7 +350,9 @@ export function DataTable({
             setPage(0);
           }}
         />
-        <span className="muted">{filtered.length} {uiText("kết quả")}</span>
+        <span className="muted">
+          {filtered.length} {uiText("kết quả")}
+        </span>
       </FilterBar>
       {sorted.length ? (
         <div className="table-scroll">
@@ -299,7 +382,11 @@ export function DataTable({
                     >
                       {uiText(label(c))}{" "}
                       <span aria-hidden="true">
-                        {sort?.key === c ? sort.direction === 1 ? "↑" : "↓" : "↕"}
+                        {sort?.key === c
+                          ? sort.direction === 1
+                            ? "↑"
+                            : "↓"
+                          : "↕"}
                       </span>
                     </button>
                   </th>
@@ -313,7 +400,12 @@ export function DataTable({
                 .map((r, i) => (
                   <tr key={r.id ?? i}>
                     {columns.map((c) => (
-                      <td key={c} className={typeof r[c] === "number" ? "numeric-cell" : undefined}>
+                      <td
+                        key={c}
+                        className={
+                          typeof r[c] === "number" ? "numeric-cell" : undefined
+                        }
+                      >
                         {c === columns[0] && onSelect ? (
                           <button className="link" onClick={() => onSelect(r)}>
                             {value(r, c)}
@@ -325,10 +417,9 @@ export function DataTable({
                     ))}
                     {actions && (
                       <td>
-                        <details className="row-menu">
-                          <summary aria-label={uiText("Thao tác")}>⋮</summary>
-                          <div className="actions">{actions(r)}</div>
-                        </details>
+                        <div className="actions table-actions">
+                          {actions(r)}
+                        </div>
                       </td>
                     )}
                   </tr>

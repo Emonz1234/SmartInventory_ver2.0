@@ -9,6 +9,7 @@ import { Layout } from '@components/Layout/Layout'
 import { Dashboard, Cabinets, CabinetDetail, Transactions, Breakdown, Environment, Operation, System } from '@pages/index'
 import api from '@api/client'
 import { OperatorLogin } from '@components/OperatorLogin'
+import { SimulationFaultMonitor } from '@components/SimulationFaultMonitor'
 
 const OPERATOR_SESSION_KEY = 'edgeOperatorSession'
 const OPERATOR_PERMISSIONS_KEY = 'edgeOperatorPermissions'
@@ -188,6 +189,7 @@ function App() {
       <CssBaseline />
       <QueryClientProvider client={queryClient}>
         <Router basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+          <SimulationFaultMonitor session={operatorSession} permissions={operatorPermissions} onSessionExpired={expireOperatorSession} />
           <Layout operatorName={operatorName} onLogout={() => void logoutOperator()}>
             {sessionWarning && <Alert severity="warning" sx={{ mb: 2 }}>{errorText(sessionWarning)}</Alert>}
             <Routes>
@@ -196,7 +198,7 @@ function App() {
               <Route path="/cabinets" element={<Cabinets />} />
               <Route path="/cabinets/:id" element={<CabinetDetail session={operatorSession} permissions={operatorPermissions} onSessionExpired={expireOperatorSession} />} />
               <Route path="/transactions" element={<Transactions session={operatorSession} onSessionExpired={expireOperatorSession} />} />
-              <Route path="/breakdown" element={<Breakdown />} />
+              <Route path="/breakdown" element={<Breakdown session={operatorSession} onSessionExpired={() => { clearSavedOperatorSession(); setOperatorSession(''); setOperatorPermissions([]) }} />} />
               <Route path="/environment" element={<Environment />} />
               <Route path="/operation" element={<Operation />} />
               <Route path="/logs" element={<Navigate to="/breakdown" replace />} />

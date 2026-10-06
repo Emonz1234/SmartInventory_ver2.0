@@ -1,7 +1,10 @@
 import { t as sharedText, getLanguage, errorText, useLanguage, LanguageSelector } from '../i18n';
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, LinearProgress, Paper, Stack, Typography } from '@mui/material'
-import { Air, CheckCircle, Home, Lightbulb, StopCircle } from '@mui/icons-material'
+import { CheckCircle, Home, Lightbulb, StopCircle } from '@mui/icons-material'
+import { SimulationFaultDialog } from './SimulationFaultDialog'
+import { MaintenanceNotice } from './MaintenanceNotice'
+import { recoveryIsReady, recoveryWasAcknowledged } from './simulationRecovery'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '@api/client'
 import { systemAPI } from '@api/system'
@@ -93,6 +96,7 @@ function formatGap(gap: number | null) {
 }
 
 interface RackOperationPanelProps {
+  cabinetActive?: boolean
   cabinetId: string | undefined
   racks: Rack[]
   session: string
@@ -104,12 +108,15 @@ interface RackOperationPanelProps {
   externalVentilated?: boolean
   onBusyChange?: (busy: boolean) => void
   onSimulationRestart?: () => void
+  onFaultVisibilityChange?: (visible: boolean) => void
+  onRecoveryStarted?: (action: 'RESUME' | 'HOME', baselineId: number) => void
+  externalError?: any
   onVentilatedChange?: (ventilated: boolean) => void
   externalGapInvalidation?: string
   blocked?: boolean
 }
 
-export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, permissions, onSessionExpired, onLightRequest, lightBusy = false, ventilation = null, externalVentilated = false, onBusyChange, onSimulationRestart, onVentilatedChange, externalGapInvalidation = '', blocked = false }: RackOperationPanelProps) => {
+export const RackOperationPanel = ({ cabinetActive = true, cabinetId, racks: sourceRacks, session, permissions, onSessionExpired, onLightRequest, lightBusy = false, ventilation = null, externalVentilated = false, onBusyChange, onSimulationRestart, onFaultVisibilityChange, onRecoveryStarted, externalError, onVentilatedChange, externalGapInvalidation = '', blocked = false }: RackOperationPanelProps) => {
   useLanguage();
   const queryClient = useQueryClient()
   const racks = useMemo(() => [...sourceRacks].sort((a, b) => rackOrder(a) - rackOrder(b)), [sourceRacks])
@@ -124,6 +131,9 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
   const [logs, setLogs] = useState<LogEntry[]>([])
   const logEnd = useRef<HTMLDivElement | null>(null)
   const dispatched = useRef(new Set<string>())
+  const stopRequested = useRef(new Set<string>())
+  const cabinetActiveRef = useRef(cabinetActive)
+  cabinetActiveRef.current = cabinetActive
   const initialStateResolved = useRef(currentGap !== null)
   const invalidatedOperation = useRef('')
   const gapRef = useRef<number | null>(currentGap)
@@ -140,7 +150,7 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
   const isSimulation = device?.device_type === 'IPCSIM' || device?.simulation_online === true
   const connected = !!device?.serial_connected
   const canOperate = permissions.includes('inventory.add_operation')
-  const canRecover = permissions.includes('cabinet.control')
+  const canRecover = cabinetActive && permissions.includes('cabinet.control')
   const simulationAvailable = !isSimulation || device?.simulation_online === true
   const mechanical = (device?.simulation_states || []).find((entry: any) => entry.cabinet_index === (racks[0]?.cabinet_index ?? Math.floor((Number(racks[0]?.rack_code) - 1) / 6) + 1))
   const fault = mechanical?.fault_context
@@ -151,12 +161,15 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
     refetchInterval: 5000
   })
   const mechanicalLocked = isSimulation && (!mechanical?.online || ['ERROR', 'RECOVERING', 'STOPPED', 'COMMUNICATION_LOST'].includes(mechanical?.system_state))
-  const [recoveryAction, setRecoveryAction] = useState<string | null>(null)
+  const [incident, setIncident] = useState<any>(null)
+  const [pendingRecovery, setPendingRecovery] = useState<any>(null)
+  const recoveryInFlight = useRef(false)
   const [recoveryBusy, setRecoveryBusy] = useState(false)
   const [recoveryError, setRecoveryError] = useState<any>('')
   const bootSeen = useRef<string | null>(null)
   const [checkBusy, setCheckBusy] = useState(false)
   const checkFaults = async () => {
+    if (!cabinetActiveRef.current) return
     setCheckBusy(true)
     setRecoveryError('')
     try {
@@ -168,23 +181,37 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
       setRecoveryError(error)
     } finally { setCheckBusy(false) }
   }
-  const performRecovery = async () => {
-    if (!mechanical || !recoveryAction || !canRecover || recoveryBusy) return
+  const recoveryOnline = !!mechanical?.online && connected && simulationAvailable && !health.isError
+  const recoveryReady = recoveryIsReady(mechanical, recoveryOnline, incident)
+  const faultVisible = !!incident
+  const controlLocked = mechanicalLocked || faultVisible || recoveryBusy
+  const controlLockedRef = useRef(controlLocked)
+  controlLockedRef.current = controlLocked
+  useEffect(() => {
+    if (incident?.context?.error_code === 'COMMUNICATION_LOST' && recoveryOnline && !fault && !mechanicalLocked) setIncident(null)
+  }, [incident, recoveryOnline, fault, mechanicalLocked])
+  const performRecovery = async (action: 'RESUME' | 'HOME') => {
+    if (!cabinetActiveRef.current || !mechanical || !recoveryReady || !canRecover || recoveryInFlight.current ||
+      !(mechanical.allowed_actions || []).includes(action)) return
+    recoveryInFlight.current = true
     setRecoveryBusy(true)
     setRecoveryError('')
+    const request = { action, faultId: fault.fault_id, commandId: fault.command_id,
+      bootId: mechanical.boot_id, sequence: mechanical.sequence, requestId: null }
+    setPendingRecovery(request)
     try {
-      await api.post('/operator/simulation-recovery', { cabinet_index: mechanical.cabinet_index, action: recoveryAction, fault_id: fault?.fault_id, confirmed: true }, { headers: { 'X-Operator-Session': session } })
-      setQueue([])
-      if (recoveryAction === 'RESUME') setCurrent(previous => previous ? { ...previous, phase: 'WAITING', error: undefined, startedAt: Date.now() } : null)
-      else setCurrent(null)
-      setRecoveryAction(null)
+      const response = await api.post('/operator/simulation-recovery', { cabinet_index: mechanical.cabinet_index, action, fault_id: fault.fault_id, confirmed: true }, { headers: { 'X-Operator-Session': session } })
+      setPendingRecovery((previous: any) => previous ? { ...previous, requestId: response.data.request_id } : null)
       await health.refetch()
     } catch (error: any) {
       if (error?.response?.status === 403) onSessionExpired()
       setRecoveryError(error)
-    } finally { setRecoveryBusy(false) }
+      setPendingRecovery(null)
+      recoveryInFlight.current = false
+      setRecoveryBusy(false)
+    }
   }
-  const ready = !!cabinetId && racks.length === 6 && connected && simulationAvailable && canOperate && !blocked && !health.isError && !telemetry.isError && !current?.error && !mechanicalLocked
+  const ready = cabinetActive && !!cabinetId && racks.length === 6 && connected && simulationAvailable && canOperate && !blocked && !health.isError && !telemetry.isError && !current?.error && !controlLocked
 
   const addLog = (message: string, tone?: LogEntry['tone'], failure?: any) => {
     const now = new Date()
@@ -201,13 +228,60 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
     logEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }, [logs])
   useEffect(() => {
-    if (current || !queue.length || mechanicalLocked) return
+    if (current || !queue.length || controlLocked) return
     setCurrent(queue[0])
     setQueue(previous => previous.slice(1))
-  }, [current, queue, mechanicalLocked])
+  }, [current, queue, controlLocked])
   useEffect(() => {
-    onBusyChange?.(!!current || queue.length > 0 || !!confirmation || !!mechanicalLocked || !!mechanical?.active_command_id)
-  }, [confirmation, current, onBusyChange, queue.length, mechanicalLocked, mechanical?.active_command_id])
+    onBusyChange?.(!!current || queue.length > 0 || !!confirmation || controlLocked || !!mechanical?.active_command_id)
+  }, [confirmation, current, onBusyChange, queue.length, controlLocked, mechanical?.active_command_id])
+  useEffect(() => { onFaultVisibilityChange?.(faultVisible) }, [faultVisible, onFaultVisibilityChange])
+  useEffect(() => {
+    const errorPresent = isSimulation && (mechanical?.system_state === 'ERROR' || mechanical?.system_state === 'STOPPED' ||
+      mechanical?.system_state === 'COMMUNICATION_LOST' || !!fault && mechanicalLocked ||
+      current?.phase === 'ERROR' || !!externalError)
+    if (!errorPresent) return
+    setIncident((previous: any) => ({
+      cabinetIndex: mechanical?.cabinet_index ?? racks[0]?.cabinet_index,
+      bootId: mechanical?.boot_id ?? previous?.bootId,
+      context: fault ? { ...fault } : previous?.context,
+      command: mechanical?.current_command ?? previous?.command ?? (current ? { action: current.kind, rack_id: Number(current.rack.rack_code), target_gap: current.targetGap } : null),
+      localCommand: previous?.localCommand ?? current,
+      error: current?.error || externalError || previous?.error,
+      gap: mechanical?.current_gap ?? previous?.gap
+    }))
+    setConfirmation(null)
+    setExecutionDialogOpen(false)
+    setQueue(previous => previous.length ? [] : previous)
+  }, [isSimulation, mechanical, fault, mechanicalLocked, current?.phase, current?.error, externalError])
+
+  useEffect(() => {
+    if (!pendingRecovery || !recoveryOnline || mechanical?.boot_id !== pendingRecovery.bootId ||
+      !(mechanical.sequence > pendingRecovery.sequence)) return
+    const rejected = mechanical.event === 'CONTROL_REJECTED' && mechanical.request_id === pendingRecovery.requestId
+    const newFault = mechanical.system_state === 'ERROR' && !fault?.cleared
+    const acknowledged = recoveryWasAcknowledged(mechanical, pendingRecovery)
+    if (!acknowledged && !rejected && !newFault) return
+    recoveryInFlight.current = false
+    setRecoveryBusy(false)
+    setPendingRecovery(null)
+    if (rejected || newFault) {
+      setRecoveryError(rejected ? 'Recovery was rejected. Check the current Simulation state.' : 'The fault is active again. Wait for Simulation to clear it.')
+      return
+    }
+    const baselineId = Math.max(0, ...(telemetry.data || []).map((entry: any) => Number(entry.id) || 0))
+    setQueue([])
+    if (pendingRecovery.action === 'RESUME') {
+      setCurrent(previous => previous ? { ...previous, phase: 'WAITING', error: undefined, baselineId, startedAt: Date.now() } : null)
+    } else {
+      setCurrent(null)
+      setLastCompleted(null)
+    }
+    setIncident(null)
+    setExecutionDialogOpen(false)
+    onRecoveryStarted?.(pendingRecovery.action, baselineId)
+  }, [pendingRecovery, recoveryOnline, mechanical, mechanicalLocked, fault, telemetry.data, onRecoveryStarted])
+
   useEffect(() => {
     onVentilatedChange?.(groupVentilated)
   }, [groupVentilated, onVentilatedChange])
@@ -218,8 +292,6 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
       setCurrent(previous => previous && previous.phase !== 'ERROR' ? { ...previous, phase: 'ERROR', error: fault.error_code } : previous)
     } else if (fault?.resumed) {
       setCurrent(previous => previous?.phase === 'ERROR' && previous.id === mechanical?.active_command_id ? { ...previous, phase: 'WAITING', error: undefined, startedAt: Date.now() } : previous)
-    } else if (mechanical?.online && !mechanicalLocked && !fault && !mechanical.active_command_id && ['IDLE', 'OPEN', 'VENTILATED'].includes(mechanical.system_state)) {
-      setCurrent(previous => previous?.phase === 'ERROR' ? null : previous)
     }
   }, [mechanicalLocked, fault?.fault_id, fault?.resumed, mechanical?.active_command_id, mechanical?.online, mechanical?.system_state])
 
@@ -232,7 +304,9 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
           setConfirmation(null)
           setExecutionDialogOpen(false)
           setLastCompleted(null)
-          setRecoveryAction(null)
+          setPendingRecovery(null)
+          recoveryInFlight.current = false
+          setRecoveryBusy(false)
           setRecoveryError('')
           onSimulationRestart?.()
         }
@@ -297,11 +371,15 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
   }, [externalVentilated])
 
   useEffect(() => {
-    if (!current || current.phase !== 'QUEUED' || dispatched.current.has(current.id)) return
+    if (!cabinetActive || controlLocked || !current || current.phase !== 'QUEUED' || dispatched.current.has(current.id)) return
     dispatched.current.add(current.id)
     const send = async () => {
       try {
         const before = await systemAPI.getOperationData(100)
+        if (!cabinetActiveRef.current || controlLockedRef.current) {
+          dispatched.current.delete(current.id)
+          return
+        }
         const baselineId = Math.max(0, ...(before.data.data || []).map((entry: any) => Number(entry.id) || 0))
         setCurrent(previous => previous?.id === current.id ? { ...previous, phase: 'SENDING', baselineId, startedAt: Date.now() } : previous)
         addLog(current.kind === 'HOME' ? 'RETURN_HOME requested' : `OPEN_RACK ${racks.findIndex(rack => rack.id === current.rack.id) + 1} requested`)
@@ -320,11 +398,23 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
       }
     }
     void send()
-  }, [current?.id, current?.phase, onSessionExpired, racks, session])
+  }, [cabinetActive, controlLocked, current?.id, current?.phase, onSessionExpired, racks, session])
 
   useEffect(() => {
     if (mechanicalLocked || !current || !['SENDING', 'WAITING'].includes(current.phase) || current.baselineId === undefined || !telemetry.data) return
     const baselineId = current.baselineId
+    // Simulation snapshots identify the logical endpoint, including after a
+    // resume. Old ERROR frames must not invalidate a resumed command.
+    if (isSimulation && mechanical) {
+      if (!mechanical.online || mechanical.active_command_id || mechanical.last_command_id !== current.id || fault ||
+        !(current.kind === 'HOME' ? mechanical.system_state === 'IDLE' && mechanical.current_gap === 6 :
+          mechanical.system_state === 'OPEN' && mechanical.active_rack === Number(current.rack.rack_code))) return
+      setLastCompleted(current)
+      setCurrent(null)
+      addLog(current.kind === 'HOME' ? 'Return Home complete' : 'Rack opened', 'success')
+      void queryClient.invalidateQueries({ queryKey: ['cabinet', cabinetId, 'racks'] })
+      return
+    }
     const recentCommandEvents = telemetry.data
       .filter((entry: any) => Number(entry.id) > baselineId && Number(entry.rack_id) === Number(current.rack.id))
       .sort((a: any, b: any) => Number(b.id) - Number(a.id))
@@ -350,12 +440,29 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
     setLastCompleted(current)
     setCurrent(null)
     void queryClient.invalidateQueries({ queryKey: ['cabinet', cabinetId, 'racks'] })
-  }, [cabinetId, current, queryClient, racks, telemetry.data, mechanicalLocked])
+  }, [cabinetId, current, queryClient, racks, telemetry.data, mechanicalLocked, isSimulation, mechanical, fault])
+
+  useEffect(() => {
+    // A local delivery/telemetry failure can precede the mechanical fault
+    // snapshot. Suspend only this workflow's confirmed active command through
+    // the existing STOP API, so Simulation retains the physical checkpoint.
+    if (!isSimulation || current?.phase !== 'ERROR' || fault || !mechanical?.online ||
+      mechanical.active_command_id !== current.id || stopRequested.current.has(current.id)) return
+    stopRequested.current.add(current.id)
+    void api.post('/operator/simulation-stop', { address: Number(current.rack.rack_code) },
+      { headers: { 'X-Operator-Session': session } }).then(() => health.refetch()).catch((error: any) => {
+        if (error?.response?.status === 403) onSessionExpired()
+        setRecoveryError(error)
+      })
+  }, [isSimulation, current?.id, current?.phase, fault, mechanical, session])
 
   useEffect(() => {
     if (!current || current.phase !== 'WAITING' || !current.startedAt) return
     const timer = window.setTimeout(() => {
-      if (isSimulation) void api.post('/operator/simulation-stop', { address: Number(current.rack.rack_code) }, { headers: { 'X-Operator-Session': session } }).catch(() => health.refetch())
+      if (isSimulation) {
+        stopRequested.current.add(current.id)
+        void api.post('/operator/simulation-stop', { address: Number(current.rack.rack_code) }, { headers: { 'X-Operator-Session': session } }).catch(() => health.refetch())
+      }
       const message = 'No endpoint confirmation received within 90 seconds. Check the rack before any retry.'
       setCurrent(previous => previous?.id === current.id ? { ...previous, phase: 'ERROR', error: message } : previous)
       addLog(`ERROR · ${message}`, 'error')
@@ -424,7 +531,9 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
   const errorRackIds = new Set([...latestTelemetryByRack.values()]
     .filter((entry: any) => Number(entry.is_endpoint) === 1 && Number(entry.state) === -2)
     .map((entry: any) => Number(entry.rack_id)))
-  const lightOnRackIds = new Set([...latestTelemetryByRack.values()]
+  const lightOnRackIds = mechanical?.lights ? new Set<number>(racks
+    .filter(rack => mechanical.lights[String(rack.rack_code)] === true)
+    .map(rack => Number(rack.id))) : new Set([...latestTelemetryByRack.values()]
     .filter((entry: any) => Number(entry.is_endpoint) === 1 && Number(entry.state) === 0)
     .map((entry: any) => Number(entry.rack_id)))
   const activeMotion = [...latestTelemetryByRack.values()].filter((entry: any) => Number(entry.is_endpoint) !== 1 &&
@@ -477,12 +586,12 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
   const currentOpen = current?.targetGap ?? queue[0]?.targetGap ?? gapRef.current
 
   return <Stack className="rack-operation-panel" spacing={2}>
-    <Dialog open={!!recoveryAction} onClose={() => !recoveryBusy && setRecoveryAction(null)} maxWidth="xs" fullWidth>
-      <Box sx={{ position: 'absolute', top: 16, right: 18 }}><LanguageSelector /></Box>
-      <DialogTitle sx={{ pr: 8 }}>{recoveryAction === 'RESUME' ? uiText('Resume interrupted command') : recoveryAction === 'HOME' ? uiText('Verify reference before homing') : uiText('Abort interrupted command')}</DialogTitle>
-      <DialogContent><Typography variant="body2">{uiText('Confirm inspected obstacles, limit sensors and actual reference position.')} {recoveryAction === 'HOME' ? uiText('Homing moves from the current position. Do not confirm an unverified reference.') : recoveryAction === 'RESUME' ? uiText('The same command continues from its saved position.') : uiText('The cabinet stops in place; homing is required before a new command.')}</Typography>{recoveryError && <Alert severity="error">{errorText(recoveryError)}</Alert>}</DialogContent>
-      <DialogActions><Button disabled={recoveryBusy} onClick={() => setRecoveryAction(null)}>{uiText("Cancel")}</Button><Button disabled={recoveryBusy || !canRecover} onClick={() => void performRecovery()}>{uiText("Confirm inspection")}</Button></DialogActions>
-    </Dialog>
+    <MaintenanceNotice cabinetIndex={mechanical?.cabinet_index ?? racks[0]?.cabinet_index} />
+    <SimulationFaultDialog incident={incident} ready={recoveryReady || recoveryBusy && recoveryOnline && !!fault?.cleared && mechanical?.system_state === 'RECOVERING'} online={recoveryOnline}
+      canResume={canRecover && (mechanical?.allowed_actions || []).includes('RESUME')}
+      canHome={canRecover && (mechanical?.allowed_actions || []).includes('HOME')}
+      busy={recoveryBusy} action={pendingRecovery?.action} error={recoveryError}
+      onRecover={action => void performRecovery(action)} />
     <Paper className="rack-operation-main" variant="outlined" sx={{ p: { xs: 2, md: 2 }, borderRadius: 4 }}>
       <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={1.25} sx={{ mb: 1.25 }}>
         <Box>
@@ -490,7 +599,7 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
           <Typography variant="body2" color="text.secondary">{uiText("Mỗi lần di chuyển một rack · Rack 1 và 2 dùng chung lối đi.")}</Typography>
         </Box>
         <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
-          {isSimulation && <Button size="small" variant="outlined" disabled={checkBusy || !connected} onClick={() => void checkFaults()}>{checkBusy ? uiText('Checking faults…') : uiText('Check faults')}</Button>}
+          {isSimulation && <Button size="small" variant="outlined" disabled={!cabinetActive || checkBusy || !connected} onClick={() => void checkFaults()}>{checkBusy ? uiText('Checking faults…') : uiText('Check faults')}</Button>}
           {isSimulation && mechanical?.online && !mechanicalLocked && !fault && <Chip size="small" label={uiText("Không có lỗi")} color="success" variant="outlined" />}
           <Chip size="small" label={device?.device_type || uiText('Mode unknown')} color={isSimulation ? 'info' : 'primary'} variant="outlined" />
           <Chip size="small" label={`Serial ${connected ? uiText('ONLINE') : uiText('OFFLINE')}`} color={connected ? 'success' : 'error'} />
@@ -498,21 +607,11 @@ export const RackOperationPanel = ({ cabinetId, racks: sourceRacks, session, per
         </Stack>
       </Stack>
       {(health.isError || telemetry.isError) && <Alert severity="error" sx={{ mb: 1.5 }}>{uiText("Không đọc được trạng thái local/telemetry. Lệnh vận hành đã bị khóa.")}</Alert>}
-      {recoveryError && !recoveryAction && <Alert severity="error" sx={{ mb: 1.5 }}>{errorText(recoveryError)}</Alert>}
+      {recoveryError && !faultVisible && <Alert severity="error" sx={{ mb: 1.5 }}>{errorText(recoveryError)}</Alert>}
       {!connected && <Alert severity="warning" sx={{ mb: 1.5 }}>{uiText("Serial offline. Không thể gửi lệnh tới rack.")}</Alert>}
       {isSimulation && !simulationAvailable && <Alert severity="error" sx={{ mb: 1.5 }}>{uiText("Simulation unavailable. GAP commands are disabled.")}</Alert>}
       {racks.length !== 6 && <Alert severity="warning" sx={{ mb: 1.5 }}>{uiText("Cần đúng 6 rack theo thứ tự địa chỉ để dùng sơ đồ GAP. Cabinet hiện có")} {racks.length} rack.</Alert>}
       {blocked && <Alert severity="info" sx={{ mb: 1.5 }}>{uiText("Điều khiển GAP tạm khóa trong khi thao tác cabinet khác đang chạy.")}</Alert>}
-      {(isSimulation && (mechanicalLocked || fault || current?.phase === 'ERROR')) && <Alert severity={!mechanicalLocked && fault?.resumed ? 'info' : mechanical?.system_state === 'RECOVERING' ? 'warning' : 'error'} sx={{ mb: 1.5 }}>
-        <Typography variant="body2" fontWeight={700}>{uiText('Cabinet')} {mechanical?.cabinet_index} · Rack {fault?.rack_id ? (fault.rack_id - 1) % 6 + 1 : '—'} · {uiText(mechanical?.system_state || 'ERROR')}</Typography>
-        <Typography variant="caption" display="block">{uiText(fault?.previous_state || '')} · {fault?.error_code ? `${uiText(fault.error_code)} (${fault.error_code})` : current?.error ? errorText(current.error) : uiText('Waiting for Simulation snapshot')} · {uiText('Current:')} {fault?.current_position ?? '—'} mm → {uiText('Target:')} {fault?.target_position ?? '—'} mm · {fault?.progress !== undefined ? Math.round(fault.progress) + '%' : ''}</Typography>
-        {fault?.command_id && <Typography variant="caption" display="block" sx={{ overflowWrap: 'anywhere' }}>{uiText('Command:')} {fault.command_id}</Typography>}
-        {fault?.moving_rack_id && fault.moving_rack_id !== fault.rack_id && <Typography variant="caption" display="block">{uiText('Movement interrupted at Rack {0}', (fault.moving_rack_id - 1) % 6 + 1)}</Typography>}
-        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 0.5 }}>
-          {(mechanical?.allowed_actions || []).map((action: string) => <Button key={action} size="small" disabled={!canRecover || recoveryBusy} onClick={() => setRecoveryAction(action)}>{action === 'RESUME' ? uiText('Resume operation') : action === 'ABORT' ? uiText('Abort operation') : uiText('Run homing')}</Button>)}
-        </Stack>
-        {recoveryError && <Typography variant="caption" color="error">{errorText(recoveryError)}</Typography>}
-      </Alert>}
       {!isSimulation && current?.phase === 'ERROR' && <Alert severity="error" sx={{ mb: 1.5 }} action={<Button color="inherit" size="small" startIcon={<StopCircle />} onClick={resetLocalOperation}>{uiText("I checked · reset")}</Button>}>
         {errorText(current.error)} {uiText("Các lệnh đang chờ không được tự gửi tiếp.")} </Alert>}
 

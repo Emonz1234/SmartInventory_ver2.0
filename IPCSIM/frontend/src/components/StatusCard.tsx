@@ -9,14 +9,7 @@ interface StatusCardProps {
   color?: string
 }
 
-const statusColors = {
-  success: '#4caf50',
-  warning: '#ff9800',
-  error: '#f44336',
-  info: '#2196f3'
-}
-
-export const StatusCard = ({ title, value, unit, status, color }: StatusCardProps) => {
+export const StatusCard = ({ title, value, unit, status }: StatusCardProps) => {
   useLanguage();
   return (
     <Card>

@@ -1,3 +1,4 @@
+import { DeviceFaultDetails } from '../components/DeviceFaultDetails'
 import { t as uiText, errorText, useLanguage } from '../i18n';
 import { useQuery } from '@tanstack/react-query'
 import { Alert, Box, Button, Card, CardContent, Chip, Divider, Grid, Skeleton, Stack, Typography } from '@mui/material'
@@ -15,6 +16,7 @@ export const System = () => {
   return <Box>
     <PageHeader title={uiText("Trạng thái hệ thống")} description={uiText("Kiểm tra kết nối thiết bị, dữ liệu local và tiến trình đồng bộ Server tại một nơi.")} action={<Button variant="outlined" startIcon={<Refresh />} disabled={query.isFetching} onClick={() => void query.refetch()}>{uiText("Làm mới")}</Button>} />
     {query.isError && <Alert severity="error" sx={{ mb: 2 }}>{uiText("Không kết nối được API local. Thử làm mới và kiểm tra IPCSIM đang chạy.")}</Alert>}
+    {known && <DeviceFaultDetails health={data} />}
     <Grid container spacing={1.5} sx={{ mb: 2 }}>{[
       { label: 'Kết nối thiết bị', icon: MemoryOutlined, good: data.serial_connected && data.hardware_status !== 'FAULT', title: data.hardware_status === 'FAULT' ? 'Có lỗi thiết bị' : data.serial_connected ? 'Đã kết nối' : 'Chưa kết nối', description: 'Kết nối Serial tới bộ mô phỏng / phần cứng.' },
       { label: 'Đồng bộ Server', icon: CloudSyncOutlined, good: data.server_synced, title: data.server_online ? data.server_synced ? 'Đã đồng bộ' : 'Đang đồng bộ' : 'Server offline', description: 'Danh mục và giao dịch được đồng bộ khi có kết nối.' },

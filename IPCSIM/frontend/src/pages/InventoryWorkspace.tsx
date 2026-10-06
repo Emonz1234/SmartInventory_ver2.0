@@ -12,6 +12,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '@api/client'
 import { cabinetAPI } from '@api/cabinet'
 import { PageHeader } from '@components/PageHeader'
+import { MaintenanceNotice } from '@components/MaintenanceNotice'
 
 interface InventoryWorkspaceProps {
   session: string
@@ -22,8 +23,7 @@ interface InventoryWorkspaceProps {
 type OperationKind = 'PICK' | 'PUT'
 type ViewMode = 'product' | 'location'
 
-const unavailableStatuses = ['BUSY', 'MOVING', 'OFFLINE', 'FAULT', 'ERROR', 'BREAKDOWN']
-const inventoryFont = '"Segoe UI", Arial, sans-serif'
+const unavailableStatuses = ['BUSY', 'MOVING', 'OPENING', 'CLOSING', 'VENTILATING', 'OFFLINE', 'FAULT', 'ERROR', 'BREAKDOWN', 'STOPPED', 'RECOVERING', 'UNKNOWN']
 
 function makeKey() {
   return Array.from(crypto.getRandomValues(new Uint8Array(24)), value => value.toString(16).padStart(2, '0')).join('')
@@ -54,7 +54,10 @@ function stockStatus(quantity: number, minimum: number) {
 }
 
 function isCabinetActive(cabinet: any) {
-  return String(cabinet?.status || '').toUpperCase() === 'ACTIVE'
+  const mechanical = cabinet?.mechanical
+  return String(cabinet?.status || '').toUpperCase() === 'ACTIVE' && (!mechanical ||
+    mechanical.online && ['IDLE', 'OPEN', 'VENTILATED'].includes(mechanical.system_state) &&
+    !mechanical.fault_context && !mechanical.active_command_id && !mechanical.command_pending)
 }
 
 function availableQuantity(item: any, cabinetById?: Map<number, any>) {
@@ -105,10 +108,20 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
   const [operationPlan, setOperationPlan] = useState<any[]>([])
   const [planIndex, setPlanIndex] = useState(0)
   const [activeOperationId, setActiveOperationId] = useState('')
-  const [operationPhase, setOperationPhase] = useState<'preview' | 'sending' | 'awaiting' | 'closing' | 'done' | 'failed'>('preview')
+  const [operationPhase, setOperationPhase] = useState<'preview' | 'sending' | 'awaiting' | 'closing' | 'decision' | 'done' | 'failed'>('preview')
   const [operationNote, setOperationNote] = useState('')
   const [error, setError] = useState<any>('')
   const [notice, setNotice] = useState('')
+  const actionBusy = useRef(false)
+  const [busy, setBusy] = useState(false)
+  const liveHealth = useQuery<any>({ queryKey: ['cabinet-operation-health'], enabled: false })
+  const mechanicalStates: any[] = liveHealth.data?.simulation_states || []
+  // An idle offline cabinet must not block inventory in a connected cabinet.
+  // An interrupted command still owns a workflow and requires reconciliation.
+  const physicalFault = mechanicalStates.some(entry => entry.fault_context &&
+    ['ERROR', 'RECOVERING', 'STOPPED', 'COMMUNICATION_LOST'].includes(entry.system_state) &&
+    (entry.fault_context.error_code !== 'COMMUNICATION_LOST' ||
+      entry.active_rack || entry.active_command_id || entry.current_command || entry.fault_context.command_id))
 
   const inventoryQuery = useQuery({
     queryKey: ['inventory-workspace'],
@@ -128,7 +141,7 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
   const health = state.health || {}
   const records: any[] = state.records || []
   const ofKind = (kind: string) => records.filter(record => record.kind === kind).map(record => record.data)
-  const items = ofKind('item').filter(item => item.is_active !== false)
+  const items = ofKind('item')
   const cabinets: any[] = inventoryQuery.data?.cabinets?.length ? inventoryQuery.data.cabinets : ofKind('cabinet')
   const racks: any[] = inventoryQuery.data?.racks?.length ? inventoryQuery.data.racks : ofKind('rack')
   const shelves = ofKind('shelf')
@@ -142,16 +155,24 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
     const rack = shelf && (rackById.get(Number(shelf.rack_id)) || racks.find(row => Number(row.id) === Number(shelf.rack_id)))
     const cabinet = rack && (cabinetById.get(Number(rack.cabinet_id)) || cabinets.find((row: any) => Number(row.id) === Number(rack.cabinet_id)))
     if (!shelf || !rack || !cabinet) return []
-    const status = String(rack.status || rack.state || 'READY').toUpperCase()
+    const mechanical = cabinet.mechanical
+    const status = mechanical ? !mechanical.online ? 'OFFLINE' : mechanical.fault_context ? 'FAULT' :
+      mechanical.active_command_id || mechanical.command_pending ? 'MOVING' :
+      ['IDLE', 'OPEN', 'VENTILATED'].includes(mechanical.system_state) ? 'READY' : mechanical.system_state :
+      String(rack.status || rack.state || 'READY').toUpperCase()
     return [{ bin, shelf, rack, cabinet, status, quantityFor: (itemId: number) => stockByItemBin.get(`${itemId}:${bin.id}`) || 0 }]
   }), [bins, shelves, racks, cabinets, rackById, cabinetById])
   const itemRows = useMemo(() => items.map(item => {
     const itemLocations = locations.map(location => ({ ...location, quantity: stockByItemBin.get(`${item.id}:${location.bin.id}`) || 0 })).filter(location => location.quantity > 0)
     const total = itemLocations.reduce((sum, location) => sum + location.quantity, 0)
     const row = { ...item, locations: itemLocations, total, stock: stockStatus(total, Number(item.min_qty || 0)) }
-    return { ...row, available: availableQuantity(row, cabinetById) }
-  }), [items, locations, stockByItemBin, cabinetById])
+    const putReady = locations.some(location => isCabinetActive(location.cabinet) && !unavailableStatuses.includes(location.status) && location.status !== 'FULL' &&
+      Number(location.bin.capacity || 0) > Number(stockByItemBin.get(`${item.id}:${location.bin.id}`) || 0))
+    const available = availableQuantity(row, cabinetById)
+    return { ...row, available, transactionReady: item.is_active !== false && !physicalFault && !liveHealth.isError && (available > 0 || putReady) }
+  }), [items, locations, stockByItemBin, cabinetById, physicalFault, liveHealth.isError])
   const categories = Array.from(new Set(items.map(item => item.category).filter(Boolean)))
+  const selectedTransactionReady = itemRows.some(item => item.id === selectedItem?.id && item.transactionReady)
   const visibleItems = itemRows.filter(item => {
     const text = `${item.item_name} ${item.item_code} ${item.barcode || item.item_barcode || ''}`.toLowerCase()
     return (!search || text.includes(search.trim().toLowerCase()))
@@ -170,17 +191,45 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
     const cabinet = cabinetById.get(Number(location.cabinet.id)) || location.cabinet
     return isCabinetActive(cabinet) && !unavailableStatuses.includes(location.status) && location.status !== 'FULL'
   })
-  const activeOperation = useQuery({
-    queryKey: ['inventory-operation', session, activeOperationId],
-    enabled: !!activeOperationId,
-    queryFn: async () => (await api.get('/operator/operations', { headers })).data.find((operation: any) => String(operation.id) === String(activeOperationId)),
-    refetchInterval: 1000,
-    retry: false
+  const operations = useQuery({
+    queryKey: ['inventory-operations', session],
+    queryFn: async () => (await api.get('/operator/operations', { headers })).data,
+    refetchInterval: 1000, retry: false
   })
+  const activeOperation = { ...operations, data: (operations.data || []).find((entry: any) => entry.id === activeOperationId) ||
+    (operations.data || []).find((entry: any) => !['COMPLETED', 'FAILED', 'CANCELLED'].includes(entry.operation_status)) }
+  useEffect(() => {
+    const row = activeOperation.data
+    if (!row || operationItem || !items.length || !locations.length) return
+    const item = items.find(entry => entry.id === row.product_id)
+    const target = locations.find(entry => entry.bin.id === row.location_id)
+    if (!item || !target) return
+    let draft: any = null
+    try { draft = JSON.parse(sessionStorage.getItem('inventory-workflow') || 'null') } catch { /* Recover from the backend journal if the draft is unavailable. */ }
+    const matches = draft?.itemId === row.product_id && draft?.kind === row.operation_type &&
+      (draft?.activeId === row.id || (draft?.keys || []).some((entry: any) => entry[1] === row.request_key))
+    const restoredPlan = matches ? draft.steps.map((step: any) => ({ location: locations.find(entry => entry.bin.id === step.binId), quantity: step.quantity })).filter((step: any) => step.location) : []
+    const restoredIndex = restoredPlan.findIndex((step: any) => step.location.bin.id === row.location_id)
+    if (matches) requestKeys.current = new Map(draft.keys || [])
+    setOperationItem(item); setOperationKind(row.operation_type); setOperationQuantity(matches ? draft.quantity : row.quantity)
+    setOperationPlan(restoredIndex >= 0 ? restoredPlan : [{ location: target, quantity: row.quantity }]); setPlanIndex(Math.max(0, restoredIndex))
+    setActiveOperationId(row.id); setOperationNote(row.note || '')
+    setOperationPhase(row.operation_confirmed ? row.phase === 'DECISION' ? 'decision' : 'closing' : 'sending')
+  }, [operations.data, inventoryQuery.data])
+  useEffect(() => {
+    if (!operationItem || !operationPlan.length || operationPhase === 'preview') return
+    sessionStorage.setItem('inventory-workflow', JSON.stringify({ itemId: operationItem.id, kind: operationKind,
+      quantity: operationQuantity, activeId: activeOperationId, index: planIndex, keys: [...requestKeys.current],
+      steps: operationPlan.map(step => ({ binId: step.location.bin.id, quantity: step.quantity })) }))
+  }, [operationItem, operationKind, operationQuantity, operationPlan, planIndex, activeOperationId, operationPhase])
 
   const locationName = (location: any) => `${cabinetRackLabel(location)} / ${location.bin.bin_code}`
   const openItem = (item: any) => { setSelectedItem(item); setError('') }
   const openOperation = (item: any, kind: OperationKind) => {
+    if (!itemRows.find(row => row.id === item.id)?.transactionReady) return
+    if (physicalFault || actionBusy.current || activeOperation.data && !['COMPLETED','FAILED','CANCELLED'].includes(activeOperation.data.operation_status)) return
+    requestKeys.current.clear()
+    setSelectedItem(null)
     setOperationItem(item); setOperationKind(kind); setOperationQuantity(1); setOperationLocation('auto'); setOperationPlan([]); setPlanIndex(0); setActiveOperationId(''); setOperationPhase('preview'); setOperationNote(''); setError('')
   }
   const buildPlan = () => {
@@ -208,66 +257,74 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
   }
   const submitPlanStep = async (index: number, plan = operationPlan) => {
     const step = plan[index]
-    if (!step || !operationItem) return
+    if (!step || !operationItem || actionBusy.current || physicalFault) return
+    actionBusy.current = true; setBusy(true)
     const currentCabinet = cabinetById.get(Number(step.location.cabinet.id)) || step.location.cabinet
     if (!isCabinetActive(currentCabinet)) {
       setError('Tủ không còn active. Hãy chọn vị trí thuộc một tủ đang active.')
       setOperationPhase('preview')
       setOperationPlan([])
+      actionBusy.current = false; setBusy(false)
       return
     }
     setOperationPhase('sending'); setError('')
     try {
-      const actionKey = `${operationKind}:${operationItem.id}:${step.location.bin.id}:${step.quantity}`
+      const actionKey = String(index)
       const requestKey = requestKeys.current.get(actionKey) || makeKey()
       requestKeys.current.set(actionKey, requestKey)
       const response = await api.post('/operator/operations', { rack_id: Number(step.location.rack.id), bin_id: Number(step.location.bin.id), item_id: Number(operationItem.id), kind: operationKind, quantity: step.quantity, request_key: requestKey }, { headers })
       setActiveOperationId(String(response.data.id))
+      await operations.refetch()
     } catch (failure: any) {
       if (failure.response?.status === 403) onSessionExpired()
       setError(failure || 'Không tạo được operation.')
       setOperationPhase('failed')
-    }
+      await operations.refetch()
+    } finally { actionBusy.current = false; setBusy(false) }
   }
   useEffect(() => {
-    if (activeOperation.isError && (activeOperation.error as any)?.response?.status === 403) onSessionExpired()
-    if (!activeOperation.data || String(activeOperation.data.id) !== String(activeOperationId)) return
-    const state = activeOperation.data.state
-    if (state === 'awaiting_confirmation' && operationPhase === 'sending') setOperationPhase('awaiting')
-    if (['failed', 'cancelled', 'uncertain'].includes(state) && ['sending', 'closing'].includes(operationPhase)) setOperationPhase('failed')
-    if (['confirmed', 'completed'].includes(state) && operationPhase === 'closing') {
-      const nextIndex = planIndex + 1
-      if (nextIndex < operationPlan.length) {
-        setPlanIndex(nextIndex)
-        setOperationNote('')
-        void submitPlanStep(nextIndex)
-      } else {
-        setOperationPhase('done')
-        setNotice(`${operationKind} hoàn tất. Rack đã đóng và tồn kho cục bộ đã được cập nhật.`)
-        queryClient.invalidateQueries({ queryKey: ['inventory-workspace'] })
-      }
-    }
-  }, [activeOperation.data, activeOperation.error, activeOperation.isError, activeOperationId, onSessionExpired, operationPhase, operationPlan, planIndex, operationKind, queryClient])
-  const confirmOperation = async (success: boolean, keepOpen = false) => {
-    if (!activeOperationId || !operationNote.trim()) return
+    const row = activeOperation.data
+    if (!row || !operationItem) return
+    if (!activeOperationId) setActiveOperationId(row.id)
+    if (row.operation_status === 'AWAITING_CONFIRMATION') setOperationPhase('awaiting')
+    else if (row.operation_status === 'CONFIRMED') setOperationPhase('decision')
+    else if (row.operation_status === 'EXECUTING') setOperationPhase(['CLOSE', 'HOME', 'RECOVERY_HOME'].includes(row.phase) ? 'closing' : 'sending')
+    else if (row.operation_status === 'UNCERTAIN') setOperationPhase('failed')
+    else if (['CANCELLED','FAILED'].includes(row.operation_status)) setOperationPhase('failed')
+    else if (row.operation_status === 'COMPLETED') setOperationPhase('done')
+  }, [operations.data, operationItem, activeOperationId])
+  const confirmOperation = async (success: boolean) => {
+    if (!activeOperationId || !operationNote.trim() || actionBusy.current || physicalFault) return
+    actionBusy.current = true; setBusy(true); setError('')
     try {
-      await api.post(`/operator/operations/${activeOperationId}/confirm`, { success, note: operationNote, keep_open: keepOpen }, { headers })
-      if (!success) { setOperationPhase('failed'); return }
-      const nextIndex = planIndex + 1
-      if (keepOpen && nextIndex < operationPlan.length) { setPlanIndex(nextIndex); setOperationNote(''); await submitPlanStep(nextIndex); return }
-      if (keepOpen) {
-        setOperationPhase('done')
-        setNotice(`${operationKind} hoàn tất. Rack vẫn đang mở và tồn kho cục bộ đã được cập nhật.`)
-        queryClient.invalidateQueries({ queryKey: ['inventory-workspace'] })
-        return
-      }
-      setOperationPhase('closing')
+      await api.post(`/operator/operations/${activeOperationId}/confirm`, { success, note: operationNote, decision_pending: true }, { headers })
+      setOperationPhase(success ? 'decision' : 'failed')
+      await operations.refetch()
+      void queryClient.invalidateQueries({ queryKey: ['inventory-workspace'] })
     } catch (failure: any) {
       if (failure.response?.status === 403) onSessionExpired()
-      setError(failure || 'Không xác nhận được operation.')
-    }
+      setError(failure)
+    } finally { actionBusy.current = false; setBusy(false) }
   }
-  const closeOperation = () => { if (!['sending', 'awaiting', 'closing'].includes(operationPhase)) { setOperationItem(null); setOperationPlan([]); setActiveOperationId('') } }
+  const finishOperation = async (keepOpen: boolean) => {
+    if (!activeOperationId || actionBusy.current || physicalFault) return
+    actionBusy.current = true; setBusy(true); setError('')
+    try {
+      await api.post(`/operator/operations/${activeOperationId}/finish`, { action: keepOpen ? 'KEEP_OPEN' : 'CLOSE' }, { headers })
+      setOperationPhase(keepOpen ? 'done' : 'closing')
+      await operations.refetch()
+    } catch (failure: any) {
+      if (failure.response?.status === 403) onSessionExpired()
+      setError(failure)
+    } finally { actionBusy.current = false; setBusy(false) }
+  }
+  const continuePlan = () => {
+    const nextIndex = planIndex + 1
+    if (nextIndex >= operationPlan.length) return
+    setPlanIndex(nextIndex); setOperationNote(''); setActiveOperationId('')
+    void submitPlanStep(nextIndex)
+  }
+  const closeOperation = () => { if (!['sending', 'awaiting', 'closing', 'decision'].includes(operationPhase) && !busy) { sessionStorage.removeItem('inventory-workflow'); setOperationItem(null); setOperationPlan([]); setActiveOperationId('') } }
   const pendingTransactions = Number(health.pending_transactions || 0)
   const totalQuantity = itemRows.reduce((sum, item) => sum + item.total, 0)
   const lowStockCount = itemRows.filter(item => item.stock.label === 'Low stock').length
@@ -277,6 +334,12 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
 
   return <Stack className="inventory-workspace" spacing={2}>
     <PageHeader title={uiText("Kho hàng")} description={uiText("Tìm sản phẩm, kiểm tra tồn kho và vị trí lưu trữ. Mở chi tiết sản phẩm để nhập hoặc xuất hàng.")} action={<Button variant="outlined" startIcon={<Refresh />} disabled={inventoryQuery.isFetching} onClick={() => void inventoryQuery.refetch()}>{uiText("Làm mới")}</Button>} />
+    <MaintenanceNotice />
+    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+      {mechanicalStates.filter(entry => entry.active_rack).map(entry => <Chip key={entry.cabinet_index}
+        color={entry.online && !liveHealth.isError && entry.system_state === 'OPEN' ? 'success' : 'warning'}
+        label={`Cabinet ${String(entry.cabinet_index).padStart(2, '0')} · ${entry.online && !liveHealth.isError ? entry.system_state : uiText('Unknown status')} · Rack ${(entry.active_rack-1)%6+1}`} />)}
+    </Stack>
     <Box className="inventory-summary" aria-label={uiText("Tổng quan kho hàng")}>
       <SummaryMetric label={uiText("Loại sản phẩm")} value={inventoryQuery.isLoading || inventoryQuery.isError ? '—' : itemRows.length} icon={<Inventory2 />} />
       <SummaryMetric label={uiText("Tổng số lượng")} value={inventoryQuery.isLoading || inventoryQuery.isError ? '—' : totalQuantity} icon={<ScaleOutlined />} />
@@ -371,15 +434,20 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
         </Box>
         <Box className="inventory-detail-actions">
           {!canOperate && <Typography variant="caption" color="text.secondary">{uiText("Tài khoản không có quyền inventory.move.")}</Typography>}
-          <Button variant="contained" startIcon={<Remove />} disabled={!canOperate || !availableQuantity(selectedItem, cabinetById)} onClick={() => openOperation(selectedItem, 'PICK')}>{uiText("Xuất hàng · PICK")}</Button>
-          <Button variant="outlined" startIcon={<Add />} disabled={!canOperate || !hasActivePutLocation} onClick={() => openOperation(selectedItem, 'PUT')}>{uiText("Nhập hàng · PUT")}</Button>
+          <Button variant="contained" startIcon={<Remove />} disabled={!canOperate || !selectedTransactionReady || !availableQuantity(selectedItem, cabinetById)} onClick={() => openOperation(selectedItem, 'PICK')}>{uiText("Xuất hàng · PICK")}</Button>
+          <Button variant="outlined" startIcon={<Add />} disabled={!canOperate || !selectedTransactionReady || !hasActivePutLocation} onClick={() => openOperation(selectedItem, 'PUT')}>{uiText("Nhập hàng · PUT")}</Button>
         </Box>
       </Box>}
     </Drawer>
 
     <OperationDialog
       canOperate={canOperate}
-      open={!!operationItem}
+      open={!!operationItem && !physicalFault}
+      busy={busy || operations.isError || physicalFault || liveHealth.isError}
+      operation={activeOperation.data}
+      hasNext={planIndex + 1 < operationPlan.length}
+      onNext={continuePlan}
+      onCloseCabinet={() => void finishOperation(false)}
       item={operationItem}
       available={operationItem ? availableQuantity(operationItem, cabinetById) : 0}
       rackAlreadyOpen={activeOperation.data?.phase === 'OPEN_REUSED'}
@@ -403,7 +471,7 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
       onPrepare={buildPlan}
       onStart={() => void submitPlanStep(0)}
       onConfirm={() => void confirmOperation(true)}
-      onKeepOpen={() => void confirmOperation(true, true)}
+      onKeepOpen={() => void finishOperation(true)}
       onFail={() => void confirmOperation(false)}
       locationName={locationName}
       cabinetRackLabel={cabinetRackLabel}
@@ -427,7 +495,8 @@ function ProductView({ items, onSelect }: { items: any[]; onSelect: (item: any) 
       <TableBody>
         {items.map(item => {
           const firstLocation = item.locations[0]
-          return <TableRow hover key={item.id}>
+          return <TableRow hover={item.transactionReady} key={item.id} aria-disabled={!item.transactionReady}
+            sx={{ opacity: item.transactionReady ? 1 : 0.45 }}>
             <TableCell data-label={uiText("Sản phẩm")} className="inventory-product-cell">
               <Typography className="inventory-product-name">{item.item_name}</Typography>
               <Typography variant="caption">SKU {item.item_code}{item.barcode || item.item_barcode ? uiText(" · Mã vạch {0}", (item.barcode || item.item_barcode)) : ''}</Typography>
@@ -483,7 +552,8 @@ function LocationView({ locations, stockByItemBin, items, locationName, onSelect
                 const quantity = stockedItems.reduce((sum, row) => sum + row.quantity, 0)
                 const capacity = Number(location.bin.capacity || 0)
                 const usage = capacity ? Math.min(100, quantity / capacity * 100) : 0
-                return <TableRow hover key={`${rackId}-${location.bin.id}`}>
+                const ready = isCabinetActive(location.cabinet) && !unavailableStatuses.includes(location.status)
+                return <TableRow hover={ready} key={`${rackId}-${location.bin.id}`} aria-disabled={!ready} sx={{ opacity: ready ? 1 : 0.45 }}>
                   <TableCell data-label={uiText("Tủ / rack")} className="inventory-location-table-cell"><Typography className="inventory-location-path">{cabinetRackLabel(location)}</Typography><Typography variant="caption">{location.bin.bin_code}</Typography></TableCell>
                   <TableCell data-label={uiText("Trạng thái")}><LocationStatus status={location.status} /></TableCell>
                   <TableCell data-label={uiText("Hàng lưu trữ")} className="inventory-location-contents">
@@ -502,7 +572,7 @@ function LocationView({ locations, stockByItemBin, items, locationName, onSelect
   </Stack>
 }
 
-function OperationDialog({ canOperate, open, item, available, kind, quantity, setQuantity, locations, location, setLocation, plan, planIndex, phase, note, setNote, error, onClose, onPrepare, onStart, onConfirm, onFail, locationName, cabinetRackLabel }: any) {
+function OperationDialog({ busy, operation, hasNext, onNext, onKeepOpen, onCloseCabinet, rackAlreadyOpen, canOperate, open, item, available, kind, quantity, setQuantity, locations, location, setLocation, plan, planIndex, phase, note, setNote, error, onClose, onPrepare, onStart, onConfirm, onFail, locationName, cabinetRackLabel }: any) {
   useLanguage();
   const step = plan[planIndex]
   const selectedLocation = locations.find((candidate: any) => location !== 'auto' && String(candidate.bin.id) === String(location))
@@ -513,7 +583,7 @@ function OperationDialog({ canOperate, open, item, available, kind, quantity, se
   return <Dialog className="inventory-operation-dialog" open={open} onClose={onClose} fullWidth maxWidth="sm">
     <DialogTitle className="inventory-dialog-title"><LanguageSelector />
       <Box><Typography variant="overline">{kind === 'PICK' ? uiText('Xuất hàng · PICK') : uiText('Nhập hàng · PUT')}</Typography><Typography component="h2">{item?.item_name}</Typography></Box>
-      <IconButton aria-label={uiText("Đóng thao tác")} onClick={onClose} disabled={['sending', 'awaiting'].includes(phase)}><Close /></IconButton>
+      <IconButton aria-label={uiText("Đóng thao tác")} onClick={onClose} disabled={busy || ['sending', 'awaiting', 'closing', 'decision'].includes(phase)}><Close /></IconButton>
     </DialogTitle>
     <DialogContent dividers>
       {error && <Alert severity="error" sx={{ mb: 1.5 }}>{errorText(error)}</Alert>}
@@ -529,8 +599,8 @@ function OperationDialog({ canOperate, open, item, available, kind, quantity, se
           </Box>
         </Box>
         <FormControl size="small" fullWidth>
-          <InputLabel>{uiText("Vị trí thao tác")}</InputLabel>
-          <Select value={location} label={uiText("Vị trí thao tác")} disabled={!canOperate} onChange={event => setLocation(event.target.value)}>
+          <InputLabel id="inventory-operation-location-label">{uiText("Vị trí thao tác")}</InputLabel>
+          <Select labelId="inventory-operation-location-label" value={location} label={uiText("Vị trí thao tác")} disabled={!canOperate} onChange={event => setLocation(event.target.value)}>
             <MenuItem value="auto">{uiText("Tự động đề xuất")}</MenuItem>
             {locations.map((candidate: any) => <MenuItem key={candidate.bin.id} value={String(candidate.bin.id)}>{locationName(candidate)} · {statusText(candidate.status)}</MenuItem>)}
           </Select>
@@ -539,7 +609,7 @@ function OperationDialog({ canOperate, open, item, available, kind, quantity, se
         {target && <Box className="inventory-operation-target"><Typography variant="caption">{plan.length ? uiText('Vị trí đề xuất') : uiText('Vị trí đã chọn')}</Typography><Typography className="inventory-location-path">{cabinetRackLabel(target)}</Typography></Box>}
         {plan.length > 0 && <Box className="inventory-operation-plan">
           <Typography className="inventory-field-label">{uiText("Kế hoạch thao tác")}</Typography>
-          {plan.map((entry: any, index: number) => <Box className="inventory-operation-plan-row" key={entry.location.bin.id}>
+          {plan.map((entry: any) => <Box className="inventory-operation-plan-row" key={entry.location.bin.id}>
             <Box><Typography className="inventory-location-path">{cabinetRackLabel(entry.location)}</Typography><Typography variant="caption">{entry.location.bin.bin_code}</Typography></Box>
             <Typography fontWeight={700}>{entry.quantity} {uiText("· còn lại")} {entry.after}</Typography>
           </Box>)}
@@ -548,16 +618,27 @@ function OperationDialog({ canOperate, open, item, available, kind, quantity, se
       </Stack>}
       {phase === 'sending' && <Stack spacing={1.25} alignItems="center" sx={{ py: 2 }}><CircularProgress size={28} /><Typography>{uiText("Đang gửi tới cabinet workflow…")}</Typography>{step && <Typography color="text.secondary">{locationName(step.location)} · {step.quantity}</Typography>}</Stack>}
       {phase === 'awaiting' && <Stack spacing={1.25}>
-        <Alert severity="info">{uiText("Cabinet đã mở. Hoàn tất thao tác thực tế rồi xác nhận để workflow đóng rack và cập nhật tồn kho cục bộ.")}</Alert>
+        {rackAlreadyOpen && <Alert severity="success">{uiText('Rack đang mở đã sẵn sàng. Không gửi lại OPEN.')}</Alert>}
+        <Typography fontWeight={700}>{uiText(kind === 'PICK' ? 'Bạn đã lấy hàng khỏi rack này chưa?' : 'Bạn đã đặt hàng vào rack này chưa?')}</Typography>
+        <Alert severity="info">{uiText("Cabinet đã sẵn sàng. Chỉ xác nhận sau khi đã thực sự lấy hoặc đặt hàng.")}</Alert>
         <Box className="inventory-operation-target inventory-operation-confirm-target"><Typography variant="caption">{uiText("Confirm target")}</Typography><Typography className="inventory-location-path">{step && cabinetRackLabel(step.location)}</Typography><Typography>{uiText("Quantity:")} <b>{step?.quantity}</b></Typography></Box>
         <TextField label={uiText("Ghi chú xác nhận")} value={note} onChange={event => setNote(event.target.value)} required multiline minRows={2} />
       </Stack>}
-      {phase === 'done' && <Alert severity="success">{uiText("Operation completed. Inventory đã cập nhật sau khi cabinet đóng thành công.")}</Alert>}
-      {phase === 'failed' && <Alert severity="warning">{uiText("Operation failed/cancelled. Inventory không thay đổi.")}</Alert>}
+      {phase === 'decision' && <Stack spacing={1.5}>
+        <Alert severity="success">{uiText(kind === 'PICK' ? 'Xuất hàng thành công' : 'Nhập hàng thành công')}</Alert>
+        <Typography>{item?.item_name} · {step?.quantity} · {step && cabinetRackLabel(step.location)}</Typography>
+        <Typography variant="caption">{operation?.id}</Typography>
+        <Typography>{uiText('Tồn kho đã cập nhật. Chọn giữ cabinet mở hoặc đóng cabinet.')}</Typography>
+      </Stack>}
+      {phase === 'closing' && <Stack spacing={1.5}><LinearProgress /><Typography>{uiText('Đang đóng cabinet. Chờ Simulation xác nhận CLOSED.')}</Typography></Stack>}
+      {phase === 'done' && <Alert severity="success">{uiText(operation?.phase === 'KEEP_OPEN' ? 'Giao dịch hoàn tất. Cabinet vẫn OPEN / ACTIVE.' : 'Giao dịch hoàn tất. Cabinet đã đóng.')}</Alert>}
+      {phase === 'failed' && <Alert severity="warning">{uiText("Thao tác đang dừng. Trạng thái xác nhận hàng và tồn kho được giữ nguyên.")}</Alert>}
     </DialogContent>
     <DialogActions>
-      {phase === 'preview' && <><Button onClick={onClose}>{uiText("Hủy")}</Button><Button onClick={onPrepare} disabled={quantity < 1}>{uiText("Xem kế hoạch")}</Button><Button variant="contained" onClick={onStart} disabled={!plan.length}>{uiText("Bắt đầu")} {uiText(kind)}</Button></>}
-      {phase === 'awaiting' && <><Button color="error" onClick={onFail} disabled={!note.trim()}>{uiText("Thất bại / Hủy")}</Button><Button variant="contained" onClick={onConfirm} disabled={!note.trim()}>{uiText("Xác nhận · đóng rack")}</Button></>}
+      {phase === 'preview' && <><Button onClick={onClose}>{uiText("Hủy")}</Button><Button onClick={onPrepare} disabled={quantity < 1}>{uiText("Xem kế hoạch")}</Button><Button variant="contained" onClick={onStart} disabled={busy || !plan.length}>{uiText("Bắt đầu")} {uiText(kind)}</Button></>}
+      {phase === 'awaiting' && <><Button color="error" onClick={onFail} disabled={busy || !note.trim()}>{uiText("Thất bại / Hủy")}</Button><Button variant="contained" onClick={onConfirm} disabled={busy || !note.trim()}>{uiText("Xác nhận đã lấy / đặt hàng")}</Button></>}
+      {phase === 'decision' && <><Button disabled={busy} variant="outlined" onClick={onKeepOpen}>{uiText('Keep Cabinet Open')}</Button><Button disabled={busy} variant="contained" onClick={onCloseCabinet}>{uiText('Close Cabinet')}</Button></>}
+      {phase === 'done' && hasNext && <Button disabled={busy} variant="contained" onClick={onNext}>{uiText('Giao dịch tiếp theo')}</Button>}
       {['done', 'failed'].includes(phase) && <Button onClick={onClose}>{uiText("Đóng")}</Button>}
     </DialogActions>
   </Dialog>

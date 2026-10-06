@@ -169,8 +169,12 @@ class MasterCom:
                 action_name = ACTION_NAMES[event['action']]
                 if event['action'] in (1, 2, 3, 4):
                     state = 2 if event['action'] == 4 else event['action']
-                    position = self.ventilating_racks_status[self._local_index(event['rack_id'])][0]
-                    self._publish_operation(event['rack_id'], 0, position, 0, state)
+                    # Ventilation is one group command: report all participating
+                    # racks as ventilating, including the stationary reference rack.
+                    participants = self.rack_ids if event['action'] == 3 else [event['rack_id']]
+                    for rack_id in participants:
+                        position = self.ventilating_racks_status[self._local_index(rack_id)][0]
+                        self._publish_operation(rack_id, 0, position, 0, state)
                 print(f"[SIM] {action_name}_RACK started rack={event['rack_id']}")
                 print(f"[SIM] current_gap={event['current_gap']} target_gap={event['target_gap']}")
             elif kind == 'step_started':
@@ -206,6 +210,9 @@ class MasterCom:
                     position = self.ventilating_racks_status[self._local_index(rack_id)][0]
                     self._publish_operation(rack_id, 0, position, 1, action)
                     continue
+                # Movement endpoints define which rack is accessible. Keep lighting
+                # unchanged during movement/faults, then light only the opened rack.
+                self.lights[:] = [action == 1 and other_id == rack_id for other_id in self.rack_ids]
                 displacement = RACK_MAX_DISPLACEMENT if action == 1 else 0.0
                 for other_id in self.rack_ids:
                     if other_id == rack_id:
@@ -278,7 +285,7 @@ class MasterCom:
             parts = self.opr_messages[index].split('|')
             parts[2] = '0.0'
             self._publish(self._cache(self.opr_messages, '|'.join(parts)))
-            if not self.gap_controller.fault_context:
+            if not self.gap_controller.fault_context or self.gap_controller.fault_context.get('cleared'):
                 code = {1: 'OBSTRUCTED', 2: 'SKEWED', 3: 'MOTOR_OVERLOAD'}[errors[0]]
                 event = self.gap_controller.inject_fault(rack_id, code)
                 self._handle_gap_events([event])

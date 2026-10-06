@@ -1,4 +1,180 @@
 {
+  "Cabinet đã sẵn sàng. Chỉ xác nhận sau khi đã thực sự lấy hoặc đặt hàng.": [
+    "Cabinet đã sẵn sàng. Chỉ xác nhận sau khi đã thực sự lấy hoặc đặt hàng.",
+    "The cabinet is ready. Confirm only after physically picking or placing the goods."
+  ],
+  "Rack đang mở đã sẵn sàng. Không gửi lại OPEN.": [
+    "Rack đang mở đã sẵn sàng. Không gửi lại OPEN.",
+    "The open rack is ready. OPEN was not sent again."
+  ],
+  "Bạn đã lấy hàng khỏi rack này chưa?": [
+    "Bạn đã lấy hàng khỏi rack này chưa?",
+    "Have you picked the goods from this rack?"
+  ],
+  "Bạn đã đặt hàng vào rack này chưa?": [
+    "Bạn đã đặt hàng vào rack này chưa?",
+    "Have you placed the goods into this rack?"
+  ],
+  "Xuất hàng thành công": [
+    "Xuất hàng thành công",
+    "Goods picked successfully"
+  ],
+  "Nhập hàng thành công": [
+    "Nhập hàng thành công",
+    "Goods put successfully"
+  ],
+  "Tồn kho đã cập nhật. Chọn giữ cabinet mở hoặc đóng cabinet.": [
+    "Tồn kho đã cập nhật. Chọn giữ cabinet mở hoặc đóng cabinet.",
+    "Inventory updated. Choose whether to keep the cabinet open or close it."
+  ],
+  "Đang đóng cabinet. Chờ Simulation xác nhận CLOSED.": [
+    "Đang đưa toàn bộ giá về Home. Chờ Simulation xác nhận hoàn tất.",
+    "Closing cabinet. Waiting for Simulation to confirm CLOSED."
+  ],
+  "Giao dịch hoàn tất. Cabinet vẫn OPEN / ACTIVE.": [
+    "Giao dịch hoàn tất. Cabinet vẫn OPEN / ACTIVE.",
+    "Transaction completed. Cabinet remains OPEN / ACTIVE."
+  ],
+  "Giao dịch hoàn tất. Cabinet đã đóng.": [
+    "Giao dịch hoàn tất. Cabinet đã đóng.",
+    "Transaction completed. Cabinet is closed."
+  ],
+  "Thao tác đang dừng. Trạng thái xác nhận hàng và tồn kho được giữ nguyên.": [
+    "Thao tác đang dừng. Trạng thái xác nhận hàng và tồn kho được giữ nguyên.",
+    "Operation paused. Physical confirmation and inventory status are preserved."
+  ],
+  "Xác nhận đã lấy / đặt hàng": [
+    "Xác nhận đã lấy / đặt hàng",
+    "Confirm physical Pick / Put"
+  ],
+  "Giao dịch tiếp theo": [
+    "Giao dịch tiếp theo",
+    "Next transaction"
+  ],
+  "Keep Cabinet Open": [
+    "Giữ cabinet mở",
+    "Keep Cabinet Open"
+  ],
+  "Close Cabinet": [
+    "Đóng toàn bộ giá · Return Home",
+    "Close Cabinet"
+  ],
+  "OBSTRUCTED": [
+    "Có vật cản",
+    "Obstructed"
+  ],
+  "SKEWED": [
+    "Rack bị lệch",
+    "Rack misaligned"
+  ],
+  "REFERENCE_LOST": [
+    "Mất vị trí cơ khí tham chiếu",
+    "Mechanical reference lost"
+  ],
+  "COMMUNICATION_LOST": [
+    "Mất kết nối Simulation",
+    "Simulation connection lost"
+  ],
+  "SENSOR_TIMEOUT": [
+    "Quá thời gian chờ cảm biến",
+    "Sensor timeout"
+  ],
+  "STATE_MISMATCH": [
+    "Trạng thái thiết bị không khớp",
+    "Device state mismatch"
+  ],
+  "OPERATOR_STOP": [
+    "Dừng theo yêu cầu vận hành",
+    "Operator stop"
+  ],
+  "Fault resolved": [
+    "Lỗi đã được xử lý",
+    "Fault resolved"
+  ],
+  "Operation interrupted": [
+    "Thao tác đã tạm dừng",
+    "Operation interrupted"
+  ],
+  "The device is ready to continue operating.": [
+    "Thiết bị đã sẵn sàng tiếp tục hoạt động.",
+    "The device is ready to continue operating."
+  ],
+  "Simulation connection lost. Fault clearance cannot be confirmed.": [
+    "Mất kết nối Simulation. Chưa thể xác nhận lỗi đã được xử lý.",
+    "Simulation connection lost. Fault clearance cannot be confirmed."
+  ],
+  "Resolve the fault in Simulation. The operation remains paused.": [
+    "Xử lý lỗi tại Simulation. Lệnh vẫn đang tạm dừng.",
+    "Resolve the fault in Simulation. The operation remains paused."
+  ],
+  "Operation:": [
+    "Thao tác:",
+    "Operation:"
+  ],
+  "Paused position": [
+    "Vị trí đang dừng / chờ tiếp tục",
+    "Paused position"
+  ],
+  "Continue resumes the saved step. Completed steps will not be repeated.": [
+    "Tiếp tục từ bước đang dở đã lưu. Không thực hiện lại các bước đã hoàn thành.",
+    "Continue resumes the saved step. Completed steps will not be repeated."
+  ],
+  "Confirm that obstacles, sensors and the mechanical reference have been inspected before choosing an action.": [
+    "Chỉ chọn thao tác sau khi đã kiểm tra vật cản, cảm biến và vị trí cơ khí.",
+    "Confirm that obstacles, sensors and the mechanical reference have been inspected before choosing an action."
+  ],
+  "Direct resume is unavailable. Verify the reference and return Home.": [
+    "Không thể tiếp tục trực tiếp. Hãy kiểm tra vị trí cơ khí và trở về Home.",
+    "Direct resume is unavailable. Verify the reference and return Home."
+  ],
+  "Details": [
+    "Chi tiết",
+    "Details"
+  ],
+  "Command:": [
+    "Lệnh:",
+    "Command:"
+  ],
+  "Fault code:": [
+    "Mã lỗi:",
+    "Fault code:"
+  ],
+  "Target GAP:": [
+    "GAP đích:",
+    "Target GAP:"
+  ],
+  "Fault ID:": [
+    "ID lỗi:",
+    "Fault ID:"
+  ],
+  "Waiting for Simulation snapshot": [
+    "Đang chờ trạng thái Simulation",
+    "Waiting for Simulation snapshot"
+  ],
+  "Waiting for Simulation to start homing…": [
+    "Đang chờ Simulation xác nhận trở về Home…",
+    "Waiting for Simulation to start homing…"
+  ],
+  "Waiting for Simulation to resume the saved command…": [
+    "Đang chờ Simulation xác nhận tiếp tục lệnh đã lưu…",
+    "Waiting for Simulation to resume the saved command…"
+  ],
+  "Continue operation": [
+    "Tiếp tục lệnh trước đó",
+    "Continue operation"
+  ],
+  "Recovery was rejected. Check the current Simulation state.": [
+    "Yêu cầu phục hồi bị từ chối. Kiểm tra trạng thái hiện tại của Simulation.",
+    "Recovery was rejected. Check the current Simulation state."
+  ],
+  "The fault is active again. Wait for Simulation to clear it.": [
+    "Lỗi đã phát sinh lại. Chờ Simulation xử lý lỗi.",
+    "The fault is active again. Wait for Simulation to clear it."
+  ],
+  "Cabinet inactive. Controls are unavailable.": [
+    "Tủ chưa hoạt động. Các chức năng điều khiển đã bị khóa.",
+    "Cabinet inactive. Controls are unavailable."
+  ],
   "Smart Inventory · Control Center": [
     "Smart Inventory · Trung tâm điều khiển",
     "Smart Inventory · Control Center"
@@ -4494,5 +4670,401 @@
   "Serial delivery could not be confirmed": [
     "Chưa xác nhận được việc gửi qua Serial.",
     "Serial delivery could not be confirmed"
+  ],
+  "Simulation connection restored": [
+    "Đã kết nối lại Simulation",
+    "Simulation connection restored"
+  ],
+  "Simulation connection lost": [
+    "Mất kết nối Simulation",
+    "Simulation connection lost"
+  ],
+  "Connection restored. Confirm to close this message. Any paused operation still requires recovery confirmation.": [
+    "Kết nối đã được khôi phục. Xác nhận để đóng thông báo. Thao tác đang tạm dừng vẫn cần xác nhận phục hồi.",
+    "Connection restored. Confirm to close this message. Any paused operation still requires recovery confirmation."
+  ],
+  "Waiting for Simulation to reconnect. Device operations are unavailable.": [
+    "Đang chờ kết nối lại Simulation. Các thao tác thiết bị đang bị khóa.",
+    "Waiting for Simulation to reconnect. Device operations are unavailable."
+  ],
+  "Confirm connection restored": [
+    "Xác nhận kết nối lại",
+    "Confirm connection restored"
+  ],
+  "Confirm reconnection to continue the saved operation.": [
+    "Xác nhận kết nối lại để tiếp tục thao tác từ vị trí đã lưu.",
+    "Confirm reconnection to continue the saved operation."
+  ],
+  "Confirm and continue operation": [
+    "Xác nhận và tiếp tục thao tác",
+    "Confirm and continue operation"
+  ],
+  "Faults & maintenance": [
+    "Sự cố & bảo trì",
+    "Faults & maintenance"
+  ],
+  "Current safety, active faults and racks requiring inspection.": [
+    "Trạng thái an toàn, sự cố đang tồn tại và các rack cần kiểm tra.",
+    "Current safety, active faults and racks requiring inspection."
+  ],
+  "SYSTEM NORMAL": [
+    "HỆ THỐNG BÌNH THƯỜNG",
+    "SYSTEM NORMAL"
+  ],
+  "ACTIVE FAULTS DETECTED": [
+    "ĐANG CÓ SỰ CỐ",
+    "ACTIVE FAULTS DETECTED"
+  ],
+  "MAINTENANCE CHECK RECOMMENDED": [
+    "KHUYẾN NGHỊ KIỂM TRA BẢO TRÌ",
+    "MAINTENANCE CHECK RECOMMENDED"
+  ],
+  "NORMAL": [
+    "Bình thường",
+    "NORMAL"
+  ],
+  "ACTIVE FAULT": [
+    "Đang có lỗi",
+    "ACTIVE FAULT"
+  ],
+  "MAINTENANCE WARNING": [
+    "Cảnh báo bảo trì",
+    "MAINTENANCE WARNING"
+  ],
+  "Some devices are offline or have no current data. Safety cannot be confirmed.": [
+    "Một số thiết bị mất kết nối hoặc chưa có dữ liệu hiện tại. Chưa thể xác nhận trạng thái an toàn.",
+    "Some devices are offline or have no current data. Safety cannot be confirmed."
+  ],
+  "Operation blocked until fault is cleared": [
+    "Thao tác bị khóa cho đến khi lỗi được xử lý",
+    "Operation blocked until fault is cleared"
+  ],
+  "Inspection is recommended. A maintenance warning does not automatically block operations.": [
+    "Khuyến nghị kiểm tra thiết bị. Cảnh báo bảo trì không tự khóa thao tác.",
+    "Inspection is recommended. A maintenance warning does not automatically block operations."
+  ],
+  "No active device faults detected.": [
+    "Không phát hiện lỗi thiết bị đang tồn tại.",
+    "No active device faults detected."
+  ],
+  "Active faults": [
+    "Sự cố đang tồn tại",
+    "Active faults"
+  ],
+  "Warning racks": [
+    "Rack cần chú ý",
+    "Warning racks"
+  ],
+  "Faults in last 24 hours": [
+    "Số lần lỗi trong 24 giờ",
+    "Faults in last 24 hours"
+  ],
+  "Most affected rack": [
+    "Rack lỗi nhiều nhất",
+    "Most affected rack"
+  ],
+  "Fault data could not be loaded. Refresh to confirm current safety.": [
+    "Không tải được dữ liệu sự cố. Làm mới để xác nhận trạng thái an toàn hiện tại.",
+    "Fault data could not be loaded. Refresh to confirm current safety."
+  ],
+  "No recorded active faults. Connection status remains unknown.": [
+    "Chưa ghi nhận lỗi đang tồn tại. Trạng thái kết nối vẫn chưa xác định.",
+    "No recorded active faults. Connection status remains unknown."
+  ],
+  "Detected": [
+    "Phát hiện",
+    "Detected"
+  ],
+  "RESOLVED": [
+    "Đã xử lý",
+    "RESOLVED"
+  ],
+  "Related transaction": [
+    "Giao dịch liên quan",
+    "Related transaction"
+  ],
+  "Communication status unknown": [
+    "Chưa xác định trạng thái kết nối",
+    "Communication status unknown"
+  ],
+  "Inspect cabinet": [
+    "Kiểm tra cabinet",
+    "Inspect cabinet"
+  ],
+  "Maintenance Attention": [
+    "Thiết bị cần chú ý bảo trì",
+    "Maintenance Attention"
+  ],
+  "No repeated-fault warnings in the configured window.": [
+    "Không có cảnh báo lỗi lặp trong khoảng thời gian cấu hình.",
+    "No repeated-fault warnings in the configured window."
+  ],
+  "INSPECTION RECOMMENDED": [
+    "Khuyến nghị kiểm tra",
+    "INSPECTION RECOMMENDED"
+  ],
+  "{0} faults in the last {1} minutes": [
+    "{0} lần lỗi trong {1} phút gần nhất",
+    "{0} faults in the last {1} minutes"
+  ],
+  "Active fault": [
+    "Đang có lỗi",
+    "Active fault"
+  ],
+  "No active fault": [
+    "Không có lỗi đang tồn tại",
+    "No active fault"
+  ],
+  "Last fault": [
+    "Lỗi gần nhất",
+    "Last fault"
+  ],
+  "Most frequent code": [
+    "Mã lỗi phổ biến nhất",
+    "Most frequent code"
+  ],
+  "Repeated same fault detected": [
+    "Phát hiện cùng mã lỗi lặp lại",
+    "Repeated same fault detected"
+  ],
+  "Inspect sensors, mechanism and wiring before continued intensive operation.": [
+    "Kiểm tra cảm biến, cơ cấu và dây dẫn trước khi tiếp tục vận hành với cường độ cao.",
+    "Inspect sensors, mechanism and wiring before continued intensive operation."
+  ],
+  "Seen by": [
+    "Đã xem bởi",
+    "Seen by"
+  ],
+  "Acknowledgement does not mean maintenance is complete.": [
+    "Xác nhận đã xem không có nghĩa là đã bảo trì xong.",
+    "Acknowledgement does not mean maintenance is complete."
+  ],
+  "Acknowledge Maintenance Warning": [
+    "Xác nhận đã xem cảnh báo bảo trì",
+    "Acknowledge Maintenance Warning"
+  ],
+  "Cabinet / Rack safety": [
+    "Trạng thái an toàn Cabinet / Rack",
+    "Cabinet / Rack safety"
+  ],
+  "All cabinets": [
+    "Tất cả cabinet",
+    "All cabinets"
+  ],
+  "Fault history": [
+    "Lịch sử sự cố",
+    "Fault history"
+  ],
+  "All racks": [
+    "Tất cả rack",
+    "All racks"
+  ],
+  "Severity": [
+    "Mức độ",
+    "Severity"
+  ],
+  "All severities": [
+    "Tất cả mức độ",
+    "All severities"
+  ],
+  "All statuses": [
+    "Tất cả trạng thái",
+    "All statuses"
+  ],
+  "Time range": [
+    "Khoảng thời gian",
+    "Time range"
+  ],
+  "Last {0} hours": [
+    "{0} giờ gần nhất",
+    "Last {0} hours"
+  ],
+  "Search error code": [
+    "Tìm mã lỗi",
+    "Search error code"
+  ],
+  "Clear filters": [
+    "Xóa bộ lọc",
+    "Clear filters"
+  ],
+  "Cabinet / Rack": [
+    "Cabinet / Rack",
+    "Cabinet / Rack"
+  ],
+  "Fault": [
+    "Sự cố",
+    "Fault"
+  ],
+  "Duration": [
+    "Thời lượng",
+    "Duration"
+  ],
+  "No matching fault occurrences.": [
+    "Không có lần lỗi phù hợp.",
+    "No matching fault occurrences."
+  ],
+  "Fault details": [
+    "Chi tiết sự cố",
+    "Fault details"
+  ],
+  "Fault ID": [
+    "Mã lần lỗi",
+    "Fault ID"
+  ],
+  "Error code": [
+    "Mã lỗi",
+    "Error code"
+  ],
+  "First detected": [
+    "Thời điểm phát hiện",
+    "First detected"
+  ],
+  "Resolved time": [
+    "Thời điểm xử lý",
+    "Resolved time"
+  ],
+  "Snapshot sequence": [
+    "Sequence tại thời điểm lỗi",
+    "Snapshot sequence"
+  ],
+  "Current step": [
+    "Bước đang thực hiện",
+    "Current step"
+  ],
+  "Recent faults on rack": [
+    "Số lần lỗi gần đây của rack",
+    "Recent faults on rack"
+  ],
+  "Repeated failures detected on this Rack. Maintenance inspection is recommended.": [
+    "Rack này có lỗi lặp. Khuyến nghị kiểm tra bảo trì.",
+    "Repeated failures detected on this Rack. Maintenance inspection is recommended."
+  ],
+  "Repeated-fault policy: {0} occurrences per rack within {1} minutes.": [
+    "Ngưỡng lỗi lặp: {0} lần lỗi/rack trong {1} phút.",
+    "Repeated-fault policy: {0} occurrences per rack within {1} minutes."
+  ],
+  "Communication loss is not counted as a device fault.": [
+    "Mất kết nối không được tính là lỗi thiết bị.",
+    "Communication loss is not counted as a device fault."
+  ],
+  "Maintenance attention": [
+    "Cần chú ý bảo trì",
+    "Maintenance attention"
+  ],
+  "Review maintenance warnings": [
+    "Xem cảnh báo bảo trì",
+    "Review maintenance warnings"
+  ],
+  "Obstacle detected": [
+    "Phát hiện vật cản",
+    "Obstacle detected"
+  ],
+  "Rack alignment fault": [
+    "Lỗi độ thẳng của rack",
+    "Rack alignment fault"
+  ],
+  "Position sensor timeout": [
+    "Quá thời gian xác nhận cảm biến vị trí",
+    "Position sensor timeout"
+  ],
+  "Mechanical reference lost": [
+    "Mất tham chiếu vị trí cơ khí",
+    "Mechanical reference lost"
+  ],
+  "Mechanical state requires inspection": [
+    "Trạng thái cơ khí cần được kiểm tra",
+    "Mechanical state requires inspection"
+  ],
+  "Maintenance warning changed; refresh before acknowledging": [
+    "Cảnh báo bảo trì đã thay đổi; làm mới trước khi xác nhận",
+    "Maintenance warning changed; refresh before acknowledging"
+  ],
+  "RECOVERY CONFIRMATION REQUIRED": [
+    "CHỜ XÁC NHẬN PHỤC HỒI",
+    "RECOVERY CONFIRMATION REQUIRED"
+  ],
+  "Faults cleared. The operation remains paused until the operator confirms recovery.": [
+    "Lỗi đã được xử lý. Thao tác vẫn tạm dừng cho đến khi operator xác nhận phục hồi.",
+    "Faults cleared. The operation remains paused until the operator confirms recovery."
+  ],
+  "Đã hoàn thành": [
+    "Đã hoàn thành",
+    "Completed"
+  ],
+  "Gặp sự cố": [
+    "Gặp sự cố",
+    "Device fault"
+  ],
+  "Đã xử lý lỗi · chờ xác nhận tiếp tục": [
+    "Đã xử lý lỗi · chờ xác nhận tiếp tục",
+    "Fault cleared · awaiting recovery confirmation"
+  ],
+  "Mất kết nối · chưa xác nhận hoàn thành": [
+    "Mất kết nối · chưa xác nhận hoàn thành",
+    "Connection lost · completion unconfirmed"
+  ],
+  "Chưa xác nhận hoàn thành": [
+    "Chưa xác nhận hoàn thành",
+    "Completion unconfirmed"
+  ],
+  "Bắt đầu / ghi nhận": [
+    "Bắt đầu / ghi nhận",
+    "Started / first observed"
+  ],
+  "Hoàn thành": [
+    "Hoàn thành",
+    "Completed at"
+  ],
+  "Cập nhật": [
+    "Cập nhật",
+    "Updated"
+  ],
+  "Chỉ hiển thị hoàn thành khi thiết bị xác nhận đúng điểm kết thúc. Bản ghi cũ thiếu bằng chứng hoặc thời gian được giữ ở trạng thái chưa xác nhận / —.": [
+    "Chỉ hiển thị hoàn thành khi thiết bị xác nhận đúng điểm kết thúc. Bản ghi cũ thiếu bằng chứng hoặc thời gian được giữ ở trạng thái chưa xác nhận / —.",
+    "Completion requires the device to confirm the correct endpoint. Older records without evidence or timestamps remain unconfirmed / —."
+  ],
+  "Unconfirmed": [
+    "Chưa xác minh",
+    "Unconfirmed"
+  ],
+  "moving": [
+    "Đang thực hiện",
+    "Moving"
+  ],
+  "fault": [
+    "Lỗi thiết bị",
+    "Device fault"
+  ],
+  "completed": [
+    "Đã hoàn thành",
+    "Completed"
+  ],
+  "awaiting_device": [
+    "Chờ thiết bị",
+    "Awaiting device"
+  ],
+  "queued": [
+    "Đang chờ xử lý",
+    "Queued"
+  ],
+  "sent": [
+    "Đã tiếp nhận · chờ kết quả",
+    "Accepted · awaiting outcome"
+  ],
+  "timeout": [
+    "Hết thời gian chờ phản hồi",
+    "Response timeout"
+  ],
+  "expired": [
+    "Lệnh hết hạn",
+    "Expired"
+  ],
+  "cancelled": [
+    "Đã hủy",
+    "Cancelled"
+  ],
+  "Trạng thái thao tác thiết bị": [
+    "Trạng thái thao tác thiết bị",
+    "Device operation status"
   ]
 }

@@ -1,5 +1,4 @@
 from datetime import timedelta
-from typing import List
 
 from fastapi import APIRouter, Request
 from fastapi import Depends

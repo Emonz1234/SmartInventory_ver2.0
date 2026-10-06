@@ -1,7 +1,7 @@
 from ipc_core.app.database.database import Base
 from ipc_core.app.database.database import engine
 
-# import models
+# Import models for SQLAlchemy metadata registration before ensure_schema().
 from ipc_core.app.database.models.auth import User
 from ipc_core.app.database.models.system import Device
 from ipc_core.app.database.models.environment import EnvironmentSnapshot

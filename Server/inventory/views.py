@@ -116,7 +116,7 @@ RESOURCES = {
     "shelves": (Shelf, {"rack_id", "code", "level"}),
     "bins": (Bin, {"shelf_id", "code", "capacity"}),
     "items": (Item, {"code", "barcode", "name", "unit", "min_qty", "max_qty", "category_id", "description", "is_active"}),
-    "categories": (Category, {'code', 'name', 'description'}),
+    "categories": (Category, {'code', 'name', 'description', 'is_active'}),
 }
 
 
@@ -175,6 +175,11 @@ def resources(request, resource):
             before = {}
             if isinstance(obj, Rack) and obj.cabinet.topology_locked:
                 raise ValueError('Rack mapping is locked; unknown Hardware must be specified before configuration')
+        if isinstance(obj, Item):
+            if obj.category_id and not Category.objects.get(pk=obj.category_id).is_active and (not before or before.get('category') != obj.category_id):
+                raise ValueError('Category is inactive')
+            if Item.objects.filter(code=obj.code).exclude(pk=obj.pk).exists():
+                return JsonResponse({'error': 'SKU already exists', 'fields': {'code': 'SKU already exists'}}, status=400)
         obj.full_clean()
         if isinstance(obj, Rack) and obj.cabinet.device_id:
             if Rack.objects.filter(cabinet__device_id=obj.cabinet.device_id, address=obj.address).exclude(pk=obj.pk).exists():
@@ -209,7 +214,10 @@ def operations(request):
         rows = Operation.objects.filter(device__device_type__in=domains).order_by('-created_at')
         if request.GET.get('device_id'):
             rows = rows.filter(device_id=request.GET['device_id'])
-        result = list(rows.values("id", "device_id", "device__device_type", "rack_id", "kind", "quantity", "state", "execution_state", "execution_updated_at", "created_at")[:200])
+        if request.GET.get('pending') == 'true':
+            rows = rows.exclude(state__in=['confirmed', 'failed', 'cancelled'])
+        result = list(rows.values("id", "device_id", "device__device_type", "rack_id", "kind", "quantity", "state", "execution_state", "execution_updated_at", "created_at",
+                                 "request_key", "rack__name", "rack__cabinet__name", "item__name", "requested_by__username")[:200])
         errors = {}
         for event in RuntimeEvent.objects.filter(device__device_type__in=domains, payload__command_id__in=[str(r['id']) for r in result]).order_by('-id'):
             errors.setdefault(event.payload['command_id'], event.payload.get('error', ''))

@@ -1,7 +1,6 @@
 from sqlalchemy import Column
 from sqlalchemy import Integer
 from sqlalchemy import Float
-from sqlalchemy import Boolean
 from sqlalchemy import DateTime
 
 from ipc_core.app.database.database import Base

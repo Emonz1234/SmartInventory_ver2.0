@@ -1,68 +1,126 @@
-import { t as sharedText, getLanguage, errorText, useLanguage } from '../i18n';
-import { useState } from 'react'
-import { Alert, Box, Button, Card, CardContent, Chip, Grid, MenuItem, Skeleton, Stack, Tab, Tabs, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
-import { Refresh, ReportProblemOutlined, CheckCircleOutline, StorageOutlined } from '@mui/icons-material'
-import { useQuery } from '@tanstack/react-query'
-import { systemAPI } from '@api/system'
+import { useRef, useState } from 'react'
+import { Alert, Box, Button, Card, CardContent, Chip, Dialog, DialogActions, DialogContent, DialogTitle,
+  Grid, MenuItem, Skeleton, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  TablePagination, TextField, Typography } from '@mui/material'
+import { CheckCircleOutline, HelpOutline, Refresh, ReportProblemOutlined, WarningAmberOutlined } from '@mui/icons-material'
+import { Link } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '@api/client'
-import { formatDateTime, parseVietnamDate } from '@utils/date'
-import { PageHeader, EmptyState } from '@components/PageHeader'
+import { PageHeader } from '@components/PageHeader'
+import { useFaultOverview } from '@components/MaintenanceNotice'
+import { t, errorText, useLanguage, getLanguage } from '../i18n'
 
-// Additional UI copy for mechanical state, recovery and rack locations.
-const mergedCopy: Record<string, [string, string]> = {
-  "Vị trí rack": ["Vị trí rack", "Rack location"],
-  "Chưa tải được vị trí rack. Các bản ghi đang hiển thị ID kỹ thuật; vui lòng làm mới.": ["Chưa tải được vị trí rack. Các bản ghi đang hiển thị ID kỹ thuật; vui lòng làm mới.", "Could not load rack locations. Records show technical IDs; please refresh."],
-  "Cần kiểm tra": ["Cần kiểm tra", "Needs inspection"]
-}
-const uiText = (value: string, ...args: any[]) => {
-  const pair = mergedCopy[value]
-  return pair ? pair[getLanguage() === 'en' ? 1 : 0].replace(/\{(\d+)\}/g, (_, index) => String(args[index] ?? '')) : sharedText(value, ...args)
-}
+const location = (row: any) => `${t('Cabinet')} ${String(row.cabinet_index).padStart(2, '0')} / Rack ${String(row.rack_index).padStart(2, '0')}`
+const date = (value: number | null) => value == null ? '—' : new Date(value * 1000).toLocaleString(getLanguage() === 'vi' ? 'vi-VN' : 'en-GB', { timeZone:'Asia/Ho_Chi_Minh' })
+const duration = (seconds: number) => `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`
+const severityColor = (severity: string) => severity === 'CRITICAL' || severity === 'ERROR' ? 'error' : severity === 'WARNING' ? 'warning' : 'info'
+const statusColor = (status: string) => status.includes('ACTIVE') ? 'error' : status.includes('MAINTENANCE') || status.includes('INSPECTION') ? 'warning' : status === 'UNKNOWN' ? 'default' : 'success'
 
-const errorsOf = (row: any): string[] => [row.is_obstructed && 'Vật cản', row.is_skewed && 'Lệch rack', row.is_overload_motor && 'Quá tải động cơ'].filter(Boolean) as string[]
-export const Breakdown = () => {
-  useLanguage();
-  const [rack, setRack] = useState(''), [status, setStatus] = useState('ALL'), [tab, setTab] = useState(0)
-  const query = useQuery({ queryKey: ['breakdownData'], queryFn: async () => (await systemAPI.getBreakdownData(200)).data.data, refetchInterval: 5000 })
-  const topology = useQuery({ queryKey: ['breakdown-topology'], queryFn: async () => (await api.get('/device/snapshot')).data.records || [], refetchInterval: 30000 })
-  const records: any[] = topology.data || []
-  const cabinets = new Map(records.filter(row => row.kind === 'cabinet').map(row => [Number(row.data.id), row.data]))
-  const racks = new Map(records.filter(row => row.kind === 'rack').map(row => [Number(row.data.id), row.data]))
-  const locationLabel = (id: number) => {
-    const r = racks.get(Number(id)), c = r && cabinets.get(Number(r.cabinet_id))
-    if (c?.cabinet_index && r?.rack_index) return `${uiText('Cabinet')} ${String(c.cabinet_index).padStart(2, '0')} / Rack ${String(r.rack_index).padStart(2, '0')}`
-    return `Rack ID ${id}`
+export const Breakdown = ({ session, onSessionExpired }: { session: string; onSessionExpired: () => void }) => {
+  useLanguage()
+  const client = useQueryClient()
+  const [cabinet, setCabinet] = useState(''), [rack, setRack] = useState(''), [severity, setSeverity] = useState('')
+  const [status, setStatus] = useState(''), [hours, setHours] = useState(24), [search, setSearch] = useState(''), [page, setPage] = useState(0)
+  const [selected, setSelected] = useState<any>(null), [acknowledging, setAcknowledging] = useState<number | null>(null)
+  const [error, setError] = useState<any>('')
+  const inFlight = useRef(false)
+  const query = useFaultOverview({ cabinet: cabinet || undefined, rack: rack || undefined, severity: severity || undefined,
+    status: status || undefined, hours, search, offset: page * 25, limit: 25 })
+  const data = query.data || {}, summary = data.summary || {}
+  const racks: any[] = data.racks || [], active: any[] = data.active_faults || [], warnings: any[] = data.maintenance_warnings || []
+  const cabinetIds = [...new Set<number>(racks.map(row => row.cabinet_index))].sort((a,b) => a-b)
+  const shownCabinet = cabinet ? Number(cabinet) : cabinetIds[0]
+  const safety = query.isError || !data.summary ? 'UNKNOWN' : summary.safety_status
+  const tone = safety.includes('ACTIVE') ? 'error' : safety.includes('MAINTENANCE') || safety.includes('RECOVERY') ? 'warning' : safety === 'UNKNOWN' ? 'default' : 'success'
+  const Icon = tone === 'error' ? ReportProblemOutlined : tone === 'warning' ? WarningAmberOutlined : tone === 'default' ? HelpOutline : CheckCircleOutline
+  const detail = useQuery({ queryKey:['fault-detail',selected?.id], enabled:!!selected,
+    queryFn:async () => (await api.get(`/faults/${selected.id}`)).data, refetchInterval:5000 })
+  const selectedLive = detail.data || selected && [...active, ...(data.history || [])].find(row => row.id === selected.id) || selected
+  const change = (setter: (value: any) => void, value: any) => { setter(value); setPage(0) }
+  const acknowledge = async (warning: any) => {
+    if (inFlight.current) return
+    inFlight.current = true; setAcknowledging(warning.address); setError('')
+    try {
+      await api.post('/operator/maintenance/acknowledge', { address: warning.address, occurrence_id: warning.latest_occurrence_id }, { headers: { 'X-Operator-Session': session } })
+      await client.invalidateQueries({ queryKey: ['fault-overview'] })
+    } catch (failure: any) {
+      if (failure?.response?.status === 403) onSessionExpired()
+      setError(failure)
+    } finally { inFlight.current = false; setAcknowledging(null) }
   }
-  const history: any[] = [...(query.data || [])].sort((a, b) => (parseVietnamDate(b.created_at)?.getTime() || 0) - (parseVietnamDate(a.created_at)?.getTime() || 0) || b.id - a.id)
-  const latest = new Map<number, any>()
-  history.forEach(row => { if (!latest.has(Number(row.rack_id))) latest.set(Number(row.rack_id), row) })
-  const current = Array.from(latest.values())
-  const active = current.filter(row => errorsOf(row).length > 0).length
-  const rows = (tab === 0 ? current : history).filter(row => (!rack || String(row.rack_id) === rack) && (status === 'ALL' || (errorsOf(row).length > 0 ? 'ERROR' : 'CLEAR') === status))
-  return <Box>
-    <PageHeader title={uiText("Sự cố & phục hồi")} description={uiText("Nhận biết rack cần kiểm tra và xem lại các lần báo lỗi, hết lỗi từ thiết bị.")} action={<Button variant="outlined" startIcon={<Refresh />} disabled={query.isFetching || topology.isFetching} onClick={() => { void query.refetch(); void topology.refetch() }}>{uiText("Làm mới")}</Button>} />
-    <Grid container spacing={1.5} sx={{ mb: 2 }}>{[
-      { label: 'Rack cần kiểm tra', value: active, icon: ReportProblemOutlined, color: '#c35454' },
-      { label: 'Rack không báo lỗi', value: current.length - active, icon: CheckCircleOutline, color: '#087c78' },
-      { label: 'Rack có dữ liệu', value: current.length, icon: StorageOutlined, color: '#3274ad' }
-    ].map(stat => <Grid item xs={12} sm={4} key={stat.label}><Card><CardContent><Stack direction="row" justifyContent="space-between" alignItems="center"><Box><Typography variant="body2" color="text.secondary">{uiText(stat.label)}</Typography><Typography variant="h4" fontWeight={750} sx={{ mt: 1 }}>{query.isLoading || query.isError ? '—' : stat.value}</Typography></Box><Box sx={{ display: 'flex', p: 1.5, borderRadius: 3, bgcolor: stat.color + '12', color: stat.color }}><stat.icon /></Box></Stack></CardContent></Card></Grid>)}</Grid>
-    {query.isError && <Alert severity="error" sx={{ mb: 2 }}>{uiText("Không tải được dữ liệu sự cố. Vui lòng làm mới.")}</Alert>}
-    {!query.isLoading && !query.isError && active > 0 && <Alert severity="warning" sx={{ mb: 2 }}>{uiText("Có")} {active} {uiText("rack báo lỗi trong dữ liệu gần nhất. Kiểm tra vật cản, độ lệch và tải động cơ trước khi tiếp tục thao tác.")}</Alert>}
-    {topology.isError && <Alert severity="warning" sx={{ mb: 2 }}>{uiText("Chưa tải được vị trí rack. Các bản ghi đang hiển thị ID kỹ thuật; vui lòng làm mới.")}</Alert>}
-    <Card sx={{ mb: 2 }}><CardContent><Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-      <TextField select size="small" label={uiText("Vị trí rack")} value={rack} onChange={event => setRack(event.target.value)} sx={{ minWidth: { sm: 270 } }}><MenuItem value="">{uiText("Tất cả rack")}</MenuItem>{Array.from(latest.keys()).sort((a, b) => { const ra = racks.get(a), rb = racks.get(b); return (cabinets.get(Number(ra?.cabinet_id))?.cabinet_index || 0) - (cabinets.get(Number(rb?.cabinet_id))?.cabinet_index || 0) || (ra?.rack_index || a) - (rb?.rack_index || b) }).map(id => <MenuItem key={id} value={String(id)}>{locationLabel(id)}</MenuItem>)}</TextField>
-      <TextField select size="small" label={uiText("Trạng thái")} value={status} onChange={event => setStatus(event.target.value)} sx={{ minWidth: 200 }}><MenuItem value="ALL">{uiText("Tất cả trạng thái")}</MenuItem><MenuItem value="ERROR">{uiText("Có lỗi")}</MenuItem><MenuItem value="CLEAR">{uiText("Không báo lỗi")}</MenuItem></TextField>
-      <Button onClick={() => { setRack(''); setStatus('ALL') }}>{uiText("Xóa bộ lọc")}</Button>
+  const select = (label: string, value: string | number, setter: (value:any)=>void, options: [string | number,string][]) =>
+    <TextField select size="small" label={t(label)} value={value} SelectProps={{ displayEmpty:true }} InputLabelProps={{ shrink:true }} onChange={event => change(setter,event.target.value)} sx={{ minWidth: 155 }}>
+      {options.map(([key,text]) => <MenuItem key={key} value={key}>{text}</MenuItem>)}
+    </TextField>
+  return <Stack spacing={2}>
+    <PageHeader title={t('Faults & maintenance')} description={t('Current safety, active faults and racks requiring inspection.')} action={<Button variant="outlined" startIcon={<Refresh />} disabled={query.isFetching} onClick={() => void query.refetch()}>{t('Refresh')}</Button>} />
+    <Card data-testid="fault-safety" sx={{ borderLeft: '6px solid', borderLeftColor: tone === 'default' ? 'grey.500' : `${tone}.main` }}><CardContent>
+      <Stack direction="row" alignItems="center" spacing={1.5}><Icon color={tone === 'default' ? 'disabled' : tone} sx={{ fontSize: 36 }} /><Box>
+        <Typography variant="h6" fontWeight={750}>{t(safety)}</Typography><Typography variant="body2" color="text.secondary">{t(safety === 'UNKNOWN' ? 'Some devices are offline or have no current data. Safety cannot be confirmed.' : active.length ? 'Operation blocked until fault is cleared' : warnings.length ? 'Inspection is recommended. A maintenance warning does not automatically block operations.' : 'No active device faults detected.')}</Typography>
+      </Box></Stack>
+      <Grid container spacing={2} sx={{ mt: 0.5 }}>{[
+        [t('Active faults'), summary.active_faults], [t('Warning racks'), summary.warning_racks], [t('Faults in last 24 hours'), summary.faults_24h],
+        [t('Most affected rack'), summary.most_affected_rack ? `${location(summary.most_affected_rack)} · ${summary.most_affected_rack.count}` : '—']
+      ].map(([label,value]) => <Grid item xs={6} md={3} key={String(label)}><Typography variant="caption" color="text.secondary">{label}</Typography><Typography fontWeight={750}>{query.isError ? '—' : value ?? '—'}</Typography></Grid>)}</Grid>
+    </CardContent></Card>
+    {query.isError && <Alert severity="error">{t('Fault data could not be loaded. Refresh to confirm current safety.')}</Alert>}
+    {!!data.recovery_pending?.length && <Alert severity="warning"><Stack spacing={0.5}>
+      <span>{t('Faults cleared. The operation remains paused until the operator confirms recovery.')}</span>
+      {data.recovery_pending.map((entry:any) => entry.cabinet_id ? <Link key={entry.cabinet_index} to={`/cabinets/${entry.cabinet_id}`}>{t('Inspect cabinet')} {entry.cabinet_index}</Link> : <span key={entry.cabinet_index}>{t('Cabinet')} {entry.cabinet_index}</span>)}
+    </Stack></Alert>}
+    {query.isLoading && <Skeleton height={150} />}
+    <Box><Typography variant="h6" fontWeight={750} sx={{ mb:1 }}>{t('Active faults')}</Typography>
+      {!active.length && !query.isError && !query.isLoading && <Alert severity={safety === 'UNKNOWN' ? 'info' : 'success'}>{t(safety === 'UNKNOWN' ? 'No recorded active faults. Connection status remains unknown.' : 'No active device faults detected.')}</Alert>}
+      <Grid container spacing={1.5}>{active.map(fault => <Grid item xs={12} md={6} key={fault.id}><Card data-testid="active-fault" sx={{ borderColor:'error.main', bgcolor:'#fff7f6' }}><CardContent><Stack spacing={1}>
+        <Stack direction="row" spacing={1} alignItems="center"><ReportProblemOutlined color="error" /><Chip size="small" color={severityColor(fault.severity)} label={t(fault.severity)} /><Typography fontWeight={750}>{location(fault)}</Typography></Stack>
+        <Typography fontWeight={650}>{t(fault.description)}</Typography><Typography variant="caption">{fault.codes.join(' · ')}</Typography>
+        <Typography variant="body2">{t('Detected')}: {date(fault.detected_at)} · {t('ACTIVE')}</Typography>
+        {fault.transaction_id && <Typography variant="body2" sx={{ overflowWrap:'anywhere' }}>{t('Related transaction')}: {fault.transaction_id}</Typography>}
+        {!fault.online && <Chip size="small" label={t('Communication status unknown')} />}
+        <Typography color="error" variant="body2">{t('Operation blocked until fault is cleared')}</Typography>
+        <Stack direction="row" spacing={1}><Button onClick={() => setSelected(fault)}>{t('Details')}</Button>{fault.cabinet_id && <Button component={Link} to={`/cabinets/${fault.cabinet_id}`}>{t('Inspect cabinet')}</Button>}</Stack>
+      </Stack></CardContent></Card></Grid>)}</Grid>
+    </Box>
+    <Box><Typography variant="h6" fontWeight={750} sx={{ mb:1 }}>{t('Maintenance Attention')}</Typography>
+      {!warnings.length && !query.isLoading && !query.isError && <Typography variant="body2" color="text.secondary">{t('No repeated-fault warnings in the configured window.')}</Typography>}
+      <Grid container spacing={1.5}>{warnings.map(warning => <Grid item xs={12} md={6} key={warning.address}><Card data-testid="maintenance-warning" sx={{ borderColor:warning.maintenance_status === 'ACKNOWLEDGED' ? 'divider' : 'warning.main' }}><CardContent><Stack spacing={1}>
+        <Stack direction="row" spacing={1} alignItems="center"><WarningAmberOutlined color="warning" /><Typography fontWeight={750}>{location(warning)}</Typography><Chip size="small" color="warning" label={t(warning.maintenance_status)} /></Stack>
+        <Typography>{t('{0} faults in the last {1} minutes',warning.count,warning.window_minutes)}</Typography>
+        <Typography variant="body2">{t(warning.active_fault ? 'Active fault' : 'No active fault')} · {t('Last fault')}: {t(warning.last_fault)} · {date(warning.last_detected_at)}</Typography>
+        <Typography variant="body2">{t('Most frequent code')}: {warning.common_code}{warning.same_fault_repeated ? ` · ${t('Repeated same fault detected')}` : ''}</Typography>
+        <Typography variant="body2" color="text.secondary">{t('Inspect sensors, mechanism and wiring before continued intensive operation.')}</Typography>
+        {warning.acknowledgement && <Typography variant="caption">{t('Seen by')} {warning.acknowledgement.username} · {date(warning.acknowledgement.acknowledged_at)} — {t('Acknowledgement does not mean maintenance is complete.')}</Typography>}
+        <Button variant="outlined" disabled={acknowledging != null || warning.maintenance_status === 'ACKNOWLEDGED'} onClick={() => void acknowledge(warning)}>{t('Acknowledge Maintenance Warning')}</Button>
+      </Stack></CardContent></Card></Grid>)}</Grid>{error && <Alert severity="error" sx={{ mt:1 }}>{errorText(error)}</Alert>}
+    </Box>
+    <Card><CardContent><Stack spacing={1.5}><Typography variant="h6" fontWeight={750}>{t('Cabinet / Rack safety')}</Typography>
+      {select('Cabinet',cabinet,value => {setCabinet(value);setRack('')},[['',t('All cabinets')],...cabinetIds.map(id => [String(id),`${t('Cabinet')} ${id}`] as [string,string])])}
+      <Typography variant="caption">{t('Cabinet')} {shownCabinet ?? '—'}</Typography>
+      <Grid container spacing={1}>{racks.filter(row => row.cabinet_index === shownCabinet).map(row => <Grid item xs={6} sm={2} key={row.address}><Box data-testid={`fault-rack-${row.address}`} sx={{ p:1.5, border:'1px solid', borderColor:statusColor(row.safety_status) === 'default' ? 'grey.400' : `${statusColor(row.safety_status)}.main`, borderRadius:2 }}>
+        <Typography fontWeight={750}>R{row.rack_index}</Typography><Chip icon={row.safety_status === 'NORMAL' ? <CheckCircleOutline /> : row.safety_status === 'UNKNOWN' ? <HelpOutline /> : <WarningAmberOutlined />} size="small" color={statusColor(row.safety_status)} label={t(row.safety_status)} sx={{ height:'auto', '& .MuiChip-label':{whiteSpace:'normal'} }} />
+      </Box></Grid>)}</Grid>
     </Stack></CardContent></Card>
-    <Card><Box sx={{ px: 2, pt: 1 }}><Tabs value={tab} onChange={(_, value) => setTab(value)} aria-label={uiText("Chế độ xem sự cố")}><Tab label={uiText("Trạng thái gần nhất")} /><Tab label={uiText("Lịch sử báo cáo")} /></Tabs></Box>
-      <Stack direction="row" justifyContent="space-between" spacing={1.5} sx={{ p: 2 }}><Typography variant="body2" color="text.secondary">{tab === 0 ? uiText('Báo cáo mới nhất của từng rack trong dữ liệu đã tải.') : uiText('Các báo cáo sự cố và hết lỗi, mới nhất trước.')}</Typography><Chip size="small" label={uiText("{0} bản ghi", rows.length)} variant="outlined" /></Stack>
-      <TableContainer sx={{ maxHeight: 620 }}><Table stickyHeader size="small"><TableHead><TableRow>{['Rack', 'Trạng thái', 'Chi tiết lỗi', 'Thời gian báo cáo'].map(label => <TableCell key={label}>{uiText(label)}</TableCell>)}</TableRow></TableHead><TableBody>
-        {query.isLoading ? Array.from({ length: 5 }, (_, index) => <TableRow key={index}><TableCell colSpan={4}><Skeleton height={40} /></TableCell></TableRow>) : rows.length === 0 ? <TableRow><TableCell colSpan={4}><EmptyState text={uiText("Chưa có báo cáo phù hợp")} /></TableCell></TableRow> : rows.map(row => {
-          const errors = errorsOf(row)
-          return <TableRow hover key={row.id}><TableCell sx={{ fontWeight: 650 }}>{locationLabel(row.rack_id)}</TableCell><TableCell><Chip size="small" label={errors.length ? uiText('Cần kiểm tra') : uiText('Không báo lỗi')} color={errors.length ? 'error' : 'success'} variant="outlined" /></TableCell><TableCell>{errors.length ? <Stack direction="row" flexWrap="wrap" gap={0.75}>{errors.map(error => <Chip key={error} label={errorText(error)} size="small" color="error" />)}</Stack> : <Typography variant="body2" color="text.secondary">{uiText("Không phát hiện lỗi trong báo cáo")}</Typography>}</TableCell><TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDateTime(row.created_at)}</TableCell></TableRow>
-        })}
-      </TableBody></Table></TableContainer>
-    </Card>
-    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>{uiText("Dữ liệu cập nhật mỗi 5 giây · tối đa 200 báo cáo gần nhất. Rack chưa có báo cáo chưa được đánh giá trạng thái.")}</Typography>
-  </Box>
+    <Card><CardContent><Stack spacing={1.5}><Typography variant="h6" fontWeight={750}>{t('Fault history')}</Typography>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        {select('Rack',rack,setRack,[['',t('All racks')],...racks.filter(row => !cabinet || row.cabinet_index === Number(cabinet)).map(row => [String(row.address),location(row)] as [string,string])])}
+        {select('Severity',severity,setSeverity,[['',t('All severities')],...['INFO','WARNING','ERROR','CRITICAL'].map(value => [value,t(value)] as [string,string])])}
+        {select('Status',status,setStatus,[['',t('All statuses')],...['ACTIVE','RESOLVED'].map(value => [value,t(value)] as [string,string])])}
+        {select('Time range',hours,value => setHours(Number(value)),[1,24,168,720].map(value => [value,t('Last {0} hours',value)]))}
+        <TextField size="small" label={t('Search error code')} value={search} onChange={event => change(setSearch,event.target.value)} />
+        <Button onClick={() => {setCabinet('');setRack('');setSeverity('');setStatus('');setHours(24);setSearch('');setPage(0)}}>{t('Clear filters')}</Button>
+      </Stack>
+      <TableContainer sx={{ maxHeight:350 }}><Table stickyHeader size="small" aria-label={t('Fault history')}><TableHead><TableRow>{['Time','Severity','Cabinet / Rack','Fault','Status','Duration','Details'].map(label => <TableCell key={label}>{t(label)}</TableCell>)}</TableRow></TableHead><TableBody>
+        {(data.history || []).map((fault:any) => <TableRow hover key={fault.id}><TableCell>{date(fault.detected_at)}</TableCell><TableCell><Chip size="small" label={t(fault.severity)} color={severityColor(fault.severity)} /></TableCell><TableCell>{location(fault)}</TableCell><TableCell><Typography variant="body2">{t(fault.description)}</Typography><Typography variant="caption">{fault.error_code}</Typography></TableCell><TableCell><Chip size="small" label={t(fault.status)} color={fault.status === 'ACTIVE' ? 'error' : 'success'} variant="outlined" /></TableCell><TableCell>{duration(fault.duration_seconds)}</TableCell><TableCell><Button size="small" onClick={() => setSelected(fault)}>{t('Details')}</Button></TableCell></TableRow>)}
+        {!data.history?.length && <TableRow><TableCell colSpan={7}>{t('No matching fault occurrences.')}</TableCell></TableRow>}
+      </TableBody></Table></TableContainer><TablePagination component="div" count={data.history_total || 0} page={page} rowsPerPage={25} rowsPerPageOptions={[25]} onPageChange={(_,value) => setPage(value)} />
+    </Stack></CardContent></Card>
+    <Dialog open={!!selectedLive} onClose={() => setSelected(null)} maxWidth="sm" fullWidth aria-labelledby="fault-details-title"><DialogTitle id="fault-details-title">{t('Fault details')}</DialogTitle><DialogContent><Stack spacing={1.5}>
+      {detail.isError && <Alert severity="warning">{t('Fault data could not be loaded. Refresh to confirm current safety.')}</Alert>}
+      {selectedLive && <><Typography fontWeight={750}>{location(selectedLive)} · {t(selectedLive.description)}</Typography><Chip label={`${t(selectedLive.severity)} · ${t(selectedLive.status)}`} color={severityColor(selectedLive.severity)} />
+        {[[t('Fault ID'),selectedLive.id],[t('Error code'),selectedLive.codes.join(' · ')],[t('First detected'),date(selectedLive.detected_at)],[t('Resolved time'),date(selectedLive.resolved_at)],[t('Duration'),duration(selectedLive.duration_seconds)],[t('Related transaction'),selectedLive.transaction_id || '—'],[t('Snapshot sequence'),selectedLive.context.sequence ?? '—'],[t('Current step'),selectedLive.context.current_step ? JSON.stringify(selectedLive.context.current_step) : '—'],[t('Recent faults on rack'),selectedLive.recent_fault_count]].map(([label,value]) => <Box key={String(label)} sx={{ overflowWrap:'anywhere' }}><Typography variant="caption" color="text.secondary">{label}</Typography><Typography variant="body2">{value}</Typography></Box>)}
+        {selectedLive.recent_fault_count >= data.config?.threshold && <Alert severity="warning">{t('Repeated failures detected on this Rack. Maintenance inspection is recommended.')}</Alert>}
+      </>}
+    </Stack></DialogContent><DialogActions><Button onClick={() => setSelected(null)}>{t('Close')}</Button></DialogActions></Dialog>
+    <Typography variant="caption" color="text.secondary">{t('Repeated-fault policy: {0} occurrences per rack within {1} minutes.',data.config?.threshold ?? '—',data.config?.window_minutes ?? '—')} {t('Communication loss is not counted as a device fault.')}</Typography>
+  </Stack>
 }

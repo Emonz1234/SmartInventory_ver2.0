@@ -34,7 +34,6 @@ interface OperationModalProps {
 
 export const OperationModal = ({
   open,
-  cabinetId,
   rackId,
   operation,
   cabinetCode,
@@ -44,7 +43,7 @@ export const OperationModal = ({
   useLanguage();
   const [isComplete, setIsComplete] = useState(false)
   const [hasError, setHasError] = useState(false)
-  const [completionTime, setCompletionTime] = useState<number | null>(null)
+  const [, setCompletionTime] = useState<number | null>(null)
   const [operationStartTime, setOperationStartTime] = useState<number | null>(null)
   const [operationSessionId, setOperationSessionId] = useState<number>(Date.now())
 

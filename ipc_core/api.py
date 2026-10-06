@@ -3,6 +3,8 @@ import asyncio
 import hmac
 from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI, Request
+from fastapi import Query
+from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 from ipc_core.app.core.config import settings
 from ipc_core.app.startup import initialize_database, start_serial
@@ -73,6 +75,23 @@ def root():
     return {"app": settings.APP_NAME, "device_id": settings.DEVICE_ID, "device_type": settings.DEVICE_TYPE}
 
 
+@app.get('/api/faults/overview')
+def fault_overview(cabinet: int | None = None, rack: int | None = None,
+                   severity: str | None = None, status: str | None = None,
+                   hours: int = Query(default=24, ge=1, le=720), search: str = Query(default='', max_length=128),
+                   offset: int = Query(default=0, ge=0), limit: int = Query(default=50, ge=1, le=100)):
+    return app.state.runtime.faults.overview(cabinet=cabinet, rack=rack, severity=severity,
+                                            status=status, hours=hours, search=search, offset=offset, limit=limit)
+
+
+@app.get('/api/faults/{fault_id}')
+def fault_detail(fault_id: int):
+    rows = app.state.runtime.faults.overview(fault_id=fault_id)['history']
+    if not rows:
+        raise HTTPException(404,'Fault occurrence not found')
+    return rows[0]
+
+
 @app.get("/serial/status")
 @app.get("/api/serial/status")
 def serial_status():
@@ -96,17 +115,46 @@ def health():
               for row in runtime.store.records() if row['kind'] == 'rack'} if links else {}
     local_state = runtime.sync.repo.state()
     hardware_status = 'ONLINE' if serial_manager.connected else 'OFFLINE'
+    fault_reasons = []
+    simulation_states = runtime.recovery.states() if runtime.recovery else []
+    any_simulation_online = serial_manager.connected and any(state.get('online') for state in simulation_states)
+    def report_state_fault(state):
+        if state['system_state'] not in {'ERROR', 'RECOVERING', 'STOPPED', 'COMMUNICATION_LOST'}:
+            return False
+        code = (state.get('fault_context') or {}).get('error_code') or state['system_state']
+        return not (any_simulation_online and code == 'COMMUNICATION_LOST')
     with runtime.store.transaction() as db:
-        fault = db.execute("SELECT 1 FROM local_transactions WHERE operation_status='UNCERTAIN' LIMIT 1").fetchone()
+        uncertain = db.execute("SELECT transaction_id,address,motion_address,phase FROM local_transactions WHERE operation_status='UNCERTAIN'").fetchall()
+        fault = bool(uncertain)
+        for row in uncertain:
+            address = row['motion_address'] or row['address']
+            fault_reasons.append({'error_code': 'TRANSACTION_UNCERTAIN', 'command_id': row['transaction_id'],
+                                  'cabinet_index': (address-1)//RACKS_PER_GROUP+1 if address else None,
+                                  'rack_id': address, 'current_step': row['phase']})
         initialized = runtime.store.revision(db=db) > 0
         has_auth = db.execute("SELECT 1 FROM edge_records WHERE key LIKE 'auth:%' LIMIT 1").fetchone() is not None
     if fault or runtime.hardware_fault:
         hardware_status = 'FAULT'
-    if runtime.recovery and any(s['system_state'] in {'ERROR', 'RECOVERING', 'STOPPED', 'COMMUNICATION_LOST'} for s in runtime.recovery.states()):
+    for state in simulation_states:
+        if report_state_fault(state):
+            context = state.get('fault_context') or {}
+            fault_reasons.append({**context, 'cabinet_index': state['cabinet_index'],
+                                  'system_state': state['system_state'], 'online': state.get('online'),
+                                  'error_code': context.get('error_code') or state['system_state']})
+    if runtime.hardware_fault:
+        details = getattr(runtime, 'hardware_fault_details', {})
+        address = details.get('rack_id')
+        for flag, code in [('is_obstructed', 'OBSTRUCTED'), ('is_skewed', 'SKEWED'), ('is_overload_motor', 'MOTOR_OVERLOAD')]:
+            if details.get(flag):
+                fault_reasons.append({'error_code': code, 'rack_id': address,
+                                      'cabinet_index': (int(address)-1)//RACKS_PER_GROUP+1 if address else None})
+        if not details:
+            fault_reasons.append({'error_code': 'HARDWARE_FAULT'})
+    if any(report_state_fault(s) for s in simulation_states):
         hardware_status = 'FAULT'
     available = initialized and has_auth and hardware_status == 'ONLINE' and serial_manager.adapter.supports_commands
     return {**local_state, 'hardware_status': hardware_status,
-            'simulation_states': runtime.recovery.states() if runtime.recovery else [],
+            'simulation_states': simulation_states, 'fault_reasons': fault_reasons,
             'server_connection_status': ('CONNECTED' if runtime.synced else 'SYNCING') if runtime.online else 'DISCONNECTED',
             'offline_mode': not runtime.online, 'local_operation_available': available,
             "device_id": settings.DEVICE_ID, "device_type": settings.DEVICE_TYPE,
@@ -131,7 +179,8 @@ def device_snapshot():
     with runtime.store.transaction() as db:
         events = [dict(r) for r in db.execute("SELECT * FROM edge_runtime ORDER BY rowid DESC LIMIT 100")]
         backlog = db.execute("SELECT count(*) FROM edge_outbox").fetchone()[0]
-        history = [dict(r) for r in db.execute('SELECT * FROM edge_operations ORDER BY rowid DESC LIMIT 200')]
+    from ipc_core.operation_history import history as operation_history
+    history = operation_history(runtime)
     return {"health": health(), "records": runtime.store.public_records(), "racks": legacy_racks(),
             "pending": pending(), "operation_history": history, "events": events, "outbox_count": backlog}
 

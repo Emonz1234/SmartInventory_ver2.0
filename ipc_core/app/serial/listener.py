@@ -2,8 +2,6 @@ import asyncio
 
 from ipc_core.app.serial import serial_manager
 
-from ipc_core.app.serial.protocol.parser import ProtocolParser
-
 from ipc_core.app.serial.handlers.telemetry_handler import TelemetryHandler
 from ipc_core.app.serial.handlers.event_handler import EventHandler
 from ipc_core.app.serial.handlers.ack_handler import AckHandler

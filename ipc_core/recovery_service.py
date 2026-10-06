@@ -4,6 +4,7 @@ import math
 import time
 from uuid import uuid4
 from ipc_core.protocol import canonical
+from ipc_core.local_repository import now
 
 LOCKED = {'ERROR', 'RECOVERING', 'STOPPED', 'COMMUNICATION_LOST'}
 
@@ -112,7 +113,7 @@ class RecoveryService:
                                                  snapshot=state.get('racks'), timestamp=time.time())
                 db.execute('UPDATE simulation_state SET body=? WHERE cabinet_index=?', (canonical(state), index))
                 self._history(db, index, 'communication_lost', state)
-                db.execute("UPDATE local_transactions SET operation_status='UNCERTAIN' WHERE operation_status='EXECUTING' AND (address-1)/6=?", (index-1,))
+                db.execute("UPDATE local_transactions SET operation_status='UNCERTAIN' WHERE operation_status IN ('PREPARED','EXECUTING','AWAITING_CONFIRMATION','CONFIRMED') AND (COALESCE(motion_address,address)-1)/6=?", (index-1,))
 
     @staticmethod
     def _history(db, group, event, state):
@@ -185,7 +186,10 @@ class RecoveryService:
                 # A new simulator starts at HOME. Archive interrupted work without
                 # committing inventory or replaying commands from its previous boot.
                 self._history(db, group, 'simulation_restarted', previous)
-                db.execute("UPDATE local_transactions SET operation_status='CANCELLED',moving=0,note='Simulation restarted at HOME; interrupted operation cancelled without inventory commit' WHERE operation_status IN ('EXECUTING','AWAITING_CONFIRMATION','UNCERTAIN') AND (address-1)/6=?", (group-1,))
+                for transaction in db.execute("SELECT * FROM local_transactions WHERE operation_status IN ('PREPARED','EXECUTING','AWAITING_CONFIRMATION','CONFIRMED','UNCERTAIN') AND (COALESCE(motion_address,address)-1)/6=?", (group-1,)).fetchall():
+                    evidence = dict(rack_id=transaction['address'],state=-1,is_endpoint=1,displacement=0,simulation=state)
+                    db.execute("UPDATE local_transactions SET operation_status=?,moving=0,completed_at=?,evidence=?,note=note || ' / Simulation restarted at HOME; physical confirmation preserved' WHERE transaction_id=?",
+                               ('COMPLETED' if transaction['inventory_applied'] else 'CANCELLED', now(), canonical(evidence), transaction['transaction_id']))
             # Unexpected resets or command changes still require reconciliation.
             mismatch = previous and previous.get('active_command_id') and (
                 previous.get('boot_id') != state['boot_id'] or
@@ -205,14 +209,13 @@ class RecoveryService:
             if not previous or previous.get('system_state') != state.get('system_state') or previous.get('event') != state.get('event'):
                 self._history(db, group, state.get('event', 'state_reconciliation'), state)
             if context and state.get('system_state') in LOCKED:
-                db.execute("UPDATE local_transactions SET operation_status='UNCERTAIN' WHERE operation_status IN ('EXECUTING','AWAITING_CONFIRMATION') AND (address-1)/6=?", (group-1,))
+                db.execute("UPDATE local_transactions SET operation_status='UNCERTAIN' WHERE operation_status IN ('PREPARED','EXECUTING','AWAITING_CONFIRMATION','CONFIRMED') AND (COALESCE(motion_address,address)-1)/6=?", (group-1,))
         self.live.add(group)
         if not hasattr(self.serial, 'links'):
             self.single_group = group
         if state.get('active_command_id') and state['system_state'] not in LOCKED and time.time() - state.get('operation_started_at', time.time()) > 90:
             self.send(group, 'STOP', address=state['current_command']['rack_id'], error_code='SENSOR_TIMEOUT')
-        if context and context.get('classification') == 'RECOVERABLE' and state['system_state'] == 'RECOVERING' and 'RESUME' in state['allowed_actions']:
-            self.recover(group, 'RESUME', context['fault_id'], confirmed=True)
+        # A cleared fault authorizes recovery; only an operator request starts it.
         return True
 
     def guard(self, address):
@@ -240,10 +243,11 @@ class RecoveryService:
         with self.store.transaction() as db:
             # Resume the existing journal phase, never dispatch OPEN/CLOSE again.
             if action == 'RESUME':
-                db.execute("UPDATE local_transactions SET operation_status='EXECUTING',moving=1 WHERE transaction_id=? AND operation_status='UNCERTAIN'",
-                           (context.get('command_id'),))
+                restored = 'EXECUTING' if context.get('command') else 'AWAITING_CONFIRMATION'
+                db.execute("UPDATE local_transactions SET operation_status=CASE WHEN inventory_applied=1 AND phase='DECISION' THEN 'CONFIRMED' WHEN motion_sent=0 AND motion_command_id!='' AND phase NOT IN ('OPEN_REUSED','DECISION') THEN 'PREPARED' ELSE ? END,moving=1 WHERE (transaction_id=? OR motion_command_id=? OR motion_sent=0 AND (COALESCE(motion_address,address)-1)/6=?) AND operation_status='UNCERTAIN'",
+                           (restored, context.get('command_id'), context.get('command_id'), group-1))
             elif action in {'ABORT', 'HOME'}:
-                db.execute("UPDATE local_transactions SET operation_status='CANCELLED',note='Interrupted operation aborted during recovery' WHERE operation_status='UNCERTAIN' AND (address-1)/6=?",
+                db.execute("UPDATE local_transactions SET operation_status=CASE WHEN inventory_applied=1 THEN 'EXECUTING' ELSE 'CANCELLED' END,phase=CASE WHEN inventory_applied=1 THEN 'RECOVERY_HOME' ELSE phase END,note=note || ' / Interrupted operation aborted during recovery' WHERE operation_status='UNCERTAIN' AND (COALESCE(motion_address,address)-1)/6=?",
                            (group-1,))
             state['allowed_actions'] = []
             db.execute('UPDATE simulation_state SET body=? WHERE cabinet_index=?', (canonical(state), group))

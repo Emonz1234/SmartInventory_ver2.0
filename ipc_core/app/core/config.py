@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 
 
 class Settings(BaseSettings):
@@ -23,6 +24,8 @@ class Settings(BaseSettings):
     EDGE_API_PORT: int = 8000
     SERVER_URL: str = ""
     HARDWARE_ENABLED: bool = False
+    REPEATED_FAULT_THRESHOLD: int = Field(default=3, ge=1)
+    REPEATED_FAULT_WINDOW_MINUTES: int = Field(default=30, ge=1)
 
     def require_identity(self):
         from ipc_core.protocol import valid_id

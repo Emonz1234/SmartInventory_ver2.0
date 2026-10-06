@@ -1,3 +1,4 @@
+import { DeviceFaultDetails } from '../components/DeviceFaultDetails'
 import { t as uiText, useLanguage } from '../i18n';
 import { Grid, Card, CardContent, Typography, Box, Chip, Stack, Divider, Skeleton, Alert, Button, ListItemButton } from '@mui/material'
 import { Circle, StorageOutlined, Inventory2Outlined, WarningAmberOutlined, ThermostatOutlined, WaterDropOutlined, ScaleOutlined, ArrowForward, Refresh, CloudSyncOutlined, MemoryOutlined, HistoryOutlined } from '@mui/icons-material'
@@ -32,6 +33,7 @@ export const Dashboard = () => {
     {summary.isError && <Alert severity="error" sx={{ mb: 2 }}>{uiText("Không tải được dữ liệu tổng quan. Vui lòng thử làm mới.")}</Alert>}
     {health.isError && <Alert severity="warning" sx={{ mb: 2 }}>{uiText("Chưa xác định được kết nối thiết bị. Kiểm tra tại trang Trạng thái hệ thống.")}</Alert>}
     {healthKnown && state.offline_mode && <Alert severity="info" sx={{ mb: 2 }}>{uiText("Server đang offline.")} {state.local_operation_available ? uiText('Có thể vận hành với dữ liệu local.') : uiText('Thiết bị chưa sẵn sàng vận hành.')} {uiText("Giao dịch sẽ đồng bộ khi kết nối trở lại.")}</Alert>}
+    {healthKnown && <DeviceFaultDetails health={state} />}
     <Grid container spacing={1.5} sx={{ mb: 2 }}>{[
       { label: 'Nhóm tủ đang hoạt động', value: known ? `${cabinets.active_cabinets ?? 0} / ${cabinets.total_cabinets ?? 0}` : '—', detail: 'Có số đo trong 15 giây gần nhất', icon: StorageOutlined, color: '#087c78', link: '/cabinets' },
       { label: 'Tổng tồn kho', value: number(stock.total_stock), detail: known ? `${stock.total_items ?? 0} loại sản phẩm` : 'Chưa có số liệu', icon: Inventory2Outlined, color: '#3274ad', link: '/inventory' },

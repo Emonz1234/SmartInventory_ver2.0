@@ -12,7 +12,7 @@ const groups = [
   { title: 'THEO DÕI & LỊCH SỬ', items: [
     { label: 'Giao dịch hàng hóa', icon: ReceiptLongOutlined, path: '/transactions' },
     { label: 'Hoạt động thiết bị', icon: HistoryOutlined, path: '/operation' },
-    { label: 'Sự cố & phục hồi', icon: ReportProblemOutlined, path: '/breakdown' },
+    { label: 'Faults & maintenance', icon: ReportProblemOutlined, path: '/breakdown' },
     { label: 'Môi trường', icon: CloudOutlined, path: '/environment' }
   ] },
   { title: 'HỆ THỐNG', items: [{ label: 'Trạng thái hệ thống', icon: SettingsOutlined, path: '/system' }] }

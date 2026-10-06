@@ -1,20 +1,24 @@
-﻿# Smart Inventory
+# Smart Inventory System
 
-Server Django/PostgreSQL quản lý IPC01 và IPCSIM01 qua MQTT. IPC và IPCSIM dùng chung runtime, API và nghiệp vụ; dữ liệu được phân theo `REAL` và `SIMULATION`.
+Architecture: **Server ↔ IPC/IPCSIM ↔ Hardware/Simulation**.
 
-## Hướng dẫn
+Server quản lý kho tập trung; IPC/IPCSIM đồng bộ qua MQTT, giữ database cục bộ và giao tiếp thiết bị qua Serial. Dữ liệu REAL và SIMULATION được phân biệt trong hệ thống.
 
-- [Cài đặt lần đầu](docs/first-time-setup.md)
-- [Khởi chạy và dừng](docs/startup.md)
-- [Reset database development và seed demo](docs/sample-databases.md)
-- [Sử dụng Inventory](docs/server-inventory.md)
+## First installation
 
-## Thành phần
+Xem [docs/FIRST_TIME_CONFIG.md](docs/FIRST_TIME_CONFIG.md).
 
-- `Server/`: Django API, PostgreSQL, web console và MQTT worker.
-- `ipc_core/`: runtime, đồng bộ, SQLite và Serial dùng chung.
-- `IPC/`, `IPCSIM/`: cấu hình và launcher từng edge.
-- `Simulation/`: GUI mô phỏng Serial.
-- `deploy/`: Docker Compose, MQTT ACL/TLS và secrets.
+## Normal startup
 
-Điều khiển REAL bị khóa mặc định cho đến khi phần cứng được kiểm tra. Simulator hỗ trợ group 1–21.
+Xem [docs/START_UP.md](docs/START_UP.md).
+
+## Main components
+
+- `Server/`: Django/PostgreSQL, React console, MQTT worker.
+- `ipc_core/`: runtime, SQLite, API, offline/sync và Serial dùng chung.
+- `IPC/`: launcher cho Hardware; `IPCSIM/`: launcher và React UI cho edge.
+- `Simulation/`: PyQt simulator, 22 nhóm × 6 rack.
+- `Hardware/`, `esp32_master_serial/`: adapter contract và firmware ESP32.
+- `deploy/`: Docker Compose, Nginx, Mosquitto ACL/TLS.
+
+ESP32 hiện hỗ trợ telemetry USB Serial; điều khiển REAL vẫn bị khóa theo khả năng adapter.

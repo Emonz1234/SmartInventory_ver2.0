@@ -1,4 +1,5 @@
 ﻿from datetime import timedelta
+from uuid import uuid4
 from django.test import TestCase, Client
 from django.contrib.auth.models import User, Group
 from django.utils import timezone
@@ -50,6 +51,51 @@ class ConsoleTests(TestCase):
             d.save()
             self.targets[domain] = (d, r, b, b2)
         self.client.force_login(self.admin)
+
+    def test_pending_operations_include_exact_blockers_and_scope(self):
+        from .models import Operation
+        for domain, (device, rack, bin_obj, _) in self.targets.items():
+            for state in ['queued', 'sent', 'uncertain', 'confirmed', 'failed', 'cancelled']:
+                Operation.objects.create(device=device, rack=rack, bin=bin_obj, item=self.item,
+                    kind='PUT', quantity=2, state=state, execution_state='completed',
+                    requested_by=self.admin, request_key=str(uuid4()), expires_at=timezone.now())
+        rows = self.client.get('/api/operations', {'source_type': 'SIMULATION', 'pending': 'true'}).json()
+        self.assertEqual({r['state'] for r in rows}, {'queued', 'sent', 'uncertain'})
+        self.assertEqual(len(rows), 3)
+        self.assertTrue(all(r['device_id'] == 'IPCSIM' and r['item__name'] == 'Part' and r['requested_by__username'] == 'root' for r in rows))
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.get('/api/operations', {'source_type': 'SIMULATION', 'pending': 'true'}).status_code, 403)
+        self.grant('cabinet.view')
+        self.assertEqual(len(self.client.get('/api/operations', {'source_type': 'ALL', 'pending': 'true'}).json()), 3)
+
+    def test_category_lifecycle_product_validation_and_safe_delete(self):
+        from .models import Category
+        cat = self.post('categories', {'code': 'NEW', 'name': 'New category', 'is_active': True}).json()
+        product = self.post('goods', {'code': 'NEW-SKU', 'name': 'Product', 'unit': 'pcs', 'category_id': cat['id']})
+        self.assertEqual(product.status_code, 201, product.content)
+        self.assertEqual(self.post('goods', {'code': 'NEW-SKU', 'name': 'Duplicate', 'unit': 'pcs'}).status_code, 400)
+        response = self.client.patch('/api/categories', {'id': cat['id'], 'name': 'Renamed', 'is_active': False}, content_type='application/json')
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertFalse(Category.objects.get(pk=cat['id']).is_active)
+        self.assertEqual(self.post('goods', {'code': 'BLOCKED', 'name': 'Blocked', 'unit': 'pcs', 'category_id': cat['id']}).status_code, 400)
+        pk = product.json()['id']
+        self.assertEqual(self.client.patch('/api/goods', {'id': pk, 'name': 'Edited product', 'min_qty': 3}, content_type='application/json').status_code, 200)
+        self.assertEqual(Item.objects.get(pk=pk).name, 'Edited product')
+        self.assertEqual(self.client.patch('/api/goods', {'id': pk, 'min_qty': -1}, content_type='application/json').status_code, 400)
+        referenced = Item.objects.create(code='REFERENCED', name='Referenced product', unit='pcs')
+        Stock.objects.create(item=referenced, bin=self.targets['IPCSIM'][2], quantity=0)
+        self.assertEqual(self.client.delete('/api/goods', {'id': referenced.pk}, content_type='application/json').status_code, 400)
+
+        self.assertEqual(self.client.patch('/api/goods', {'id': pk, 'is_active': False}, content_type='application/json').status_code, 200)
+        self.assertEqual(self.client.delete('/api/categories', {'id': cat['id']}, content_type='application/json').status_code, 400)
+        self.assertEqual(self.client.delete('/api/goods', {'id': pk}, content_type='application/json').status_code, 200)
+        self.assertEqual(self.client.delete('/api/categories', {'id': cat['id']}, content_type='application/json').status_code, 200)
+        self.assertEqual(self.client.delete('/api/goods', {'id': self.item.id}, content_type='application/json').status_code, 200)
+        history = self.client.get('/api/audit-logs', {'source_type': 'ALL', 'resource': 'items', 'object_id': pk}).json()
+        self.assertTrue(history)
+        self.assertTrue(all(row['resource'] == 'items' and row['object_id'] == str(pk) for row in history))
+        self.client.force_login(self.user)
+        self.assertEqual(self.post('categories', {'code': 'DENIED', 'name': 'Denied'}).status_code, 403)
 
     def grant(self, permission, scope="SIMULATION"):
         RolePermission.objects.create(
@@ -292,3 +338,38 @@ class ConsoleTests(TestCase):
             ).status_code,
             403,
         )
+
+    def test_ipc_summary_counts_are_read_only_and_permission_scoped(self):
+        from .models import PhysicalTransaction
+        d, rack, _, _ = self.targets['IPCSIM']
+        Alarm.objects.create(device=d, rack=rack, source_type='SIMULATION',
+                             code='OBSTRUCTED', severity='ERROR', active=True, created_at=timezone.now())
+        PhysicalTransaction.objects.create(device=d, transaction_id=uuid4(),
+                                           digest='summary-test', payload={}, status='PENDING')
+        admin_row = next(r for r in self.client.get('/api/ipcs?source_type=SIMULATION').json() if r['id']==d.pk)
+        self.assertEqual(admin_row['active_errors'], 1)
+        self.assertEqual(admin_row['pending_sync'], 1)
+        from .models import Operation
+        InventoryTransaction.objects.create(item=self.item, kind='INBOUND', quantity=1,
+                                            to_location=self.targets['IPCSIM'][2], source_type='SIMULATION',
+                                            actor=self.admin, note='summary fixture', request_key='summary-record')
+        Operation.objects.create(device=d, rack=rack, item=self.item, bin=self.targets['IPCSIM'][2],
+                                 kind='PUT', quantity=1, requested_by=self.admin, request_key='summary-operation',
+                                 expires_at=timezone.now()+timedelta(seconds=30))
+        d.acknowledged_revision=0
+        d.save(update_fields=['acknowledged_revision'])
+        pending = next(r for r in self.client.get('/api/ipcs?source_type=SIMULATION').json() if r['id']==d.pk)
+        self.assertEqual(pending['pending_sync'],3)
+        d.acknowledged_revision=d.revision
+        d.save(update_fields=['acknowledged_revision'])
+        self.grant('ipc.view')
+        self.client.force_login(self.user)
+        restricted = self.client.get('/api/ipcs?source_type=SIMULATION').json()[0]
+        self.assertIsNone(restricted['active_errors'])
+        self.assertIsNone(restricted['pending_sync'])
+        self.grant('alarm.view')
+        self.grant('inventory.view')
+        authorized = self.client.get('/api/ipcs?source_type=SIMULATION').json()[0]
+        self.assertEqual(authorized['active_errors'], 1)
+        self.assertEqual(authorized['pending_sync'], 1)
+        self.assertEqual(PhysicalTransaction.objects.get(device=d).status, 'PENDING')

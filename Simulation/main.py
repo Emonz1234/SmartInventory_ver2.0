@@ -322,6 +322,8 @@ class MainWindow(QMainWindow):
         if self.rack_group.get(worker.index) is not worker:
             return
         group = self.uic.rackGroupList[worker.index]
+        for rack_id, light in state.get('lights', {}).items():
+            self.light_data[worker.index][int(rack_id)] = bool(light)
         previous = (group.rackGroupImage.gap_state or {}).get('racks', {})
         for rack_id, rack in state['racks'].items():
             if rack != previous.get(rack_id) or rack_id not in group.speedGraph.history:
@@ -351,6 +353,7 @@ class MainWindow(QMainWindow):
         else:
             text = 'HOME  /  READY' if state['current_gap'] == 6 else 'IDLE'
         group.rackGroupStateLineEdit.setText(text)
+        group.light.display(self.light_data[worker.index].get(group.selected_rack_id, False))
         self.display_physical_motion(worker.index)
         self.update_operation_controls(worker.index)
 
