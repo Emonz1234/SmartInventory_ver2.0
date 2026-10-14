@@ -68,6 +68,40 @@ class ConsoleTests(TestCase):
         self.grant('cabinet.view')
         self.assertEqual(len(self.client.get('/api/operations', {'source_type': 'ALL', 'pending': 'true'}).json()), 3)
 
+    def test_console_read_labels_preserve_source_scope_and_raw_fields(self):
+        for domain, (device, rack, bin_obj, _) in self.targets.items():
+            scope = 'REAL' if domain == 'IPC' else 'SIMULATION'
+            EnvironmentStatus.objects.create(device=device, rack=rack, source_type=scope,
+                values={'temperature': 24}, created_at=timezone.now())
+            Alarm.objects.create(device=device, rack=rack, source_type=scope,
+                code='MOTOR_OVERLOAD', severity='ERROR', created_at=timezone.now())
+            InventoryTransaction.objects.create(item=self.item, source_type=scope,
+                kind='INBOUND', quantity=1, to_location=bin_obj, actor=self.admin,
+                note='Counted physically', request_key=str(uuid4()))
+            AuditLog.objects.create(actor=self.admin, action='inventory.update',
+                resource='item', object_id=str(self.item.pk), source_type=scope,
+                after={'name': self.item.name})
+        for permission in ['environment.view','alarm.view','inventory.view','audit.view']:
+            self.grant(permission)
+        self.client.force_login(self.user)
+        for endpoint in ['environment','alarms','inventory-transactions','audit-logs']:
+            response = self.client.get('/api/'+endpoint, {'source_type':'ALL'})
+            self.assertEqual(response.status_code, 200)
+            records = response.json()
+            self.assertEqual(len(records), 1)
+            self.assertEqual(records[0]['source_type'], 'SIMULATION')
+            self.assertIn('id', records[0])
+            if endpoint != 'audit-logs':
+                self.assertIn('IPCSIM', records[0]['location'])
+            if endpoint == 'inventory-transactions':
+                self.assertEqual(records[0]['product'], 'Part')
+                self.assertEqual(records[0]['item_id'], self.item.pk)
+                self.assertEqual(records[0]['actor'], 'root')
+                self.assertEqual(records[0]['result'], 'Recorded')
+            if endpoint == 'audit-logs':
+                self.assertEqual(records[0]['object'], 'Part')
+                self.assertEqual(records[0]['after'], {'name':'Part'})
+
     def test_category_lifecycle_product_validation_and_safe_delete(self):
         from .models import Category
         cat = self.post('categories', {'code': 'NEW', 'name': 'New category', 'is_active': True}).json()

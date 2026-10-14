@@ -1,6 +1,7 @@
+import { TablePageMenu } from '@components/TablePageMenu'
 import { t as uiText, statusText, useLanguage } from '../i18n';
 import { useEffect, useState } from 'react'
-import { Alert, Box, Button, Card, CardContent, Chip, Grid, InputAdornment, MenuItem, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TablePagination, TextField, Typography, Skeleton } from '@mui/material'
+import { Alert, Box, Button, Card, CardContent, Chip, Grid, InputAdornment, MenuItem, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography, Skeleton } from '@mui/material'
 import { Search, Refresh, ArrowDownward, ArrowUpward, ReceiptLongOutlined } from '@mui/icons-material'
 import { useQuery } from '@tanstack/react-query'
 import api from '@api/client'
@@ -11,6 +12,7 @@ const states: Record<string, string> = { COMPLETED: 'Hoàn tất', FAILED: 'Th�
 export const Transactions = ({ session, onSessionExpired }: { session: string; onSessionExpired: () => void }) => {
   useLanguage();
   const [search, setSearch] = useState(''), [type, setType] = useState('ALL'), [page, setPage] = useState(0)
+  const [rowsPerPage, setRowsPerPage] = useState(5)
   const history = useQuery({ queryKey: ['transactions'], queryFn: async () => (await transactionsAPI.list()).data, refetchInterval: 5000 })
   const local = useQuery({ queryKey: ['local-transactions', session], enabled: !!session, queryFn: async () => (await api.get('/operator/operations', { headers: { 'X-Operator-Session': session } })).data, refetchInterval: 3000, retry: false })
   const items = useQuery({ queryKey: ['transaction-items'], queryFn: async () => (await api.get('/items')).data })
@@ -30,7 +32,7 @@ export const Transactions = ({ session, onSessionExpired }: { session: string; o
       { label: 'Tổng giao dịch', value: rows.length, icon: ReceiptLongOutlined, color: '#087c78' },
       { label: 'Nhập hàng · PUT', value: rows.filter(row => row.kind === 'PUT').length, icon: ArrowDownward, color: '#3274ad' },
       { label: 'Xuất hàng · PICK', value: rows.filter(row => row.kind === 'PICK').length, icon: ArrowUpward, color: '#bb7837' }
-    ].map(stat => <Grid item xs={12} sm={4} key={stat.label}><Card><CardContent><Stack direction="row" justifyContent="space-between" alignItems="center"><Box><Typography variant="body2" color="text.secondary">{uiText(stat.label)}</Typography><Typography variant="h4" fontWeight={750} sx={{ mt: 1 }}>{loading ? '—' : stat.value}</Typography></Box><Box sx={{ display: 'flex', p: 1.5, borderRadius: 3, color: stat.color, bgcolor: stat.color + '12' }}><stat.icon /></Box></Stack></CardContent></Card></Grid>)}</Grid>
+    ].map(stat => <Grid item xs={12} sm={4} key={stat.label}><Card><CardContent><Stack direction="row" justifyContent="space-between" alignItems="center"><Box sx={{display:'flex',alignItems:'center',gap:2}}><Typography variant="body2" color="text.secondary">{uiText(stat.label)}</Typography><Typography variant="h5" fontWeight={750}>{loading ? '—' : stat.value}</Typography></Box><Box sx={{ display: 'flex', p: 1.5, borderRadius: 3, color: stat.color, bgcolor: stat.color + '12' }}><stat.icon /></Box></Stack></CardContent></Card></Grid>)}</Grid>
     <Card sx={{ mb: 2 }}><CardContent><Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
       <TextField size="small" label={uiText("Tìm sản phẩm hoặc mã giao dịch")} value={search} onChange={event => { setSearch(event.target.value); setPage(0) }} sx={{ flex: 1 }} InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }} />
       <TextField select size="small" label={uiText("Loại giao dịch")} value={type} onChange={event => { setType(event.target.value); setPage(0) }} sx={{ minWidth: 190 }}>{[['ALL', 'Tất cả'], ['PUT', 'Nhập hàng · PUT'], ['PICK', 'Xuất hàng · PICK'], ['ADJUST', 'Điều chỉnh'], ['INITIAL', 'Tồn kho ban đầu']].map(([key, label]) => <MenuItem key={key} value={key}>{uiText(label)}</MenuItem>)}</TextField>
@@ -38,17 +40,16 @@ export const Transactions = ({ session, onSessionExpired }: { session: string; o
     </Stack></CardContent></Card>
     {history.isError && <Alert severity="error" sx={{ mb: 1.5 }}>{uiText("Không tải được lịch sử giao dịch. Vui lòng làm mới.")}</Alert>}
     {local.isError && <Alert severity="error" sx={{ mb: 1.5 }}>{uiText("Không tải được giao dịch local. Vui lòng kiểm tra kết nối và phiên đăng nhập.")}</Alert>}
-    <Card><Stack direction="row" justifyContent="space-between" sx={{ p: 2 }}><Typography variant="h6" fontWeight={700}>{uiText("Lịch sử giao dịch")}</Typography><Chip size="small" variant="outlined" label={uiText("{0} bản ghi", filtered.length)} /></Stack>
-      <TableContainer><Table size="small"><TableHead><TableRow>{['Sản phẩm', 'Loại', 'Số lượng', 'Vị trí', 'Trạng thái', 'Thời gian', 'Mã giao dịch'].map(label => <TableCell key={label}>{uiText(label)}</TableCell>)}</TableRow></TableHead><TableBody>
-        {loading ? Array.from({ length: 5 }, (_, index) => <TableRow key={index}><TableCell colSpan={7}><Skeleton height={40} /></TableCell></TableRow>) : filtered.length === 0 ? <TableRow><TableCell colSpan={7}><EmptyState text={uiText("Chưa có giao dịch phù hợp")} /></TableCell></TableRow> : filtered.slice(Math.min(page, Math.max(0, Math.ceil(filtered.length / 15) - 1)) * 15, (Math.min(page, Math.max(0, Math.ceil(filtered.length / 15) - 1)) + 1) * 15).map(row => <TableRow hover key={row.id}>
+    <Card><Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap spacing={1} sx={{ p: 1.5 }}><Typography variant="h6" fontWeight={700}>{uiText("Lịch sử giao dịch")}</Typography><Chip size="small" variant="outlined" label={uiText("{0} bản ghi", filtered.length)} /><TablePageMenu count={filtered.length} rowsPerPage={rowsPerPage} page={Math.min(page, Math.max(0, Math.ceil(filtered.length / rowsPerPage) - 1))} onPageChange={(_, value) => setPage(value)} onRowsPerPageChange={event => {setRowsPerPage(Number(event.target.value));setPage(0)}} /></Stack>
+      <TableContainer><Table stickyHeader size="small"><TableHead><TableRow>{['Sản phẩm', 'Loại', 'Số lượng', 'Vị trí', 'Trạng thái', 'Thời gian', 'Mã giao dịch'].map(label => <TableCell key={label}>{uiText(label)}</TableCell>)}</TableRow></TableHead><TableBody>
+        {loading ? Array.from({ length: 5 }, (_, index) => <TableRow key={index}><TableCell colSpan={7}><Skeleton height={40} /></TableCell></TableRow>) : filtered.length === 0 ? <TableRow><TableCell colSpan={7}><EmptyState text={uiText("Chưa có giao dịch phù hợp")} /></TableCell></TableRow> : filtered.slice(Math.min(page, Math.max(0, Math.ceil(filtered.length / rowsPerPage) - 1)) * rowsPerPage, (Math.min(page, Math.max(0, Math.ceil(filtered.length / rowsPerPage) - 1)) + 1) * rowsPerPage).map(row => <TableRow hover key={row.id}>
           <TableCell><Typography variant="body2" fontWeight={650}>{(row.item_name || uiText("Sản phẩm #{0}", row.item_id))}</Typography><Typography variant="caption" color="text.secondary">{(row.item_code || `ID ${row.item_id}`)}</Typography></TableCell>
           <TableCell><Chip size="small" label={statusText(row.kind)} color={row.kind === 'PUT' ? 'success' : row.kind === 'PICK' ? 'warning' : 'default'} variant="outlined" /></TableCell>
           <TableCell align="right" sx={{ fontWeight: 700 }}>{row.quantity}</TableCell><TableCell>{(row.location || (row.rack ? `Rack ID ${row.rack}` : '—'))}</TableCell>
           <TableCell><Chip size="small" label={statusText(states[row.state] || row.state)} color={row.state === 'COMPLETED' ? 'success' : row.state === 'FAILED' ? 'error' : 'default'} variant="outlined" />{row.sync && <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>{statusText(row.sync)}</Typography>}</TableCell>
-          <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDateTime(row.time)}</TableCell><TableCell sx={{ maxWidth: 210, overflowWrap: 'anywhere', fontSize: 12 }}>{row.reference}</TableCell>
+          <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDateTime(row.time)}</TableCell><TableCell sx={{ maxWidth: 210, overflowWrap: 'anywhere', fontSize: 14 }}>{row.reference}</TableCell>
         </TableRow>)}
       </TableBody></Table></TableContainer>
-      <TablePagination component="div" count={filtered.length} rowsPerPage={15} rowsPerPageOptions={[15]} page={Math.min(page, Math.max(0, Math.ceil(filtered.length / 15) - 1))} onPageChange={(_, value) => setPage(value)} labelDisplayedRows={({ from, to, count }) => `${from}–${to} / ${count}`} />
     </Card>
   </Box>
 }

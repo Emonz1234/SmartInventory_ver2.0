@@ -1,3 +1,4 @@
+import { TablePageMenu, useTablePage } from '@components/TablePageMenu'
 import { t as uiText, errorText, useLanguage } from '../i18n';
 import { useState, useEffect } from 'react'
 import {
@@ -322,6 +323,7 @@ export const Inventory = () => {
       })
     : inventoryItems
 
+  const paging = useTablePage(filtered.length, debounced)
   const selectedItemId = selectedItem?.item_id ?? selectedItem?.id
   const hasValidQuantity = qty > 0
   const totalStock = inventoryItems.reduce((total, item) => total + Number(item.total_quantity ?? item.qty ?? 0), 0)
@@ -413,7 +415,8 @@ export const Inventory = () => {
                 InputProps={{ startAdornment: <InputAdornment position="start"><Search color="action" /></InputAdornment> }}
                 sx={{ mb: 2 }}
               />
-              <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 560 }}>
+              <TablePageMenu {...paging.controls} />
+              <TableContainer component={Paper} variant="outlined">
                 <Table stickyHeader size="small">
                   <TableHead>
                     <TableRow>
@@ -430,7 +433,7 @@ export const Inventory = () => {
                       Array.from({ length: 5 }).map((_, index) => <TableRow key={index}><TableCell colSpan={6}><Skeleton /></TableCell></TableRow>)
                     ) : filtered.length === 0 ? (
                       <TableRow><TableCell colSpan={6} align="center"><Typography color="text.secondary" sx={{ py: 5 }}>{uiText("No inventory items match your search.")}</Typography></TableCell></TableRow>
-                    ) : filtered.map((item: any) => {
+                    ) : paging.slice(filtered).map((item: any) => {
                       const quantity = Number(item.total_quantity ?? item.qty ?? 0)
                       const minimum = Number(item.min_qty ?? item.minimum_quantity ?? 0)
                       const isLowStock = minimum > 0 && quantity < minimum

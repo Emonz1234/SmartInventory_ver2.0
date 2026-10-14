@@ -6,6 +6,7 @@ import { t, useLanguage } from '../i18n'
 import api from '@api/client'
 import { systemAPI } from '@api/system'
 import { cabinetAPI } from '@api/cabinet'
+import { SimulationResumeDialog } from './SimulationResumeDialog'
 import { SimulationFaultDialog } from './SimulationFaultDialog'
 import { lockedSimulationStates, recoveryIsReady, recoveryWasAcknowledged } from './simulationRecovery'
 
@@ -21,6 +22,7 @@ export function SimulationFaultMonitor({ session, permissions, onSessionExpired 
   const displayedId = location.pathname.match(/^\/cabinets\/([^/]+)\/?$/)?.[1]
   const displayedGroup = cabinets.data?.find((cabinet: any) => String(cabinet.id) === displayedId)?.cabinet_index
   const [incident, setIncident] = useState<any>(null)
+  const [resuming, setResuming] = useState<any>(null)
   const [pending, setPending] = useState<any>(null)
   const [error, setError] = useState<any>('')
   const inFlight = useRef(false)
@@ -65,6 +67,7 @@ export function SimulationFaultMonitor({ session, permissions, onSessionExpired 
   useEffect(() => {
     if (!pending || !online || state?.boot_id !== pending.bootId || !(state.sequence > pending.sequence)) return
     if (recoveryWasAcknowledged(state, pending)) {
+      if (pending.action === 'RESUME') setResuming({ ...pending, cabinetIndex: incident?.cabinetIndex, operation: incident?.context?.operation || incident?.command?.action })
       setIncident(null)
       setPending(null)
       inFlight.current = false
@@ -98,7 +101,7 @@ export function SimulationFaultMonitor({ session, permissions, onSessionExpired 
 
   // The read-only Faults page presents all active faults together. Hardware stays
   // interlocked; visiting the cabinet page opens its existing recovery workflow.
-  return <><SimulationFaultDialog incident={ownedByCabinetPage || location.pathname === '/breakdown' ? null : incident} ready={ready || !!pending && online && !!state?.fault_context?.cleared && state?.system_state === 'RECOVERING'} online={online}
+  return <><SimulationResumeDialog tracking={incident || connectionLost ? null : resuming} state={states.find(entry => entry.cabinet_index === resuming?.cabinetIndex)} online={!!device?.serial_connected && !!device?.simulation_online && !health.isError && !!states.find(entry => entry.cabinet_index === resuming?.cabinetIndex)?.online} onClose={() => setResuming(null)} /><SimulationFaultDialog incident={ownedByCabinetPage || location.pathname === '/breakdown' ? null : incident} ready={ready || !!pending && online && !!state?.fault_context?.cleared && state?.system_state === 'RECOVERING'} online={online}
     canResume={authorized && (state?.allowed_actions || []).includes('RESUME')}
     canHome={authorized && (state?.allowed_actions || []).includes('HOME')}
     busy={!!pending} action={pending?.action} error={error} onRecover={action => void recover(action)} />

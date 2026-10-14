@@ -20,9 +20,8 @@ const groups = [
 export const Sidebar = ({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => void }) => {
   useLanguage();
   const content = <Stack sx={{ height: '100%', px: 1.5, py: 2 }}>
-    <Box sx={{ px: 1.5, mb: 1 }}><Typography variant="caption" color="text.secondary">{uiText("KHÔNG GIAN LÀM VIỆC")}</Typography><Typography fontWeight={700} sx={{ mt: 0.5 }}>{uiText("Điều khiển IPCSIM")}</Typography></Box>
-    {groups.map(group => <Box key={group.title} sx={{ mt: 1.5 }}>
-      <Typography sx={{ px: 1.5, mb: 1, fontSize: 10, fontWeight: 750, letterSpacing: 1.1, color: 'text.secondary' }}>{uiText(group.title)}</Typography>
+    {groups.map((group, index) => <Box key={group.title} sx={{ mt: index === 0 ? 0 : 1.5 }}>
+      <Typography sx={{ px: 1.5, mb: 1, fontSize: 12, fontWeight: 750, letterSpacing: 1.1, color: 'text.secondary' }}>{uiText(group.title)}</Typography>
       <List disablePadding>{group.items.map(item => <ListItemButton key={item.path} component={NavLink} to={item.path} end={item.path === '/'} onClick={onClose} sx={{ mb: 0.5, minHeight: 40, borderRadius: 2, px: 1.5, color: 'text.secondary', '&.active': { bgcolor: '#e5f3f1', color: 'primary.main', '& .MuiListItemText-primary': { fontWeight: 700 } }, '&:hover': { bgcolor: '#eff6f5' } }}>
         <ListItemIcon sx={{ color: 'inherit', minWidth: 34 }}><item.icon fontSize="small" /></ListItemIcon><ListItemText primary={uiText(item.label)} primaryTypographyProps={{ fontSize: 13 }} />
       </ListItemButton>)}</List>

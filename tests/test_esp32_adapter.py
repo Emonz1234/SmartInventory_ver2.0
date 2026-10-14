@@ -32,15 +32,16 @@ def test_invalid_hardware_frames_are_rejected(frame):
         HardwareAdapter().parse(frame)
 
 
-def test_enabled_hardware_connects_at_firmware_baud_but_cannot_write():
+def test_enabled_hardware_connects_and_writes_commands_without_claiming_completion():
     with patch.object(settings, 'DEVICE_TYPE', 'IPC'), patch.object(settings, 'HARDWARE_ENABLED', True), patch.object(settings, 'SERIAL_BAUDRATE', 115200):
         manager = SerialManager('COM9')
         with patch('ipc_core.app.serial.serial_manager.serial.serial_for_url') as connect:
+            connect.return_value.write.side_effect = len
             manager.connect()
             connect.assert_called_once_with('COM9', baudrate=115200, timeout=0.2, write_timeout=1)
         manager.serial = Mock(is_open=True)
-        with pytest.raises(NotImplementedError):
-            manager.send_domain({'address': 1, 'action': 'OPEN'})
-        with pytest.raises(NotImplementedError):
-            manager.send('anything')
-        manager.serial.write.assert_not_called()
+        manager.serial.write.side_effect = len
+        manager.send_domain({'address': 1, 'action': 'OPEN'})
+        manager.serial.write.assert_called_once_with(b'OPEN 1\n')
+        assert 1 in manager.pending
+        assert manager.rack_states == {}

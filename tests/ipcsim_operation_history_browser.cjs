@@ -30,7 +30,7 @@ const {spawn}=require('node:child_process');const readline=require('node:readlin
     });
     await page.goto(`http://127.0.0.1:${server.address().port}/ui/operation`);
     const table=page.locator('table'),row=id=>table.locator('tbody tr').filter({hasText:id});
-    await row('history-open').getByText('Executing',{exact:true}).waitFor();
+    await row('history-open').getByText(/^(Executing|Moving)$/).waitFor();
     assert.notEqual(await row('history-open').locator('td').nth(2).innerText(),'—');
     assert.equal(await row('history-open').locator('td').nth(3).innerText(),'—');
     data=await call({operation:'FAULT'});await row('history-open').getByText('Device fault',{exact:true}).waitFor();
@@ -40,7 +40,7 @@ const {spawn}=require('node:child_process');const readline=require('node:readlin
     await fault.waitFor({state:'hidden'});data=await call({operation:'COMPLETE'});
     await row('history-open').getByText('Completed',{exact:true}).waitFor();
     const completedAt=await row('history-open').locator('td').nth(3).innerText();assert.notEqual(completedAt,'—');
-    data=await call({operation:'COMMAND',id:'history-home',action:'HOME'});await row('history-home').getByText('Executing',{exact:true}).waitFor();
+    data=await call({operation:'COMMAND',id:'history-home',action:'HOME'});await row('history-home').getByText(/^(Executing|Moving)$/).waitFor();
     data=await call({operation:'COMPLETE'});await row('history-home').getByText('Completed',{exact:true}).waitFor();
     await page.reload();await row('history-open').getByText('Completed',{exact:true}).waitFor();
     assert.equal(await row('history-open').locator('td').nth(3).innerText(),completedAt);

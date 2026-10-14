@@ -1,7 +1,9 @@
 import { t as sharedText, getLanguage, errorText, useLanguage, LanguageSelector } from '../i18n';
+import type { ReactNode } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, LinearProgress, Paper, Stack, Typography } from '@mui/material'
-import { CheckCircle, Home, Lightbulb, StopCircle } from '@mui/icons-material'
+import { Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress, Paper, Stack, Tooltip, Typography } from '@mui/material'
+import { CheckCircle, Home, StopCircle } from '@mui/icons-material'
+import { SimulationResumeDialog } from './SimulationResumeDialog'
 import { SimulationFaultDialog } from './SimulationFaultDialog'
 import { MaintenanceNotice } from './MaintenanceNotice'
 import { recoveryIsReady, recoveryWasAcknowledged } from './simulationRecovery'
@@ -11,6 +13,11 @@ import { systemAPI } from '@api/system'
 
 // Additional UI copy for mechanical state, recovery and rack locations.
 const mergedCopy: Record<string, [string, string]> = {
+  "Operation status": ["Trạng thái vận hành", "Operation status"],
+  "Current action": ["Lệnh hiện tại", "Current action"],
+  "Selected rack": ["Rack được chọn", "Selected rack"],
+  "Movement state": ["Trạng thái", "Movement state"],
+  "Light: Auto": ["Đèn: Tự bật khi mở rack", "Light: Auto on rack opening"],
   "Check faults": ["Kiểm tra lỗi", "Check faults"],
   "Checking faults…": ["Đang kiểm tra…", "Checking faults…"],
   "Không có lỗi": ["Không có lỗi", "No faults"],
@@ -96,6 +103,7 @@ function formatGap(gap: number | null) {
 }
 
 interface RackOperationPanelProps {
+  utilities?: (disabled: boolean) => ReactNode
   cabinetActive?: boolean
   cabinetId: string | undefined
   racks: Rack[]
@@ -116,7 +124,7 @@ interface RackOperationPanelProps {
   blocked?: boolean
 }
 
-export const RackOperationPanel = ({ cabinetActive = true, cabinetId, racks: sourceRacks, session, permissions, onSessionExpired, onLightRequest, lightBusy = false, ventilation = null, externalVentilated = false, onBusyChange, onSimulationRestart, onFaultVisibilityChange, onRecoveryStarted, externalError, onVentilatedChange, externalGapInvalidation = '', blocked = false }: RackOperationPanelProps) => {
+export const RackOperationPanel = ({ utilities, cabinetActive = true, cabinetId, racks: sourceRacks, session, permissions, onSessionExpired, ventilation = null, externalVentilated = false, onBusyChange, onSimulationRestart, onFaultVisibilityChange, onRecoveryStarted, externalError, onVentilatedChange, externalGapInvalidation = '', blocked = false }: RackOperationPanelProps) => {
   useLanguage();
   const queryClient = useQueryClient()
   const racks = useMemo(() => [...sourceRacks].sort((a, b) => rackOrder(a) - rackOrder(b)), [sourceRacks])
@@ -126,6 +134,7 @@ export const RackOperationPanel = ({ cabinetActive = true, cabinetId, racks: sou
   const [queue, setQueue] = useState<Command[]>([])
   const [current, setCurrent] = useState<Command | null>(null)
   const [confirmation, setConfirmation] = useState<CommandRequest | null>(null)
+  const [resuming, setResuming] = useState<any>(null)
   const [executionDialogOpen, setExecutionDialogOpen] = useState(false)
   const [lastCompleted, setLastCompleted] = useState<Command | null>(null)
   const [logs, setLogs] = useState<LogEntry[]>([])
@@ -148,6 +157,12 @@ export const RackOperationPanel = ({ cabinetActive = true, cabinetId, racks: sou
   })
   const device = health.data as any
   const isSimulation = device?.device_type === 'IPCSIM' || device?.simulation_online === true
+  const physicalHistory = useQuery({
+    queryKey: ['physical-rack-command-history', cabinetId],
+    enabled: device?.device_type === 'IPC',
+    queryFn: async () => (await api.get('/device/snapshot')).data.operation_history || [],
+    refetchInterval: current ? 500 : 2000
+  })
   const connected = !!device?.serial_connected
   const canOperate = permissions.includes('inventory.add_operation')
   const canRecover = cabinetActive && permissions.includes('cabinet.control')
@@ -211,7 +226,7 @@ export const RackOperationPanel = ({ cabinetActive = true, cabinetId, racks: sou
       setRecoveryBusy(false)
     }
   }
-  const ready = cabinetActive && !!cabinetId && racks.length === 6 && connected && simulationAvailable && canOperate && !blocked && !health.isError && !telemetry.isError && !current?.error && !controlLocked
+  const ready = (isSimulation || device?.hardware_commands_supported === true) && cabinetActive && !!cabinetId && racks.length === 6 && connected && simulationAvailable && canOperate && !blocked && !health.isError && !telemetry.isError && !current?.error && !controlLocked
 
   const addLog = (message: string, tone?: LogEntry['tone'], failure?: any) => {
     const now = new Date()
@@ -272,13 +287,14 @@ export const RackOperationPanel = ({ cabinetActive = true, cabinetId, racks: sou
     const baselineId = Math.max(0, ...(telemetry.data || []).map((entry: any) => Number(entry.id) || 0))
     setQueue([])
     if (pendingRecovery.action === 'RESUME') {
+      if (!current && !blocked) setResuming({ ...pendingRecovery, cabinetIndex: mechanical.cabinet_index, operation: incident?.context?.operation || incident?.command?.action })
       setCurrent(previous => previous ? { ...previous, phase: 'WAITING', error: undefined, baselineId, startedAt: Date.now() } : null)
     } else {
       setCurrent(null)
       setLastCompleted(null)
     }
     setIncident(null)
-    setExecutionDialogOpen(false)
+    setExecutionDialogOpen(pendingRecovery.action === 'RESUME' && !!current)
     onRecoveryStarted?.(pendingRecovery.action, baselineId)
   }, [pendingRecovery, recoveryOnline, mechanical, mechanicalLocked, fault, telemetry.data, onRecoveryStarted])
 
@@ -296,6 +312,24 @@ export const RackOperationPanel = ({ cabinetActive = true, cabinetId, racks: sou
   }, [mechanicalLocked, fault?.fault_id, fault?.resumed, mechanical?.active_command_id, mechanical?.online, mechanical?.system_state])
 
   useEffect(() => {
+    if (device?.device_type === 'IPC') {
+      const rack = racks.find(r => Number(r.rack_code) === 1)
+      const state = device.hardware_racks?.[1]?.hardware_state
+      if (state === 'OPENED' || state === 'CLOSED') {
+        const opened = state === 'OPENED'
+        gapRef.current = opened ? gapForRack(racks.findIndex(r => r.id === rack?.id) + 1) : 6
+        activeRackRef.current = opened ? rack?.id ?? null : null
+        setCurrentGap(gapRef.current)
+        setActiveRackId(activeRackRef.current)
+        initialStateResolved.current = true
+      } else if (['UNKNOWN', 'STOPPED', 'ERROR'].includes(state)) {
+        gapRef.current = null
+        activeRackRef.current = null
+        setCurrentGap(null)
+        setActiveRackId(null)
+      }
+      return
+    }
     if (mechanical) {
       if (mechanical.online && mechanical.boot_id) {
         if (bootSeen.current && bootSeen.current !== mechanical.boot_id) {
@@ -385,7 +419,7 @@ export const RackOperationPanel = ({ cabinetActive = true, cabinetId, racks: sou
         addLog(current.kind === 'HOME' ? 'RETURN_HOME requested' : `OPEN_RACK ${racks.findIndex(rack => rack.id === current.rack.id) + 1} requested`)
         const requestKey = current.id
         const response = await api.post('/operator/device-commands', {
-          rack_id: Number(current.rack.id), kind: current.kind, request_key: requestKey
+          rack_id: Number(current.rack.id), kind: !isSimulation && current.kind === 'HOME' ? 'CLOSE' : current.kind, request_key: requestKey
         }, { headers: { 'X-Operator-Session': session } })
         if (response.data.state !== 'local_sent') throw new Error('Serial delivery is uncertain; inspect the cabinet before retrying.')
         setCurrent(previous => previous?.id === current.id ? { ...previous, phase: 'WAITING' } : previous)
@@ -398,10 +432,26 @@ export const RackOperationPanel = ({ cabinetActive = true, cabinetId, racks: sou
       }
     }
     void send()
-  }, [cabinetActive, controlLocked, current?.id, current?.phase, onSessionExpired, racks, session])
+  }, [cabinetActive, controlLocked, current?.id, current?.phase, onSessionExpired, racks, session, isSimulation])
 
   useEffect(() => {
-    if (mechanicalLocked || !current || !['SENDING', 'WAITING'].includes(current.phase) || current.baselineId === undefined || !telemetry.data) return
+    if (device?.device_type !== 'IPC' || !current || !['SENDING', 'WAITING'].includes(current.phase)) return
+    const result = physicalHistory.data?.find((row: any) => row.id === current.id)
+    if (result?.execution_state === 'completed') {
+      setLastCompleted(current)
+      setCurrent(null)
+      addLog(current.kind === 'HOME' ? 'Return Home complete' : 'Rack opened', 'success')
+      void health.refetch()
+      void queryClient.invalidateQueries({ queryKey: ['cabinet', cabinetId, 'racks'] })
+    } else if (['fault', 'failed', 'rejected', 'communication_lost'].includes(result?.execution_state)) {
+      const message = result.execution_error || 'Hardware command failed; inspect the cabinet.'
+      setCurrent(previous => previous?.id === current.id ? { ...previous, phase: 'ERROR', error: message } : previous)
+      addLog(message, 'error')
+    }
+  }, [device?.device_type, physicalHistory.data, current, cabinetId, queryClient])
+
+  useEffect(() => {
+    if (device?.device_type === 'IPC' || mechanicalLocked || !current || !['SENDING', 'WAITING'].includes(current.phase) || current.baselineId === undefined || !telemetry.data) return
     const baselineId = current.baselineId
     // Simulation snapshots identify the logical endpoint, including after a
     // resume. Old ERROR frames must not invalidate a resumed command.
@@ -470,8 +520,20 @@ export const RackOperationPanel = ({ cabinetActive = true, cabinetId, racks: sou
     return () => window.clearTimeout(timer)
   }, [current?.id, current?.phase, current?.startedAt, isSimulation, session])
 
-  const resetLocalOperation = () => {
+  const resetLocalOperation = async () => {
     if (isSimulation) return
+    const rack = current?.rack || racks.find(r => Number(r.rack_code) === 1)
+    if (!rack) return
+    try {
+      await api.post('/operator/device-commands', {
+        rack_id: Number(rack.id), kind: 'RESET', request_key: crypto.randomUUID()
+      }, { headers: { 'X-Operator-Session': session } })
+      await health.refetch()
+    } catch (error: any) {
+      const message = error?.response?.data?.detail || error?.message || 'Command could not be confirmed.'
+      addLog(message, 'error', error)
+      return
+    }
     setQueue([])
     setCurrent(null)
     gapRef.current = null
@@ -585,43 +647,42 @@ export const RackOperationPanel = ({ cabinetActive = true, cabinetId, racks: sou
   const currentActiveOrder = activeRackId ? racks.findIndex(rack => rack.id === activeRackId) : -1
   const currentOpen = current?.targetGap ?? queue[0]?.targetGap ?? gapRef.current
 
-  return <Stack className="rack-operation-panel" spacing={2}>
+  return <Stack className="rack-operation-panel" spacing={1.25}>
+    <SimulationResumeDialog tracking={faultVisible ? null : resuming} state={mechanical} online={recoveryOnline} onClose={() => setResuming(null)} />
     <MaintenanceNotice cabinetIndex={mechanical?.cabinet_index ?? racks[0]?.cabinet_index} />
     <SimulationFaultDialog incident={incident} ready={recoveryReady || recoveryBusy && recoveryOnline && !!fault?.cleared && mechanical?.system_state === 'RECOVERING'} online={recoveryOnline}
       canResume={canRecover && (mechanical?.allowed_actions || []).includes('RESUME')}
       canHome={canRecover && (mechanical?.allowed_actions || []).includes('HOME')}
       busy={recoveryBusy} action={pendingRecovery?.action} error={recoveryError}
       onRecover={action => void performRecovery(action)} />
-    <Paper className="rack-operation-main" variant="outlined" sx={{ p: { xs: 2, md: 2 }, borderRadius: 4 }}>
+    <Paper className="rack-operation-main" variant="outlined" sx={{ p: 1.5, borderRadius: 3 }}>
       <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={1.25} sx={{ mb: 1.25 }}>
         <Box>
-          <Typography variant="h6" fontWeight={750}>{uiText("Rack operation")}</Typography>
-          <Typography variant="body2" color="text.secondary">{uiText("Mỗi lần di chuyển một rack · Rack 1 và 2 dùng chung lối đi.")}</Typography>
+          <Typography variant="subtitle1" component="h2" fontWeight={750} title={uiText("Mỗi lần di chuyển một rack · Rack 1 và 2 dùng chung lối đi.")}>{uiText("Rack operation")}</Typography>
+
         </Box>
         <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
           {isSimulation && <Button size="small" variant="outlined" disabled={!cabinetActive || checkBusy || !connected} onClick={() => void checkFaults()}>{checkBusy ? uiText('Checking faults…') : uiText('Check faults')}</Button>}
-          {isSimulation && mechanical?.online && !mechanicalLocked && !fault && <Chip size="small" label={uiText("Không có lỗi")} color="success" variant="outlined" />}
-          <Chip size="small" label={device?.device_type || uiText('Mode unknown')} color={isSimulation ? 'info' : 'primary'} variant="outlined" />
-          <Chip size="small" label={`Serial ${connected ? uiText('ONLINE') : uiText('OFFLINE')}`} color={connected ? 'success' : 'error'} />
-          <Chip size="small" label={`SIM ${device?.simulation_online ? uiText('READY') : isSimulation ? uiText('UNAVAILABLE') : uiText('N/A')}`} color={device?.simulation_online ? 'success' : isSimulation ? 'warning' : 'default'} variant="outlined" />
+          {utilities && <Box component="fieldset" disabled={!ready || !!current || queue.length > 0 || !!confirmation} sx={{ m: 0, p: 0, border: 0, minWidth: 0 }}>{utilities(!ready || !!current || queue.length > 0 || !!confirmation)}</Box>}
         </Stack>
       </Stack>
       {(health.isError || telemetry.isError) && <Alert severity="error" sx={{ mb: 1.5 }}>{uiText("Không đọc được trạng thái local/telemetry. Lệnh vận hành đã bị khóa.")}</Alert>}
       {recoveryError && !faultVisible && <Alert severity="error" sx={{ mb: 1.5 }}>{errorText(recoveryError)}</Alert>}
       {!connected && <Alert severity="warning" sx={{ mb: 1.5 }}>{uiText("Serial offline. Không thể gửi lệnh tới rack.")}</Alert>}
+      {device?.device_type === 'IPC' && device?.hardware_commands_supported === false && <Alert severity="info" sx={{ mb: 1.5 }}>{uiText("IPC firmware currently supports telemetry only. Device commands are unavailable.")}</Alert>}
       {isSimulation && !simulationAvailable && <Alert severity="error" sx={{ mb: 1.5 }}>{uiText("Simulation unavailable. GAP commands are disabled.")}</Alert>}
       {racks.length !== 6 && <Alert severity="warning" sx={{ mb: 1.5 }}>{uiText("Cần đúng 6 rack theo thứ tự địa chỉ để dùng sơ đồ GAP. Cabinet hiện có")} {racks.length} rack.</Alert>}
       {blocked && <Alert severity="info" sx={{ mb: 1.5 }}>{uiText("Điều khiển GAP tạm khóa trong khi thao tác cabinet khác đang chạy.")}</Alert>}
       {!isSimulation && current?.phase === 'ERROR' && <Alert severity="error" sx={{ mb: 1.5 }} action={<Button color="inherit" size="small" startIcon={<StopCircle />} onClick={resetLocalOperation}>{uiText("I checked · reset")}</Button>}>
         {errorText(current.error)} {uiText("Các lệnh đang chờ không được tự gửi tiếp.")} </Alert>}
 
-      <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2}>
-        <Box className="rack-operation-map" sx={{ flex: 1.6, minWidth: 0, p: { xs: 1.5, sm: 2 }, borderRadius: 3, bgcolor: '#f7fafb', border: '1px solid', borderColor: 'divider' }}>
+      <Stack direction={{ xs: 'column', lg: 'row' }} spacing={1.5}>
+        <Box className="rack-operation-map" sx={{ flex: 1.6, minWidth: 0, p: 1.25, borderRadius: 2, bgcolor: '#f7fafb' }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
             <Typography variant="subtitle2" fontWeight={750}>{ventilationMode ? uiText('Thông gió · 5 khoảng hở') : uiText('Sơ đồ rack & lối đi')}</Typography>
             <Chip size="small" color={stateColor as any} label={uiText(stateLabel)} />
           </Stack>
-          <Box aria-label={uiText("Six-rack GAP arrangement")} sx={{ position: 'relative', width: '100%', height: { xs: 90, sm: 116 }, mb: 1.5 }}>
+          <Box aria-label={uiText("Six-rack GAP arrangement")} sx={{ position: 'relative', width: '100%', height: { xs: 100, sm: 120 }, mb: 1 }}>
             {racks.map((rack, index) => {
               const physical = mechanical?.racks?.[String(rack.rack_code)]
               const isMoving = physical ? !mechanicalLocked && physical.is_moving : displayMovingRack?.id === rack.id
@@ -646,7 +707,7 @@ export const RackOperationPanel = ({ cabinetActive = true, cabinetId, racks: sou
               }}>
                 {isLightOn && <Box aria-label={uiText("Rack {0} light on", index + 1)} sx={{ position: 'absolute', top: 4, right: 4, width: 7, height: 7, borderRadius: '50%', bgcolor: 'warning.main', boxShadow: '0 0 0 2px rgba(237, 108, 2, 0.16)' }} />}
                 <Typography variant="subtitle2" fontWeight={800} sx={{ fontSize: { xs: 14, sm: 19 }, lineHeight: 1.1 }}>R{index + 1}</Typography>
-                <Typography variant="caption" color={isError ? 'error.main' : isMoving ? 'warning.dark' : isActive ? 'success.dark' : 'text.secondary'} noWrap sx={{ fontSize: { xs: 7, sm: 9 }, lineHeight: 1.1, mt: 0.35 }}>
+                <Typography variant="caption" color={isError ? 'error.main' : isMoving ? 'warning.dark' : isActive ? 'success.dark' : 'text.secondary'} noWrap sx={{ fontSize: { xs: 11, sm: 14 }, lineHeight: 1.2, mt: 0.5 }}>
                   {uiText(rackState)}
                 </Typography>
               </Box>
@@ -655,12 +716,12 @@ export const RackOperationPanel = ({ cabinetActive = true, cabinetId, racks: sou
               position: 'absolute', left: `${(index * 6 + 5) / 35 * 100}%`, top: 0, bottom: 0, width: `${100 / 35}%`,
               border: '1px dashed', borderColor: 'info.main', bgcolor: 'rgba(2, 136, 209, 0.10)', borderRadius: 0.5,
               zIndex: 3, display: 'grid', placeItems: 'center', pointerEvents: 'none'
-            }}><Typography variant="caption" fontWeight={750} color="info.dark" sx={{ fontSize: { xs: 6, sm: 8 }, writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>{uiText("GAP")}</Typography></Box>)
+            }}><Typography variant="caption" fontWeight={750} color="info.dark" sx={{ fontSize: { xs: 9, sm: 11 }, writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>{uiText("GAP")}</Typography></Box>)
               : gapLeftPercent !== null && <Box title={uiText("ACCESS GAP · {0}", uiText(formatGap(currentGap)))} aria-label={uiText("Current access gap: {0}", uiText(formatGap(currentGap)))} sx={{
                 position: 'absolute', left: `${gapLeftPercent}%`, top: 0, bottom: 0, width: `${mechanical ? 100 / 7 : 100 / 13}%`,
                 border: '1px dashed', borderColor: 'info.main', borderRadius: 0.6, bgcolor: 'rgba(2, 136, 209, 0.10)',
                 transition: 'left 120ms linear', zIndex: 3, display: 'grid', placeItems: 'center', pointerEvents: 'none'
-              }}><Typography variant="caption" fontWeight={800} color="info.dark" sx={{ fontSize: { xs: 7, sm: 9 }, writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>{uiText("GAP")}</Typography></Box>}
+              }}><Typography variant="caption" fontWeight={800} color="info.dark" sx={{ fontSize: { xs: 10, sm: 12 }, writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>{uiText("GAP")}</Typography></Box>}
           </Box>
           <Stack direction="row" spacing={{ xs: 0.75, sm: 1.5 }} useFlexGap flexWrap="wrap" alignItems="center" sx={{ minHeight: 24, px: 0.5, py: 0.35, borderRadius: 0.75, bgcolor: 'action.hover' }}>
             <Typography variant="caption" noWrap><b>{uiText("Active:")}</b> {ventilationMode ? '—' : activeRackId ? `R${currentActiveOrder + 1}` : '—'}</Typography>
@@ -685,33 +746,36 @@ export const RackOperationPanel = ({ cabinetActive = true, cabinetId, racks: sou
           </Box>}
         </Box>
 
-        <Box className="rack-operation-controls" sx={{ flex: 1, minWidth: { xs: 0, lg: 290 }, borderLeft: { lg: '1px solid' }, borderColor: { lg: 'divider' }, pl: { lg: 2 } }}>
+        <Box className="rack-operation-controls" sx={{ flex: 1, minWidth: { xs: 0, lg: 290 }, borderLeft: { lg: '1px solid' }, borderColor: { lg: 'divider' }, pl: { lg: 1.5 } }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
             <Typography variant="subtitle2" fontWeight={750}>{uiText("Mở rack")}</Typography>
-            <Typography variant="caption" color="text.secondary">{uiText("Queue")} {queue.length}</Typography>
+<Chip size="small" label={current ? `${current.kind === 'HOME' ? uiText('RETURN_HOME') : `R${rackNumber(current.rack)}`} / ${uiText(current.phase)} / ${uiText("Queue")} ${queue.length}` : `${uiText("Queue")} ${queue.length}`} color={current?.phase === 'ERROR' ? 'error' : current ? 'info' : 'default'} variant="outlined" />
           </Stack>
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 0.75 }}>
             {racks.map((rack, index) => {
               const duplicateOpen = hasPendingOpen(rack.id)
               const alreadyActive = isRackAlreadyActive(rack.id)
               const disabled = !ready || !!current?.error || !!confirmation || duplicateOpen || alreadyActive
-              return <Button key={rack.id} size="small" aria-label={uiText("Open R{0}", index + 1)} title={duplicateOpen ? uiText("Rack {0} already has an open command pending", index + 1) : alreadyActive ? uiText("Rack {0} is already active", index + 1) : uiText("Open Rack {0}", index + 1)} variant={activeRackId === rack.id ? 'contained' : 'outlined'} disabled={disabled} onClick={() => requestCommand('OPEN', rack)} sx={{ minWidth: 0, minHeight: 36, px: 0.25, py: 0, fontSize: 14, fontWeight: 700, borderRadius: 2, boxShadow: 'none' }}>
+              return <Button key={rack.id} size="small" aria-label={uiText("Open R{0}", index + 1)} title={duplicateOpen ? uiText("Rack {0} already has an open command pending", index + 1) : alreadyActive ? uiText("Rack {0} is already active", index + 1) : uiText("Open Rack {0}", index + 1)} color={duplicateOpen ? 'info' : activeRackId === rack.id ? 'success' : 'primary'} variant={activeRackId === rack.id || duplicateOpen ? 'contained' : 'outlined'} disabled={disabled} onClick={() => requestCommand('OPEN', rack)} sx={{ minWidth: 0, minHeight: 36, px: 0.25, py: 0, fontSize: 14, fontWeight: 700, borderRadius: 2, boxShadow: 'none' }}>
                 R{index + 1}
               </Button>
             })}
           </Box>
-          <Stack className="rack-operation-lights" direction="row" spacing={0.5} alignItems="center" sx={{ mt: 1.5 }}>
-            <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>{uiText("Đèn")}</Typography>
-            {racks.map((rack, index) => {
-              const lightOn = lightOnRackIds.has(Number(rack.id))
-              const action = lightOn ? 'LIGHT_OFF' : 'LIGHT'
-              return <IconButton key={rack.id} size="small" title={uiText("Turn light {0} for Rack {1}", lightOn ? uiText('off') : uiText('on'), index + 1)} aria-label={uiText("Turn light {0} for Rack {1}", lightOn ? uiText('off') : uiText('on'), index + 1)} color={lightOn ? 'warning' : 'default'} disabled={!ready || !!current || queue.length > 0 || lightBusy || !!confirmation} onClick={() => onLightRequest(rack, action)} sx={{ width: 36, height: 46, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
-                <Lightbulb fontSize="small" />
-                <Typography component="span" sx={{ fontSize: 9, fontWeight: 650, color: 'inherit', lineHeight: 1 }}>R{index + 1}</Typography>
-              </IconButton>
-            })}
-          </Stack>
-          <Button fullWidth variant="outlined" color="inherit" startIcon={<Home />} title={isAlreadyHome() ? uiText('The cabinet is already at HOME') : hasPendingHome() ? uiText('A HOME command is already pending') : uiText('Return Home')} disabled={!ready || !!current?.error || !!confirmation || hasPendingHome() || isAlreadyHome()} onClick={() => requestCommand('HOME')} sx={{ mt: 1.5, minHeight: 36, borderRadius: 2.5 }}> {uiText("Return Home · GAP right of R6")} </Button>
+          <Box className="rack-operation-status" sx={{ mt: 1.25, p: 1.25, bgcolor: '#f7fafb', borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="subtitle2" fontWeight={750} sx={{ mb: 0.75 }}>{uiText('Operation status')}</Typography>
+            <Box component="dl" sx={{ m: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.2fr)', columnGap: 1, rowGap: 0.5 }}>
+              {[
+                [uiText('Current action'), mechanical?.current_command?.action || (current ? current.kind === 'HOME' ? 'HOME' : 'OPEN' : ventilationActive ? 'VENTILATE' : '—')],
+                [uiText('Selected rack'), confirmation?.kind === 'OPEN' ? `R${rackNumber(confirmation.rack)}` : current && current.kind !== 'HOME' ? `R${rackNumber(current.rack)}` : activeRackId ? `R${currentActiveOrder + 1}` : '—'],
+                [uiText('GAP:'), ventilationMode ? uiText('5 × 20 mm · even spacing') : uiText(formatGap(currentGap))],
+                [uiText('Movement state'), uiText(stateLabel)],
+                [uiText('Queue'), String(queue.length)]
+              ].map(([label, value]) => <Box key={label} sx={{ display: 'contents' }}><Typography component="dt" variant="body2" color="text.secondary">{label}</Typography><Typography component="dd" variant="body2" fontWeight={650} sx={{ m: 0, textAlign: 'right', overflowWrap: 'anywhere' }}>{value}</Typography></Box>)}
+            </Box>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75, pt: 0.75, borderTop: '1px solid', borderColor: 'divider' }}>{uiText('Light: Auto')}</Typography>
+          </Box>
+          <Tooltip title={isAlreadyHome() ? uiText('The cabinet is already at HOME') : hasPendingHome() ? uiText('A HOME command is already pending') : !ready ? uiText('Check the cabinet before retrying.') : uiText('Return Home')}><Box><Button fullWidth variant="outlined" color="primary" startIcon={<Home />} title={isAlreadyHome() ? uiText('The cabinet is already at HOME') : hasPendingHome() ? uiText('A HOME command is already pending') : uiText('Return Home')} disabled={!ready || !!current?.error || !!confirmation || hasPendingHome() || isAlreadyHome()} onClick={() => requestCommand('HOME')} sx={{ mt: 1.25, minHeight: 38, borderRadius: 2, fontWeight: 700, '&.Mui-disabled': { bgcolor: '#f1f4f5', color: 'text.secondary', borderColor: '#ccd8dc' } }}> {uiText("Return Home · GAP right of R6")} </Button></Box></Tooltip>
+
           {!canOperate && <Typography variant="caption" color="warning.main" display="block" sx={{ mt: 1 }}>{uiText("Operator permission is required.")}</Typography>}
         </Box>
       </Stack>
@@ -790,27 +854,31 @@ export const RackOperationPanel = ({ cabinetActive = true, cabinetId, racks: sou
       </DialogActions>
     </Dialog>
 
-    <Paper className="rack-operation-history" variant="outlined" sx={{ p: { xs: 2, md: 2 }, borderRadius: 4 }}>
+    <Paper className="rack-operation-history" variant="outlined" sx={{ p: 1.5, borderRadius: 3 }}>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
         <Box sx={{ flex: 1 }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
             <Typography variant="subtitle2" fontWeight={750}>{uiText("Hàng đợi lệnh")}</Typography>
             <Chip size="small" label={uiText("{0} waiting", queue.length)} color={queue.length ? 'warning' : 'default'} variant="outlined" />
           </Stack>
-          <Stack spacing={0.5} sx={{ maxHeight: 140, overflowY: 'auto' }}>
+          <Stack spacing={0.5}>
             {current && <Stack direction="row" justifyContent="space-between" sx={{ px: 1, py: 0.6, bgcolor: 'action.hover', borderRadius: 0.75 }}>
               <Typography variant="body2">{current.kind === 'HOME' ? uiText('RETURN_HOME') : `OPEN_RACK ${rackNumber(current.rack)}`}</Typography>
               <Chip size="small" label={uiText(current.phase)} color={current.phase === 'ERROR' ? 'error' : 'info'} />
             </Stack>}
-            {queue.map((command, index) => <Stack key={command.id} direction="row" justifyContent="space-between" sx={{ px: 1, py: 0.6 }}>
-              <Typography variant="body2">{index + 1}. {command.kind === 'HOME' ? uiText('RETURN_HOME') : `OPEN_RACK ${rackNumber(command.rack)}`}</Typography>
+            {queue[0] && <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 1, py: 0.6 }}><Typography variant="body2">{queue[0].kind === 'HOME' ? uiText('RETURN_HOME') : `OPEN_RACK ${rackNumber(queue[0].rack)}`}</Typography><Chip size="small" label={uiText('Queued')} variant="outlined" /></Stack>}
+          <Box component="details"><Box component="summary" sx={{ cursor: 'pointer', display: queue.length > 1 ? 'list-item' : 'none' }}>{uiText("Queue")} {queue.length}</Box>
+            {queue.slice(1).map((command, index) => <Stack key={command.id} direction="row" justifyContent="space-between" sx={{ px: 1, py: 0.6 }}>
+              <Typography variant="body2">{index + 2}. {command.kind === 'HOME' ? uiText('RETURN_HOME') : `OPEN_RACK ${rackNumber(command.rack)}`}</Typography>
               <Chip size="small" label={command.steps.length ? uiText("{0} movement step{1}", command.steps.length, command.steps.length === 1 ? '' : 's') : command.sourceGap === command.targetGap ? uiText('No movement') : uiText('GAP unknown')} variant="outlined" />
             </Stack>)}
+            </Box>
             {!current && !queue.length && <Typography variant="body2" color="text.secondary">{uiText("No command waiting.")}</Typography>}
           </Stack>
         </Box>
         <Box sx={{ flex: 1, borderLeft: { md: '1px solid' }, borderColor: { md: 'divider' }, pl: { md: 2 } }}>
-          <Typography variant="subtitle2" fontWeight={750} sx={{ mb: 1 }}>{uiText("Nhật ký thao tác")}</Typography>
+            {logs.length > 0 && <Typography variant="body2" color={logs.at(-1)?.tone === 'error' ? 'error.main' : 'text.secondary'} sx={{ mb: 0.5, overflowWrap: 'anywhere' }}>[{logs.at(-1)?.time}] {logs.at(-1)?.tone === 'error' ? errorText(logs.at(-1)?.failure || logs.at(-1)?.message) : uiText(logs.at(-1)!.message)}</Typography>}
+          <Box component="details"><Box component="summary" sx={{cursor:'pointer',mb:1}}><Typography component="span" variant="subtitle2" fontWeight={750}>{uiText("Nhật ký thao tác")}</Typography></Box>
           <Box sx={{ maxHeight: 140, overflowY: 'auto', fontFamily: 'monospace' }}>
             {(recoveryHistory.data || []).filter((entry: any) => entry.cabinet_index === mechanical?.cabinet_index).slice(0, 30).map((entry: any) => <Typography key={`recovery-${entry.id}`} variant="caption" display="block" color={entry.event.includes('error') || entry.event.includes('fault') ? 'error.main' : 'text.secondary'}>[{new Date(entry.timestamp * 1000).toLocaleTimeString()}] {uiText(entry.event)}</Typography>)}
             {logs.map(entry => <Typography key={entry.id} variant="caption" display="block" color={entry.tone === 'error' ? 'error.main' : entry.tone === 'success' ? 'success.dark' : 'text.secondary'}>
@@ -818,7 +886,7 @@ export const RackOperationPanel = ({ cabinetActive = true, cabinetId, racks: sou
             </Typography>)}
             {!logs.length && <Typography variant="body2" color="text.secondary">{uiText("Operation events will appear here.")}</Typography>}
             <div ref={logEnd} />
-          </Box>
+          </Box></Box>
         </Box>
       </Stack>
     </Paper>

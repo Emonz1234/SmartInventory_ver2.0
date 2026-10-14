@@ -113,7 +113,7 @@ def device_command(request: Request, data: dict):
         raise HTTPException(403, str(exc)) from None
     action = str(data.get('kind', '')).upper()
     rack_id, key = data.get('rack_id'), data.get('request_key')
-    if action not in {'OPEN', 'CLOSE', 'VENTILATE', 'LIGHT', 'HOME', 'LIGHT_OFF'} or type(rack_id) is not int or rack_id < 1:
+    if action not in {'OPEN', 'CLOSE', 'VENTILATE', 'LIGHT', 'HOME', 'LIGHT_OFF', 'STOP', 'RESET', 'STATUS'} or type(rack_id) is not int or rack_id < 1:
         raise HTTPException(400, 'Invalid device command')
     if not isinstance(key, str) or not 1 <= len(key) <= 128:
         raise HTTPException(400, 'A stable request_key is required')
@@ -121,7 +121,7 @@ def device_command(request: Request, data: dict):
     try:
         with runtime.operation_lock:
             with runtime.store.transaction() as db:
-                if runtime.transactions.repo.active(db):
+                if runtime.transactions.repo.active(db) and action != 'STOP':
                     raise ValueError('Finish the active PUT/PICK before issuing another hardware command')
             state = runtime.store.execute_local(key, rack_id, action, runtime.send_checked)
     except ValueError as exc:

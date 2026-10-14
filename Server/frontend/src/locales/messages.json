@@ -1,4 +1,135 @@
 {
+  "Active hardware breakdown; wait for an explicit clear snapshot": ["Rack còn trạng thái lỗi. Kiểm tra phần cứng, nhấn reset và chờ ESP32 xác nhận an toàn.", "Rack has an active hardware fault. Inspect the hardware, reset and wait for ESP32 to confirm a safe state."],
+  "OPEN_TIMEOUT": ["Mở rack quá 5 giây nhưng chưa nhận limit OPEN. Kiểm tra công tắc giới hạn và chiều quay servo, rồi reset.", "Rack opening timed out without reaching the OPEN limit. Check the limit switch and servo direction, then reset."],
+  "CLOSE_TIMEOUT": ["Đóng rack quá 5 giây nhưng chưa nhận limit CLOSE. Kiểm tra công tắc giới hạn và chiều quay servo, rồi reset.", "Rack closing timed out without reaching the CLOSE limit. Check the limit switch and servo direction, then reset."],
+  "SMOKE_ALARM": ["Cảm biến MQ-2 đang báo khói. Kiểm tra điều kiện an toàn trước khi reset.", "MQ-2 smoke alarm. Check safe conditions before resetting."],
+  "LIMIT_CONFLICT": ["Cả hai công tắc OPEN và CLOSE đang kích hoạt. Kiểm tra dây và công tắc trước khi reset.", "Both OPEN and CLOSE limit switches are active. Check wiring and switches before resetting."],
+  "COMMUNICATION_ERROR": ["Mất phản hồi từ ESP32. Kiểm tra kết nối USB Serial.", "ESP32 communication lost. Check the USB Serial connection."],
+  "RESET rack before moving": ["Cần reset rack trước khi điều khiển chuyển động.", "Reset the rack before moving."],
+  "Hardware": ["Phần cứng", "Hardware"],
+  "IPC firmware currently supports telemetry only. Device commands are unavailable.": ["Firmware IPC hiện chỉ hỗ trợ nhận telemetry. Chưa hỗ trợ lệnh điều khiển thiết bị.", "IPC firmware currently supports telemetry only. Device commands are unavailable."],
+  "Không kết nối được API local. Thử làm mới và kiểm tra thiết bị đang chạy.": ["Không kết nối được API local. Thử làm mới và kiểm tra thiết bị đang chạy.", "Cannot connect to the local API. Refresh and check that the edge is running."],
+  "Cấu hình kết nối được quản lý trong môi trường chạy thiết bị. Quản lý danh mục tại Server.": ["Cấu hình kết nối được quản lý trong môi trường chạy thiết bị. Quản lý danh mục tại Server.", "Connections are configured in the edge runtime environment. Manage the catalog on the Server."],
+  "Latest readings": [
+    "Số đo hiện tại",
+    "Latest readings"
+  ],
+  "Trends": [
+    "Xu hướng",
+    "Trends"
+  ],
+  "Rows per page:": [
+    "Số dòng mỗi trang:",
+    "Rows per page:"
+  ],
+  "Cabinets per page:": [
+    "Số tủ mỗi trang:",
+    "Cabinets per page:"
+  ],
+  "Total cabinets": [
+    "Tổng số tủ",
+    "Total cabinets"
+  ],
+  "Offline / Unknown": [
+    "Offline / Chưa rõ",
+    "Offline / Unknown"
+  ],
+  "Fault / Warning": [
+    "Sự cố / Cảnh báo",
+    "Fault / Warning"
+  ],
+  "products": [
+    "loại sản phẩm",
+    "products"
+  ],
+  "Total racks": [
+    "Tổng số rack",
+    "Total racks"
+  ],
+  "Active incidents": [
+    "Sự cố đang hoạt động",
+    "Active incidents"
+  ],
+  "Cabinet & rack overview": [
+    "Tổng quan tủ & rack",
+    "Cabinet & rack overview"
+  ],
+  "System connectivity": [
+    "Kết nối hệ thống",
+    "System connectivity"
+  ],
+  "Data synchronization": [
+    "Đồng bộ dữ liệu",
+    "Data synchronization"
+  ],
+  "Recent activity": [
+    "Hoạt động gần đây",
+    "Recent activity"
+  ],
+  "Average": [
+    "Trung bình",
+    "Average"
+  ],
+  "Min / Max": [
+    "Thấp nhất / Cao nhất",
+    "Min / Max"
+  ],
+  "Sensor alerts": [
+    "Cảnh báo cảm biến",
+    "Sensor alerts"
+  ],
+  "fresh racks": [
+    "rack có số đo mới",
+    "fresh racks"
+  ],
+  "pending transactions": [
+    "giao dịch chờ",
+    "pending transactions"
+  ],
+  "No fresh online sensor data": [
+    "Chưa có số đo mới từ cảm biến online",
+    "No fresh online sensor data"
+  ],
+  "No recent activity": [
+    "Chưa có hoạt động gần đây",
+    "No recent activity"
+  ],
+  "No cabinets available": [
+    "Chưa có tủ",
+    "No cabinets available"
+  ],
+  "Some overview data is unavailable. Refresh to confirm current status.": [
+    "Chưa tải được một phần dữ liệu. Làm mới để xác nhận trạng thái hiện tại.",
+    "Some overview data is unavailable. Refresh to confirm current status."
+  ],
+  "Server connection reported by IPC; MQTT detail is not provided.": [
+    "Kết nối Server do IPC báo cáo; API chưa cung cấp trạng thái MQTT riêng.",
+    "Server connection reported by IPC; MQTT detail is not provided."
+  ],
+  "Based on live Simulation responses, independently of Serial.": [
+    "Dựa trên phản hồi thực tế của Simulation, độc lập với Serial.",
+    "Based on live Simulation responses, independently of Serial."
+  ],
+  "Temperature / humidity limits are not provided by the current API.": [
+    "API hiện chưa cung cấp ngưỡng nhiệt độ/độ ẩm; chưa thể xác nhận trạng thái bình thường.",
+    "Temperature / humidity limits are not provided by the current API."
+  ],
+  "Degraded": [
+    "Kết nối một phần",
+    "Degraded"
+  ],
+  "Show stocked racks": [
+    "Thu gọn · Rack có hàng",
+    "Show stocked racks"
+  ],
+  "Show all racks": [
+    "Mở rộng · Tất cả rack",
+    "Show all racks"
+  ],
+  "No stocked racks. Expand to view all racks.": [
+    "Chưa có rack chứa hàng. Mở rộng để xem tất cả rack.",
+    "No stocked racks. Expand to view all racks."
+  ],
   "Cabinet đã sẵn sàng. Chỉ xác nhận sau khi đã thực sự lấy hoặc đặt hàng.": [
     "Cabinet đã sẵn sàng. Chỉ xác nhận sau khi đã thực sự lấy hoặc đặt hàng.",
     "The cabinet is ready. Confirm only after physically picking or placing the goods."
@@ -4068,8 +4199,8 @@
     "Enabled"
   ],
   "field.is_active": [
-    "Hoạt động",
-    "Active"
+    "Trạng thái",
+    "Status"
   ],
   "field.id": [
     "ID",
@@ -5066,5 +5197,41 @@
   "Trạng thái thao tác thiết bị": [
     "Trạng thái thao tác thiết bị",
     "Device operation status"
+  ],
+  "field.role_names": [
+    "Vai trò",
+    "Roles"
+  ],
+  "field.permission_count": [
+    "Số quyền",
+    "Permissions"
+  ],
+  "field.sensor_name": [
+    "Cảm biến",
+    "Sensor"
+  ],
+  "field.current": [
+    "Số đo hiện tại",
+    "Current reading"
+  ],
+  "field.location": [
+    "Vị trí",
+    "Location"
+  ],
+  "field.recent_count": [
+    "Lỗi / 30 phút",
+    "Faults / 30 min"
+  ],
+  "field.maintenance_state": [
+    "Trạng thái bảo trì",
+    "Maintenance status"
+  ],
+  "field.last_login": [
+    "Đăng nhập gần nhất",
+    "Last login"
+  ],
+  "Recorded": [
+    "Đã ghi nhận",
+    "Recorded"
   ]
 }

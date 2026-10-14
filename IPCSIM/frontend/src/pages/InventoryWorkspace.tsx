@@ -1,3 +1,4 @@
+import { TablePageMenu, useTablePage } from '@components/TablePageMenu'
 import { t as uiText, errorText, statusText, useLanguage, LanguageSelector } from '../i18n';
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -7,7 +8,7 @@ import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField,
   ToggleButton, ToggleButtonGroup, Tooltip, Typography, LinearProgress
 } from '@mui/material'
-import { Add, Close, InfoOutlined, Inventory2, LocationOn, Remove, Search, Tune, Refresh, WarningAmberOutlined, ScaleOutlined } from '@mui/icons-material'
+import { ExpandMore, Add, Close, InfoOutlined, Inventory2, LocationOn, Remove, Search, Tune, Refresh, WarningAmberOutlined, ScaleOutlined } from '@mui/icons-material'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '@api/client'
 import { cabinetAPI } from '@api/cabinet'
@@ -96,7 +97,6 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
   const [view, setView] = useState<ViewMode>('product')
   const [search, setSearch] = useState('')
   const [cabinetFilter, setCabinetFilter] = useState('all')
-  const [rackFilter, setRackFilter] = useState('all')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [stockFilter, setStockFilter] = useState('all')
   const [filtersOpen, setFiltersOpen] = useState(true)
@@ -179,13 +179,11 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
       && (categoryFilter === 'all' || item.category === categoryFilter)
       && (stockFilter === 'all' || item.stock.label === stockFilter)
       && (cabinetFilter === 'all' || item.locations.some((location: any) => String(location.cabinet.id) === cabinetFilter))
-      && (rackFilter === 'all' || item.locations.some((location: any) => String(location.rack.id) === rackFilter))
   })
   const visibleLocations = locations.filter(location => {
     const text = `${cabinetLabel(location.cabinet)} ${rackLabel(location.rack)} ${location.bin.bin_code}`.toLowerCase()
     return (!search || text.includes(search.trim().toLowerCase()))
       && (cabinetFilter === 'all' || String(location.cabinet.id) === cabinetFilter)
-      && (rackFilter === 'all' || String(location.rack.id) === rackFilter)
   })
   const hasActivePutLocation = locations.some(location => {
     const cabinet = cabinetById.get(Number(location.cabinet.id)) || location.cabinet
@@ -332,14 +330,22 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
   const nextPlanStep = operationPlan[planIndex + 1]
   const canKeepOpen = !nextPlanStep || Number(currentPlanStep?.location.rack.id) === Number(nextPlanStep.location.rack.id)
 
-  return <Stack className="inventory-workspace" spacing={2}>
+  const pageFilterKey = JSON.stringify([view, search, cabinetFilter, categoryFilter, stockFilter])
+  const paging = useTablePage(visibleItems.length, pageFilterKey)
+  const locationCabinets = cabinets.filter(cabinet => (cabinetFilter === 'all' || String(cabinet.id) === cabinetFilter)
+    && (visibleLocations.some(location => String(location.cabinet.id) === String(cabinet.id)) || !search))
+    .sort((a, b) => cabinetLabel(a).localeCompare(cabinetLabel(b), undefined, { numeric: true }) || Number(a.id) - Number(b.id))
+  const locationCabinetIds = locationCabinets.map(cabinet => String(cabinet.id))
+  const cabinetPaging = useTablePage(locationCabinetIds.length, pageFilterKey, 1)
+  const displayedCabinetIds = new Set(cabinetPaging.slice(locationCabinetIds))
+  return <Stack className="inventory-workspace" spacing={1.5}>
     <PageHeader title={uiText("Kho hàng")} description={uiText("Tìm sản phẩm, kiểm tra tồn kho và vị trí lưu trữ. Mở chi tiết sản phẩm để nhập hoặc xuất hàng.")} action={<Button variant="outlined" startIcon={<Refresh />} disabled={inventoryQuery.isFetching} onClick={() => void inventoryQuery.refetch()}>{uiText("Làm mới")}</Button>} />
     <MaintenanceNotice />
-    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+    {mechanicalStates.some(entry => entry.active_rack) && <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
       {mechanicalStates.filter(entry => entry.active_rack).map(entry => <Chip key={entry.cabinet_index}
         color={entry.online && !liveHealth.isError && entry.system_state === 'OPEN' ? 'success' : 'warning'}
         label={`Cabinet ${String(entry.cabinet_index).padStart(2, '0')} · ${entry.online && !liveHealth.isError ? entry.system_state : uiText('Unknown status')} · Rack ${(entry.active_rack-1)%6+1}`} />)}
-    </Stack>
+    </Stack>}
     <Box className="inventory-summary" aria-label={uiText("Tổng quan kho hàng")}>
       <SummaryMetric label={uiText("Loại sản phẩm")} value={inventoryQuery.isLoading || inventoryQuery.isError ? '—' : itemRows.length} icon={<Inventory2 />} />
       <SummaryMetric label={uiText("Tổng số lượng")} value={inventoryQuery.isLoading || inventoryQuery.isError ? '—' : totalQuantity} icon={<ScaleOutlined />} />
@@ -356,22 +362,22 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
           onChange={event => setSearch(event.target.value)}
           InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }}
         />
+        <FormControl className="inventory-cabinet-filter" size="small"><InputLabel>{uiText("Nhóm tủ")}</InputLabel><Select value={cabinetFilter} label={uiText("Nhóm tủ")} onChange={event => { setCabinetFilter(event.target.value) }}><MenuItem value="all">{uiText("Tất cả tủ")}</MenuItem>{cabinets.map((cabinet: any) => <MenuItem key={cabinet.id} value={String(cabinet.id)}>{cabinetLabel(cabinet)}</MenuItem>)}</Select></FormControl>
         <ToggleButtonGroup className="inventory-view-toggle" exclusive value={view} onChange={(_, value: ViewMode | null) => { if (value && value !== view) { setView(value); setSearch('') } }} size="small" aria-label={uiText("Chế độ xem kho")}>
           <ToggleButton value="product">{uiText("Sản phẩm")}</ToggleButton>
           <ToggleButton value="location">{uiText("Vị trí")}</ToggleButton>
         </ToggleButtonGroup>
-        <Button className="inventory-filter-toggle" size="small" variant="outlined" startIcon={<Tune />} aria-expanded={filtersOpen} onClick={() => setFiltersOpen(value => !value)}>{uiText("Bộ lọc")}</Button>
+        {view === 'product' && <Button className="inventory-filter-toggle" size="small" variant="outlined" startIcon={<Tune />} aria-expanded={filtersOpen} onClick={() => setFiltersOpen(value => !value)}>{uiText("Bộ lọc")}</Button>}
+        {view === 'location' && <Button size="small" onClick={() => { setSearch(''); setCabinetFilter('all') }}>{uiText('Clear filters')}</Button>}
       </Box>
-      {filtersOpen && <Box className="inventory-filters">
-        <FormControl size="small"><InputLabel>{uiText("Nhóm tủ")}</InputLabel><Select value={cabinetFilter} label={uiText("Nhóm tủ")} onChange={event => { setCabinetFilter(event.target.value); setRackFilter('all') }}><MenuItem value="all">{uiText("Tất cả tủ")}</MenuItem>{cabinets.map((cabinet: any) => <MenuItem key={cabinet.id} value={String(cabinet.id)}>{cabinetLabel(cabinet)}</MenuItem>)}</Select></FormControl>
-        <FormControl size="small"><InputLabel>Rack</InputLabel><Select value={rackFilter} label="Rack" onChange={event => setRackFilter(event.target.value)}><MenuItem value="all">{uiText("Tất cả rack")}</MenuItem>{racks.filter((rack: any) => cabinetFilter === 'all' || String(rack.cabinet_id) === cabinetFilter).map((rack: any) => <MenuItem key={rack.id} value={String(rack.id)}>{rackLabel(rack)}</MenuItem>)}</Select></FormControl>
-        <FormControl size="small" disabled={view === 'location'}><InputLabel>{uiText("Danh mục")}</InputLabel><Select value={categoryFilter} label={uiText("Danh mục")} onChange={event => setCategoryFilter(event.target.value)}><MenuItem value="all">{uiText("Tất cả danh mục")}</MenuItem>{categories.map(category => <MenuItem key={category} value={category}>{category}</MenuItem>)}</Select></FormControl>
-        <FormControl size="small" disabled={view === 'location'}><InputLabel>{uiText("Tồn kho")}</InputLabel><Select value={stockFilter} label={uiText("Tồn kho")} onChange={event => setStockFilter(event.target.value)}><MenuItem value="all">{uiText("Tất cả trạng thái")}</MenuItem><MenuItem value="Available">{uiText("Còn hàng")}</MenuItem><MenuItem value="Low stock">{uiText("Sắp hết hàng")}</MenuItem><MenuItem value="Out of stock">{uiText("Hết hàng")}</MenuItem></Select></FormControl>
+      {filtersOpen && view === 'product' && <Box className="inventory-filters">
+        <FormControl size="small"><InputLabel>{uiText("Danh mục")}</InputLabel><Select value={categoryFilter} label={uiText("Danh mục")} onChange={event => setCategoryFilter(event.target.value)}><MenuItem value="all">{uiText("Tất cả danh mục")}</MenuItem>{categories.map(category => <MenuItem key={category} value={category}>{category}</MenuItem>)}</Select></FormControl>
+        <FormControl size="small"><InputLabel>{uiText("Tồn kho")}</InputLabel><Select value={stockFilter} label={uiText("Tồn kho")} onChange={event => setStockFilter(event.target.value)}><MenuItem value="all">{uiText("Tất cả trạng thái")}</MenuItem><MenuItem value="Available">{uiText("Còn hàng")}</MenuItem><MenuItem value="Low stock">{uiText("Sắp hết hàng")}</MenuItem><MenuItem value="Out of stock">{uiText("Hết hàng")}</MenuItem></Select></FormControl>
       </Box>}
-      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1} sx={{ mt: 1.5 }}>
+      {view === 'product' && <><Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1} sx={{ mt: 1.5 }}>
         <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap"><Chip size="small" label={inventoryQuery.isLoading || inventoryQuery.isError ? uiText('Kết nối: chưa xác định') : health.server_online ? uiText('Server online') : uiText('Server offline')} color={health.server_online ? 'success' : 'default'} variant="outlined" /><Chip size="small" label={pendingTransactions ? uiText("{0} giao dịch chờ", pendingTransactions) : uiText('Không có giao dịch chờ')} color={pendingTransactions ? 'warning' : 'default'} variant="outlined" /></Stack>
-        <Button size="small" onClick={() => { setSearch(''); setCabinetFilter('all'); setRackFilter('all'); setCategoryFilter('all'); setStockFilter('all') }}>{uiText("Xóa bộ lọc")}</Button>
-      </Stack>
+        <Button size="small" onClick={() => { setSearch(''); setCabinetFilter('all'); setCategoryFilter('all'); setStockFilter('all') }}>{uiText("Xóa bộ lọc")}</Button>
+      </Stack></>}
     </Paper>
 
     {!health.server_online && <Alert className="inventory-alert" severity="info">{uiText("Server offline · Vận hành local")} {health.local_operation_available ? uiText('available') : uiText('unavailable')} · {pendingTransactions} {uiText("giao dịch chờ đồng bộ")}</Alert>}
@@ -379,12 +385,12 @@ export const InventoryWorkspace = ({ session, permissions, onSessionExpired }: I
     {notice && <Alert className="inventory-alert" severity="success" onClose={() => setNotice('')}>{uiText(notice)}</Alert>}
     {inventoryQuery.isError && <Alert className="inventory-alert" severity="error" action={<Button color="inherit" size="small" onClick={() => void inventoryQuery.refetch()}>{uiText("Thử lại")}</Button>}>{uiText("Không tải được dữ liệu kho hàng hoặc cấu trúc tủ. Vui lòng thử lại.")}</Alert>}
 
-    <Stack direction="row" justifyContent="space-between" alignItems="center"><Typography variant="h6" fontWeight={700}>{view === 'product' ? uiText('Danh sách sản phẩm') : uiText('Vị trí trong kho')}</Typography><Chip size="small" variant="outlined" label={view === 'product' ? uiText("{0} sản phẩm", visibleItems.length) : uiText("{0} vị trí", visibleLocations.length)} /></Stack>
+    <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" useFlexGap spacing={1}><Typography variant="h6" fontWeight={700}>{view === 'product' ? uiText('Danh sách sản phẩm') : uiText('Vị trí trong kho')}</Typography><Chip size="small" variant="outlined" label={view === 'product' ? uiText("{0} sản phẩm", visibleItems.length) : uiText("{0} vị trí", visibleLocations.length)} />{view === 'location' && <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap"><Chip size="small" label={inventoryQuery.isLoading || inventoryQuery.isError ? uiText('Kết nối: chưa xác định') : health.server_online ? uiText('Server online') : uiText('Server offline')} color={health.server_online ? 'success' : 'default'} variant="outlined" /><Chip size="small" label={pendingTransactions ? uiText("{0} giao dịch chờ", pendingTransactions) : uiText('Không có giao dịch chờ')} color={pendingTransactions ? 'warning' : 'default'} variant="outlined" /></Stack>}{view === 'product' ? <TablePageMenu {...paging.controls} /> : <TablePageMenu {...cabinetPaging.controls} rowsPerPageOptions={[1, 3, 5]} labelRowsPerPage={uiText('Cabinets per page:')} />}</Stack>
     {inventoryQuery.isLoading
       ? <Skeleton className="inventory-loading" variant="rounded" height={280} />
       : view === 'product'
-        ? <ProductView items={visibleItems} onSelect={openItem} />
-        : <LocationView locations={visibleLocations} stockByItemBin={stockByItemBin} items={items} locationName={locationName} onSelect={location => {
+        ? <ProductView items={paging.slice(visibleItems)} onSelect={openItem} />
+        : <LocationView cabinets={locationCabinets.filter(cabinet => displayedCabinetIds.has(String(cabinet.id)))} racks={racks} allLocations={visibleLocations} locations={visibleLocations.filter(location => displayedCabinetIds.has(String(location.cabinet.id)))} stockByItemBin={stockByItemBin} items={items} locationName={locationName} onSelect={location => {
           const item = itemRows.find(row => row.locations.some((candidate: any) => candidate.bin.id === location.bin.id))
           if (item) openItem(item)
         }} />}
@@ -520,34 +526,12 @@ function ProductView({ items, onSelect }: { items: any[]; onSelect: (item: any) 
   </TableContainer>
 }
 
-function LocationView({ locations, stockByItemBin, items, locationName, onSelect }: { locations: any[]; stockByItemBin: Map<string, number>; items: any[]; locationName: (location: any) => string; onSelect: (location: any) => void }) {
+function LocationView({ cabinets, racks, locations, allLocations, stockByItemBin, items, locationName, onSelect }: { cabinets: any[]; racks: any[]; locations: any[]; allLocations: any[]; stockByItemBin: Map<string, number>; items: any[]; locationName: (location: any) => string; onSelect: (location: any) => void }) {
   useLanguage();
-  const grouped = locations.reduce((result: Record<string, any[]>, location) => {
-    const key = location.cabinet.id
-    ;(result[key] ||= []).push(location)
-    return result
-  }, {})
-
-  return <Stack className="inventory-location-list" spacing={1}>
-    {Object.entries(grouped).map(([cabinetId, cabinetLocations]) => {
-      const cabinet = cabinetLocations[0].cabinet
-      const groupedRacks = cabinetLocations.reduce((result: Record<string, any[]>, location) => {
-        const key = location.rack.id
-        ;(result[key] ||= []).push(location)
-        return result
-      }, {})
-      const cabinetQuantity = cabinetLocations.reduce((sum, location) => sum + items.reduce((rackSum, item) => rackSum + (stockByItemBin.get(`${item.id}:${location.bin.id}`) || 0), 0), 0)
-
-      return <Paper variant="outlined" className="inventory-cabinet" key={cabinetId}>
-        <Box className="inventory-cabinet-heading">
-          <Box><Typography className="inventory-location-path">{cabinetLabel(cabinet)}</Typography><Typography variant="caption">{cabinetLocations.length} {uiText("ô chứa")}</Typography></Box>
-          <Stack direction="row" spacing={0.75} alignItems="center"><LocationStatus status={isCabinetActive(cabinet) ? 'ACTIVE' : 'OFFLINE'} /><Chip size="small" label={uiText("{0} units", cabinetQuantity)} variant="outlined" /></Stack>
-        </Box>
-        <TableContainer>
-          <Table size="small" aria-label={uiText("{0} locations", cabinetLabel(cabinet))}>
-            <TableHead><TableRow><TableCell>{uiText("Tủ / rack")}</TableCell><TableCell>{uiText("Trạng thái")}</TableCell><TableCell>{uiText("Hàng lưu trữ")}</TableCell><TableCell align="right">{uiText("Sức chứa")}</TableCell><TableCell align="right">{uiText("Chi tiết")}</TableCell></TableRow></TableHead>
-            <TableBody>
-              {Object.entries(groupedRacks).map(([rackId, rackLocations]) => rackLocations.map(location => {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [detailRack, setDetailRack] = useState<any | null>(null)
+  const renderLocations = (rackLocations: any[], rackId: string) => {
+    return rackLocations.map(location => {
                 const stockedItems = items.map(item => ({ item, quantity: stockByItemBin.get(`${item.id}:${location.bin.id}`) || 0 })).filter(row => row.quantity > 0)
                 const quantity = stockedItems.reduce((sum, row) => sum + row.quantity, 0)
                 const capacity = Number(location.bin.capacity || 0)
@@ -560,15 +544,59 @@ function LocationView({ locations, stockByItemBin, items, locationName, onSelect
                     {stockedItems.length ? <Stack spacing={0.25}>{stockedItems.slice(0, 2).map(({ item, quantity: itemQuantity }) => <Typography variant="body2" key={item.id}>{item.item_name} <b>× {itemQuantity}</b></Typography>)}{stockedItems.length > 2 && <Typography variant="caption">+{stockedItems.length - 2} {uiText("more")}</Typography>}</Stack> : <Typography variant="body2">{uiText("Trống")}</Typography>}
                   </TableCell>
                   <TableCell data-label={uiText("Sức chứa")} align="right"><Typography variant="body2" fontWeight={600}>{quantity} / {(capacity || '—')}</Typography><LinearProgress variant="determinate" value={usage} color={usage >= 100 ? 'warning' : 'primary'} sx={{ mt: 0.5, height: 4, borderRadius: 2 }} /></TableCell>
-                  <TableCell data-label={uiText("Chi tiết")} align="right"><Tooltip title={stockedItems.length ? uiText('Xem sản phẩm tại vị trí') : uiText('Vị trí chưa có hàng')}><span><IconButton size="small" aria-label={uiText("View {0}", locationName(location))} disabled={!stockedItems.length} onClick={() => onSelect(location)}><InfoOutlined fontSize="small" /></IconButton></span></Tooltip></TableCell>
+                  <TableCell data-label={uiText("Chi tiết")} align="right"><Tooltip title={stockedItems.length ? uiText('Xem sản phẩm tại vị trí') : uiText('Vị trí chưa có hàng')}><span><IconButton size="small" aria-label={uiText("View {0}", locationName(location))} disabled={!stockedItems.length} onClick={() => { setDetailRack(null); onSelect(location) }}><InfoOutlined fontSize="small" /></IconButton></span></Tooltip></TableCell>
                 </TableRow>
-              }))}
+    })
+  }
+  const hasStock = (location: any) => items.some(item => (stockByItemBin.get(`${item.id}:${location.bin.id}`) || 0) > 0)
+  return <Stack className="inventory-location-list" spacing={1}>
+    {cabinets.map(cabinet => {
+      const cabinetId = String(cabinet.id)
+      const cabinetLocations = locations.filter(location => String(location.cabinet.id) === cabinetId)
+      const cabinetRacks = racks.filter(rack => String(rack.cabinet_id) === cabinetId)
+        .sort((a,b) => Number(a.rack_index || a.rack_code || a.id) - Number(b.rack_index || b.rack_code || b.id))
+      const stockedRacks = new Set(cabinetLocations.filter(hasStock).map(location => String(location.rack.id)))
+      const visibleRacks = expanded[cabinetId] ? cabinetRacks : cabinetRacks.filter(rack => stockedRacks.has(String(rack.id)))
+      const fullCabinetLocations = allLocations.filter(location => String(location.cabinet.id) === cabinetId)
+      const cabinetQuantity = fullCabinetLocations.reduce((sum, location) => sum + items.reduce((rackSum, item) => rackSum + (stockByItemBin.get(`${item.id}:${location.bin.id}`) || 0), 0), 0)
+
+      return <Paper variant="outlined" className="inventory-cabinet" key={cabinetId} sx={{ opacity: isCabinetActive(cabinet) ? 1 : 0.5 }}>
+        <Box className="inventory-cabinet-heading" sx={{ flexWrap: 'wrap' }}>
+          <Box><Typography className="inventory-location-path">{cabinetLabel(cabinet)}</Typography><Typography variant="caption">{fullCabinetLocations.length} {uiText("ô chứa")}</Typography></Box>
+          <Stack direction="row" spacing={0.75} alignItems="center"><LocationStatus status={isCabinetActive(cabinet) ? 'ACTIVE' : 'OFFLINE'} /><Chip size="small" label={uiText("{0} units", cabinetQuantity)} variant="outlined" /><Button size="small" aria-expanded={!!expanded[cabinetId]} aria-controls={`cabinet-locations-${cabinetId}`} onClick={() => setExpanded(current => ({ ...current, [cabinetId]: !current[cabinetId] }))} endIcon={<ExpandMore sx={{ transform: expanded[cabinetId] ? 'rotate(180deg)' : undefined }} />}>{uiText(expanded[cabinetId] ? 'Show stocked racks' : 'Show all racks')}</Button></Stack>
+        </Box>
+        <Box id={`cabinet-locations-${cabinetId}`}>
+        <TableContainer>
+          <Table size="small" stickyHeader aria-label={uiText("{0} locations", cabinetLabel(cabinet))}>
+            <TableHead><TableRow><TableCell>{uiText("Tủ / rack")}</TableCell><TableCell>{uiText("Trạng thái")}</TableCell><TableCell>{uiText("Hàng lưu trữ")}</TableCell><TableCell align="right">{uiText("Sức chứa")}</TableCell><TableCell align="right">{uiText("Chi tiết")}</TableCell></TableRow></TableHead>
+            <TableBody>
+              {visibleRacks.map(rack => {
+                const rackLocations = cabinetLocations.filter(location => String(location.rack.id) === String(rack.id))
+                const stockedItems = items.map(item => ({ item, quantity: rackLocations.reduce((sum, location) => sum + (stockByItemBin.get(`${item.id}:${location.bin.id}`) || 0), 0) })).filter(row => row.quantity > 0)
+                const quantity = stockedItems.reduce((sum, row) => sum + row.quantity, 0)
+                const capacity = rackLocations.reduce((sum, location) => sum + Number(location.bin.capacity || 0), 0)
+                const rackStatus = !isCabinetActive(cabinet) ? 'OFFLINE' : rackLocations[0]?.status || String(rack.status || 'READY').toUpperCase()
+                return <TableRow key={rack.id} data-testid={rackLocations.length ? 'inventory-location-rack' : 'inventory-empty-rack'}>
+                  <TableCell data-label={uiText('T\u1ee7 / rack')}><Typography className="inventory-location-path">{rackLabel(rack)}</Typography></TableCell>
+                  <TableCell data-label={uiText('Tr\u1ea1ng th\u00e1i')}><LocationStatus status={rackStatus} /></TableCell>
+                  <TableCell data-label={uiText('H\u00e0ng l\u01b0u tr\u1eef')}>{stockedItems.length ? <Typography variant="body2">{stockedItems[0].item.item_name} <b>&times; {stockedItems[0].quantity}</b>{stockedItems.length > 1 && <Typography component="span" variant="caption" color="text.secondary"> &middot; +{stockedItems.length - 1} {uiText('more')}</Typography>}</Typography> : uiText('Tr\u1ed1ng')}</TableCell>
+                  <TableCell data-label={uiText('S\u1ee9c ch\u1ee9a')} align="right">{quantity} / {capacity || '\u2014'}</TableCell>
+                  <TableCell data-label={uiText('Chi ti\u1ebft')} align="right"><IconButton size="small" aria-label={uiText('View {0}', `${cabinetLabel(cabinet)} \u00b7 ${rackLabel(rack)}`)} disabled={!rackLocations.length} onClick={() => setDetailRack({ cabinet, rack })}><InfoOutlined fontSize="small" /></IconButton></TableCell>
+                </TableRow>
+              })}
+              {!visibleRacks.length && <TableRow><TableCell colSpan={5}>{uiText('No stocked racks. Expand to view all racks.')}</TableCell></TableRow>}
             </TableBody>
           </Table>
         </TableContainer>
+        </Box>
       </Paper>
     })}
-    {!locations.length && <Box className="inventory-empty"><Inventory2 color="disabled" /><Typography fontWeight={600}>{uiText("Không có vị trí phù hợp")}</Typography><Typography variant="body2">{uiText("Thử đổi tủ, rack hoặc từ khóa.")}</Typography></Box>}
+    {!cabinets.length && <Box className="inventory-empty"><Inventory2 color="disabled" /><Typography fontWeight={600}>{uiText("Không có vị trí phù hợp")}</Typography><Typography variant="body2">{uiText("Thử đổi tủ, rack hoặc từ khóa.")}</Typography></Box>}
+    <Dialog open={!!detailRack} onClose={() => setDetailRack(null)} maxWidth="md" fullWidth>
+      <DialogTitle>{detailRack && `${cabinetLabel(detailRack.cabinet)} / ${rackLabel(detailRack.rack)}`}</DialogTitle>
+      <DialogContent dividers><TableContainer><Table size="small"><TableHead><TableRow>{['T\u1ee7 / rack', 'Tr\u1ea1ng th\u00e1i', 'H\u00e0ng l\u01b0u tr\u1eef', 'S\u1ee9c ch\u1ee9a', 'Chi ti\u1ebft'].map(label => <TableCell key={label}>{uiText(label)}</TableCell>)}</TableRow></TableHead><TableBody>{detailRack && renderLocations(locations.filter(location => String(location.rack.id) === String(detailRack.rack.id)), String(detailRack.rack.id))}</TableBody></Table></TableContainer></DialogContent>
+      <DialogActions><Button onClick={() => setDetailRack(null)}>{uiText('Close')}</Button></DialogActions>
+    </Dialog>
   </Stack>
 }
 

@@ -32,6 +32,8 @@ Kết nối Hardware đã cấu hình, đóng Serial Monitor và bật nguồn. 
 
 UI: http://127.0.0.1:8002/ui/. Dùng token IPC và tài khoản Server cấp quyền. Kiểm Server online/revision synchronized; nếu HARDWARE_ENABLED=true, USB COM đúng/baud 115200, kiểm Serial connected/telemetry. ESP32 hiện chỉ telemetry; điều khiển REAL vẫn khóa theo adapter.
 
+IPC dùng chung bản build giao diện hiện tại của IPCSIM và tự nhận chế độ qua `/api/system/health`. IPC quản lý **1 tủ gồm 6 rack (01–06)**: trang Tủ & rack mở trực tiếp tủ được Server cấp (theo ID thực tế), không có bộ chọn nhóm; tổng quan có lưới 6 rack và trạng thái Hardware. Danh mục chưa đồng bộ hoặc khác 1 tủ/6 rack sẽ được thông báo để kiểm tra tại Server. Các trang kho hàng, giao dịch, hoạt động thiết bị, sự cố và môi trường dùng cùng API local, theo dữ liệu REAL của IPC. Firmware hiện chỉ gửi telemetry nên các nút điều khiển rack/đèn/thông gió bị khóa theo `hardware_commands_supported`; không dùng workflow phục hồi Simulation cho IPC.
+
 ### SIMULATION: Server → MQTT → IPCSIM → Virtual Serial → Simulation
 
 Terminal riêng tại root:

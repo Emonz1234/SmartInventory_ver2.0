@@ -4,9 +4,10 @@ import { Alert, Box, CircularProgress, CssBaseline, Stack, ThemeProvider, Typogr
 import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { viVN, enUS } from '@mui/material/locale'
 import { InventoryWorkspace } from './pages/InventoryWorkspace'
+import { DeviceCabinets } from './pages/DeviceCabinets'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Layout } from '@components/Layout/Layout'
-import { Dashboard, Cabinets, CabinetDetail, Transactions, Breakdown, Environment, Operation, System } from '@pages/index'
+import { Dashboard, CabinetDetail, Transactions, Breakdown, Environment, Operation, System } from '@pages/index'
 import api from '@api/client'
 import { OperatorLogin } from '@components/OperatorLogin'
 import { SimulationFaultMonitor } from '@components/SimulationFaultMonitor'
@@ -43,15 +44,18 @@ const theme = createTheme({
   },
   typography: {
     fontFamily: '"Segoe UI", "Roboto", "Arial", sans-serif',
-    fontSize: 14
+    fontSize: 14,
+    body2: { fontSize:15, lineHeight:1.5 },
+    caption: { fontSize:14, lineHeight:1.5 },
+    button: { fontSize:14 }
   },
   components: {
     MuiCardContent: { styleOverrides: { root: { padding: 16, '&:last-child': { paddingBottom: 16 } } } },
     MuiTablePagination: { styleOverrides: { toolbar: { minHeight: 44 } } },
     MuiCard: { defaultProps: { elevation: 0 }, styleOverrides: { root: { borderRadius: 16, border: '1px solid #e0e8eb' } } },
     MuiPaper: { styleOverrides: { rounded: { borderRadius: 12 } } },
-    MuiTableCell: { styleOverrides: { root: { borderBottom: '1px solid #edf1f3', padding: '9px 14px' }, head: { backgroundColor: '#f7fafb', color: '#647a80', fontWeight: 700, whiteSpace: 'nowrap', fontSize: 12 } } },
-    MuiChip: { styleOverrides: { root: { borderRadius: 8, fontWeight: 600 } } },
+    MuiTableCell: { styleOverrides: { root: { borderBottom: '1px solid #edf1f3', padding: '10px 14px', fontSize:15, lineHeight:1.5 }, head: { backgroundColor: '#f7fafb', color: '#647a80', fontWeight: 700, whiteSpace: 'normal', fontSize: 14 } } },
+    MuiChip: { styleOverrides: { root: { borderRadius: 8, fontWeight: 600, fontSize:13, minHeight:28 } } },
     MuiOutlinedInput: { styleOverrides: { root: { borderRadius: 10 } } },
     MuiButton: {
       styleOverrides: {
@@ -195,7 +199,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/inventory" element={<InventoryWorkspace session={operatorSession} permissions={operatorPermissions} onSessionExpired={expireOperatorSession} />} />
-              <Route path="/cabinets" element={<Cabinets />} />
+              <Route path="/cabinets" element={<DeviceCabinets session={operatorSession} permissions={operatorPermissions} onSessionExpired={expireOperatorSession} />} />
               <Route path="/cabinets/:id" element={<CabinetDetail session={operatorSession} permissions={operatorPermissions} onSessionExpired={expireOperatorSession} />} />
               <Route path="/transactions" element={<Transactions session={operatorSession} onSessionExpired={expireOperatorSession} />} />
               <Route path="/breakdown" element={<Breakdown session={operatorSession} onSessionExpired={() => { clearSavedOperatorSession(); setOperatorSession(''); setOperatorPermissions([]) }} />} />

@@ -10,12 +10,18 @@ import {
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
+import EnvironmentViews, { MeasurementHistory } from "./EnvironmentViews.jsx";
+import { RecordBrowser, SettingsPanel } from "./RecordViews.jsx";
+import MaintenanceView, {
+  environmentalAlarm,
+  maintenanceAlarm,
+} from "./MaintenanceView.jsx";
 import Inventory from "./Inventory.jsx";
 import OperationsDashboard from "./OperationsDashboard.jsx";
 import StockWizard from "./StockWizard.jsx";
 import Navigation from "./Navigation.jsx";
 import { Categories, WarehouseOverview } from "./CatalogManagement.jsx";
-import { DeviceTree, deviceStatus } from "./DeviceViews.jsx";
+import { DeviceTree, IPCDeviceTree, deviceStatus } from "./DeviceViews.jsx";
 import RackCommands from "./RackCommands.jsx";
 import {
   SourceBadge,
@@ -139,7 +145,8 @@ function Form({
   disabled = false,
 }) {
   useLanguage();
-  const [working, setWorking] = useState(false);
+  const [working, setWorking] = useState(false),
+    [formError, setFormError] = useState("");
   return (
     <form
       onSubmit={async (e) => {
@@ -165,14 +172,21 @@ function Form({
           }
         }
         setWorking(true);
+        setFormError("");
         try {
           await submit(data);
-        } catch {
+        } catch (error) {
+          setFormError(errorText(error));
         } finally {
           setWorking(false);
         }
       }}
     >
+      {formError && (
+        <p className="error" role="alert">
+          {formError}
+        </p>
+      )}
       <fieldset disabled={disabled || working}>
         {fields.map((f) => (
           <label
@@ -291,26 +305,60 @@ function App() {
     ),
   };
   const [session, setSession] = useState(null),
-    [page, setPage] = useState("Dashboard"),
+    [page, setPage] = useState(() => {
+      try {
+        const saved = JSON.parse(
+          sessionStorage.getItem("server.navigation") || "{}",
+        );
+        return pages.some((entry) => entry[0] === saved.page)
+          ? saved.page
+          : "Dashboard";
+      } catch {
+        return "Dashboard";
+      }
+    }),
     [source, setSource] = useState("REAL");
   const [data, setData] = useState(null),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false);
   const [selection, setSelection] = useState(null),
-    [filters, setFilters] = useState({}),
+    [filters, setFilters] = useState(() => {
+      try {
+        return (
+          JSON.parse(sessionStorage.getItem("server.navigation") || "{}")
+            .filters || {}
+        );
+      } catch {
+        return {};
+      }
+    }),
     [version, setVersion] = useState(0);
   const [lookup, setLookup] = useState({}),
     [master, setMaster] = useState("shelves"),
-    [edit, setEdit] = useState(false);
+    [edit, setEdit] = useState(false),
+    [editorOpen, setEditorOpen] = useState(false);
+  useEffect(() => {
+    if (session?.authenticated)
+      sessionStorage.setItem(
+        "server.navigation",
+        JSON.stringify({ page, filters }),
+      );
+  }, [page, filters, session]);
   const seq = useRef(0);
   const detailSequence = useRef(0);
   const can = (permission, scope = source) =>
-    scope === "ALL"
-      ? ["REAL", "SIMULATION", "ALL"].some((s) =>
-          session?.grants?.[permission]?.includes(s),
-        )
-      : session?.grants?.[permission]?.some((s) => s === scope || s === "ALL");
+    ["user.view", "user.manage", "role.manage", "system.manage"].includes(
+      permission,
+    )
+      ? session?.grants?.[permission]?.includes("ALL")
+      : scope === "ALL"
+        ? ["REAL", "SIMULATION", "ALL"].some((s) =>
+            session?.grants?.[permission]?.includes(s),
+          )
+        : session?.grants?.[permission]?.some(
+            (s) => s === scope || s === "ALL",
+          );
   const canAll = (p) => session?.grants?.[p]?.includes("ALL");
   useEffect(() => {
     api("session")
@@ -320,11 +368,14 @@ function App() {
   useEffect(() => {
     if (!session?.authenticated) return;
     const current = pages.find((p) => p[0] === page);
-    const target = session.grants?.[current[2]]?.length
+    const target = can(current[2], "ALL")
       ? current
-      : pages.find((p) => session.grants?.[p[2]]?.length);
+      : pages.find((p) => can(p[2], "ALL"));
     if (target) {
-      if (target[0] !== page) setPage(target[0]);
+      if (target[0] !== page) {
+        setPage(target[0]);
+        setFilters({});
+      }
       const scopes = session.grants[target[2]];
       if (!scopes.includes("ALL") && !scopes.includes(source))
         setSource(scopes[0]);
@@ -349,13 +400,17 @@ function App() {
         const params = new URLSearchParams({
           source_type: source,
           ...Object.fromEntries(
-            Object.entries(filters).filter(([, v]) => v !== ""),
+            Object.entries(filters).filter(
+              ([key, v]) => !key.startsWith("ui_") && v !== "",
+            ),
           ),
         });
         const result = await api(endpoint + "?" + params);
         if (alive && current === seq.current) {
           setData(result);
-          if (["Cabinets", "Racks", "Storage Map", "IPC Devices"].includes(page)) {
+          if (
+            ["Cabinets", "Racks", "Storage Map", "IPC Devices"].includes(page)
+          ) {
             setSelection((previous) =>
               previous
                 ? result.find((row) => row.id === previous.id) || null
@@ -441,6 +496,8 @@ function App() {
       setSource(f.source_type);
     setFilters(f);
     setSelection(null);
+    setEditorOpen(false);
+    setEdit(false);
     setLookup({});
     setNotice("");
   }
@@ -477,24 +534,61 @@ function App() {
             act(async () => {
               const s = await api("session", "POST", d);
               setSession(s);
-              const first = pages.find((p) => s.grants[p[2]]?.length);
+              const first = pages.find(
+                (p) =>
+                  s.grants[p[2]]?.length &&
+                  (!["user.view", "role.manage", "system.manage"].includes(
+                    p[2],
+                  ) ||
+                    s.grants[p[2]].includes("ALL")),
+              );
               if (first) setPage(first[0]);
             })
           }
         />
       </main>
     );
-  const rows = (Array.isArray(data) ? data : []).filter(
-    (row) =>
-      (!filters.device_id || row.id === filters.device_id) &&
-      (!filters.alert_id || String(row.id) === String(filters.alert_id)) &&
-      (!filters.transaction_id ||
-        String(row.request_key || row.id) === String(filters.transaction_id)),
-  );
+  const rows = (Array.isArray(data) ? data : [])
+    .filter(
+      (row) =>
+        page !== "Alarms" ||
+        filters.alert_id ||
+        (filters.ui_mode === "environment"
+          ? environmentalAlarm(row)
+          : filters.ui_mode === "maintenance"
+            ? true
+            : !environmentalAlarm(row) && !maintenanceAlarm(row)),
+    )
+    .filter(
+      (row) =>
+        (!filters.device_id ||
+          (page === "IPC Devices" ? row.id : row.device_id) ===
+            filters.device_id) &&
+        (!filters.ui_severity || row.severity === filters.ui_severity) &&
+        (!filters.ui_location || row.location === filters.ui_location) &&
+        (!filters.ui_alarmtype || row.code === filters.ui_alarmtype) &&
+        (!filters.alert_id || String(row.id) === String(filters.alert_id)) &&
+        (!filters.transaction_id ||
+          String(row.request_key || row.id) === String(filters.transaction_id)),
+    );
   const permission = pages.find((p) => p[0] === page)[2];
   return (
-    <Navigation session={session} page={page} source={source} labels={pageLabels} pages={pages} can={can} api={api} navigate={navigate}
-      logout={() => act(async () => setSession(await api("session", "DELETE"))).catch(() => {})}>
+    <Navigation
+      session={session}
+      page={page}
+      source={source}
+      filters={filters}
+      labels={pageLabels}
+      pages={pages}
+      can={can}
+      api={api}
+      navigate={navigate}
+      logout={() =>
+        act(async () => setSession(await api("session", "DELETE"))).catch(
+          () => {},
+        )
+      }
+    >
       <main>
         <PageHeader
           title={pageLabels[page] || uiText(page)}
@@ -581,6 +675,45 @@ function App() {
           </p>
         )}
         {data === null && !error && can(permission) && <LoadingState />}
+        {["Environment", "Alarms", "Transactions", "Audit Logs"].includes(
+          page,
+        ) &&
+          (Number(filters.offset || 0) > 0 ||
+            (Array.isArray(data) && data.length >= 200)) && (
+            <div className="toolbar">
+              <button
+                className="secondary"
+                disabled={!Number(filters.offset || 0)}
+                onClick={() =>
+                  setFilters({
+                    ...filters,
+                    offset: Math.max(0, Number(filters.offset || 0) - 200),
+                  })
+                }
+              >
+                {" "}
+                {uiText("Trang trước")}{" "}
+              </button>
+              <span>
+                {" "}
+                {uiText("Trang")}{" "}
+                {Math.floor(Number(filters.offset || 0) / 200) + 1}
+              </span>
+              <button
+                className="secondary"
+                disabled={!Array.isArray(data) || data.length < 200}
+                onClick={() =>
+                  setFilters({
+                    ...filters,
+                    offset: Number(filters.offset || 0) + 200,
+                  })
+                }
+              >
+                {" "}
+                {uiText("Trang sau")}{" "}
+              </button>
+            </div>
+          )}
         {can(permission) && (
           <>
             {page === "Dashboard" && can("dashboard.view") && (
@@ -592,8 +725,16 @@ function App() {
                 version={version}
               />
             )}
-            {page === "Categories" && <Categories api={api} source={source} session={session} />}
-            {page === "Warehouse Overview" && <WarehouseOverview api={api} source={source} navigate={navigate} />}
+            {page === "Categories" && (
+              <Categories api={api} source={source} session={session} />
+            )}
+            {page === "Warehouse Overview" && (
+              <WarehouseOverview
+                api={api}
+                source={source}
+                navigate={navigate}
+              />
+            )}
             {page === "Stock Operations" &&
               can("inventory.view") &&
               can("inventory.move") && (
@@ -608,6 +749,53 @@ function App() {
                   initialProduct={filters.product_id}
                 />
               )}
+            {page === "Stock Operations" && (
+              <section>
+                {can("inventory.move") && (
+                  <TechnicalDetails
+                    title={text(
+                      "Ghi nhận thủ công / chuyển / mượn / trả",
+                      "Manual recording / move / borrow / return",
+                    )}
+                  >
+                    <h3>{uiText("Ghi nhận giao dịch kho")}</h3>
+                    <p>
+                      {" "}
+                      {uiText(
+                        "Chỉ xác nhận sau khi kiểm tra hàng hóa thực tế. Để chỉnh tồn, mở Inventory → chi tiết sản phẩm → Inventory Adjustment. RETURN phải tham chiếu giao dịch BORROW.",
+                      )}{" "}
+                    </p>
+                    <Form
+                      disabled={!can("inventory.move") || busy}
+                      fields={[
+                        {
+                          name: "kind",
+                          options: [
+                            "INBOUND",
+                            "OUTBOUND",
+                            "MOVE",
+                            "BORROW",
+                            "RETURN",
+                          ],
+                        },
+                        number("item_id"),
+                        number("quantity"),
+                        number("from_location_id", true),
+                        number("to_location_id", true),
+                        number("borrow_id", true),
+                        field("note"),
+                      ]}
+                      submit={(d) =>
+                        mutate("inventory-transactions", "POST", {
+                          ...d,
+                          request_key: key(),
+                        })
+                      }
+                    />
+                  </TechnicalDetails>
+                )}
+              </section>
+            )}
             {page === "Stock Operations" && !can("inventory.view") && (
               <p className="notice">
                 {text(
@@ -625,6 +813,26 @@ function App() {
                     "Synchronization reflects IPC dataset acknowledgement, not physical transaction completion.",
                   )}
                 </p>
+                <div className="environment-kpis">
+                  {[
+                    [
+                      "Synced",
+                      rows.filter((row) => row.synchronized === true).length,
+                    ],
+                    [
+                      "Pending",
+                      rows.filter(
+                        (row) => row.synchronized === false && !row.sync_error,
+                      ).length,
+                    ],
+                    ["Failed", rows.filter((row) => !!row.sync_error).length],
+                  ].map(([label, value]) => (
+                    <article key={label}>
+                      <StatusBadge value={label} />
+                      <strong>{value}</strong>
+                    </article>
+                  ))}
+                </div>
                 <Table
                   rows={rows}
                   columns={[
@@ -645,21 +853,19 @@ function App() {
               <>
                 <section>
                   <h2>{uiText("Kết nối và đồng bộ")}</h2>
-                  <Table
-                    rows={rows.map((row) => ({
-                      ...row,
-                      status: deviceStatus(row),
-                    }))}
+                  <IPCDeviceTree
+                    rows={rows}
+                    api={api}
+                    can={can}
                     onSelect={open}
-                    columns={[
-                      "name",
-                      "source_type",
-                      "status",
-                      "cabinet_group_count",
-                      "racks",
-                      "synchronized",
-                      "last_seen",
-                    ]}
+                    onRackSelect={(row) => {
+                      navigate("Racks", {
+                        source_type: row.source_type,
+                        ipc_id: row.ipc_id,
+                        cabinet_id: row.cabinet_id,
+                      });
+                      setSelection(row);
+                    }}
                   />
                 </section>
                 {selection && (
@@ -848,24 +1054,7 @@ function App() {
                       )
                     }
                   />
-                  {page === "Cabinets" && (
-                    <DeviceTree rows={rows.map(row=>({...row,status:deviceStatus(row)}))} onSelect={open} />
-                  )}
-                  {page === "Racks" && (
-                    <Table
-                      rows={rows.map(row=>({...row,status:deviceStatus(row)}))}
-                      onSelect={open}
-                      columns={[
-                        "name",
-                        "source_type",
-                        "ipc_id",
-                        "cabinet",
-                        "online",
-                        "status",
-                        "last_update",
-                      ]}
-                    />
-                  )}
+                  <DeviceTree rows={rows} onSelect={open} />
                 </section>
                 {selection && (
                   <DetailDrawer
@@ -973,12 +1162,62 @@ function App() {
             )}
             {page === "Environment" && (
               <section className="environment-panel">
-                <h2>{uiText("Lịch sử môi trường")}</h2>
+                <h2>
+                  {filters.ui_mode === "history"
+                    ? text("Lịch sử đo", "Measurement history")
+                    : filters.ui_mode === "sensors"
+                      ? text("Cảm biến", "Sensors")
+                      : text("Tổng quan môi trường", "Environment overview")}
+                </h2>
                 <Form
                   fields={[
-                    { name: "ipc_id", optional: true },
-                    number("cabinet_id", true),
-                    number("rack_id", true),
+                    {
+                      name: "ipc_id",
+                      optional: true,
+                      options: [
+                        ...new Set(
+                          rows.map((row) => row.device_id).filter(Boolean),
+                        ),
+                      ],
+                    },
+                    {
+                      name: "cabinet_id",
+                      optional: true,
+                      options: [
+                        ...new Map(
+                          rows
+                            .filter((row) => row.cabinet_id)
+                            .map((row) => [
+                              row.cabinet_id,
+                              {
+                                value: row.cabinet_id,
+                                label:
+                                  row.cabinet_code ||
+                                  `Cabinet ${row.cabinet_index}`,
+                              },
+                            ]),
+                        ).values(),
+                      ],
+                    },
+                    {
+                      name: "rack_id",
+                      optional: true,
+                      options: [
+                        ...new Map(
+                          rows
+                            .filter((row) => row.rack_id)
+                            .map((row) => [
+                              row.rack_id,
+                              {
+                                value: row.rack_id,
+                                label:
+                                  row.location ||
+                                  `Rack ${row.rack_index ?? row.rack_id}`,
+                              },
+                            ]),
+                        ).values(),
+                      ],
+                    },
                     { name: "from", type: "datetime-local", optional: true },
                     { name: "to", type: "datetime-local", optional: true },
                   ]}
@@ -986,85 +1225,154 @@ function App() {
                   submit={(d) => {
                     for (const k of ["from", "to"])
                       if (d[k]) d[k] = new Date(d[k]).toISOString();
-                    setFilters(
-                      Object.fromEntries(
+                    setFilters((previous) => ({
+                      ...Object.fromEntries(
+                        Object.entries(previous).filter(([key]) =>
+                          key.startsWith("ui_"),
+                        ),
+                      ),
+                      ...Object.fromEntries(
                         Object.entries(d).filter(([, v]) => v),
                       ),
-                    );
+                    }));
                   }}
                 />
-                <Table
-                  rows={rows.map((r) => ({ ...r, ...r.values }))}
-                  columns={[
-                    "created_at",
-                    "source_type",
-                    "device_id",
-                    "rack_id",
-                    "temperature",
-                    "humidity",
-                    "weight",
-                    "smoke",
-                  ]}
-                />
+                {filters.ui_mode !== "history" ? (
+                  <EnvironmentViews
+                    rows={rows}
+                    mode={filters.ui_mode || "overview"}
+                  />
+                ) : (
+                  <MeasurementHistory
+                    rows={rows}
+                    metric={filters.ui_metric || "temperature"}
+                    onMetric={(metric) =>
+                      setFilters((previous) => ({
+                        ...previous,
+                        ui_metric: metric,
+                      }))
+                    }
+                  />
+                )}
               </section>
             )}
             {page === "Alarms" && (
               <section>
-                <h2>{uiText("Cảnh báo")}</h2>
+                <h2>
+                  {filters.ui_mode === "maintenance"
+                    ? text("Bảo trì", "Maintenance")
+                    : filters.ui_mode === "environment"
+                      ? text("Cảnh báo môi trường", "Environmental alerts")
+                      : text("Cảnh báo & sự cố", "Alerts & incidents")}
+                </h2>
+                {filters.ui_mode === "maintenance" && (
+                  <p className="muted">
+                    {text(
+                      "Hiển thị cảnh báo kiểm tra/bảo trì do hệ thống ghi nhận.",
+                      "Inspection and maintenance alerts recorded by the system.",
+                    )}
+                  </p>
+                )}
                 <select
                   aria-label={uiText("Alarm status")}
                   value={filters.active || ""}
-                  onChange={(e) => setFilters({ active: e.target.value })}
+                  onChange={(e) =>
+                    setFilters((previous) => ({
+                      ...previous,
+                      active: e.target.value,
+                    }))
+                  }
                 >
                   <option value="">{uiText("Tất cả trạng thái")}</option>
                   <option value="true">{uiText("Active")}</option>
                   <option value="false">{uiText("Cleared")}</option>
                 </select>
-                <Table
-                  rows={rows}
-                  columns={[
-                    "id",
-                    "source_type",
-                    "severity",
-                    "code",
-                    "device_id",
-                    "rack_id",
-                    "active",
-                    "created_at",
-                    "acknowledged_at",
-                    "cleared_at",
-                  ]}
-                  actions={(r) => (
-                    <>
-                      <button
-                        className="secondary"
-                        onClick={() => setSelection(r)}
+                <div className="filter-bar">
+                  {[
+                    ["ui_severity", "severity", text("Mức độ", "Severity")],
+                    ["ui_location", "location", text("Vị trí", "Location")],
+                    [
+                      "ui_alarmtype",
+                      "code",
+                      text("Loại cảnh báo", "Alert type"),
+                    ],
+                  ].map(([key, field, label]) => (
+                    <label key={key}>
+                      {label}
+                      <select
+                        value={filters[key] || ""}
+                        onChange={(event) =>
+                          setFilters((previous) => ({
+                            ...previous,
+                            [key]: event.target.value,
+                          }))
+                        }
                       >
-                        {text("Xem chi tiết", "View details")}
-                      </button>
-                      {can("alarm.acknowledge", r.source_type) && (
-                        <button
-                          disabled={
-                            !!r.acknowledged_at ||
-                            busy ||
-                            !can("alarm.acknowledge", r.source_type)
-                          }
-                          onClick={() =>
-                            mutate(
-                              `alarms/${r.id}/acknowledge`,
-                              "POST",
-                              {},
-                            ).catch(() => {})
-                          }
-                        >
-                          {r.acknowledged_at
-                            ? text("Đã tiếp nhận", "Acknowledged")
-                            : text("Tiếp nhận cảnh báo", "Acknowledge alert")}
-                        </button>
+                        <option value="">{text("Tất cả", "All")}</option>
+                        {[
+                          ...new Set(
+                            (Array.isArray(data) ? data : [])
+                              .map((row) => row[field])
+                              .filter(Boolean),
+                          ),
+                        ].map((value) => (
+                          <option key={value}>{value}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+                {filters.ui_mode === "maintenance" ? (
+                  <MaintenanceView rows={rows} onSelect={setSelection} />
+                ) : (
+                  <>
+                    {" "}
+                    <Table
+                      rows={rows}
+                      columns={[
+                        "severity",
+                        "code",
+                        "location",
+                        "source_type",
+                        "active",
+                        "created_at",
+                      ]}
+                      actions={(r) => (
+                        <>
+                          <button
+                            className="secondary"
+                            onClick={() => setSelection(r)}
+                          >
+                            {text("Xem chi tiết", "View details")}
+                          </button>
+                          {can("alarm.acknowledge", r.source_type) && (
+                            <button
+                              disabled={
+                                !!r.acknowledged_at ||
+                                busy ||
+                                !can("alarm.acknowledge", r.source_type)
+                              }
+                              onClick={() =>
+                                mutate(
+                                  `alarms/${r.id}/acknowledge`,
+                                  "POST",
+                                  {},
+                                ).catch(() => {})
+                              }
+                            >
+                              {r.acknowledged_at
+                                ? text("Đã tiếp nhận", "Acknowledged")
+                                : text(
+                                    "Tiếp nhận cảnh báo",
+                                    "Acknowledge alert",
+                                  )}
+                            </button>
+                          )}
+                        </>
                       )}
-                    </>
-                  )}
-                />
+                    />
+                  </>
+                )}
               </section>
             )}
             {page === "Alarms" && selection && (
@@ -1077,7 +1385,8 @@ function App() {
                   <StatusBadge value={selection.active ? "Error" : "Ready"} />
                 </p>
                 <p>
-                  {selection.device_id} / Rack {selection.rack_id || "—"}
+                  {selection.location ||
+                    `${selection.device_id} / Rack ${selection.rack_index ?? "—"}`}
                 </p>
                 <p>{new Date(selection.created_at).toLocaleString()}</p>
                 <p>
@@ -1240,151 +1549,141 @@ function App() {
                       </button>
                     )}
                   </div>
-                  {can("inventory.move") && (
-                    <TechnicalDetails
-                      title={text(
-                        "Ghi nhận thủ công / chuyển / mượn / trả",
-                        "Manual recording / move / borrow / return",
-                      )}
-                    >
-                      <h3>{uiText("Ghi nhận giao dịch kho")}</h3>
-                      <p>
-                        {" "}
-                        {uiText(
-                          "Chỉ xác nhận sau khi kiểm tra hàng hóa thực tế. Để chỉnh tồn, mở Inventory → chi tiết sản phẩm → Inventory Adjustment. RETURN phải tham chiếu giao dịch BORROW.",
-                        )}{" "}
-                      </p>
-                      <Form
-                        disabled={!can("inventory.move") || busy}
-                        fields={[
-                          {
-                            name: "kind",
-                            options: [
-                              "INBOUND",
-                              "OUTBOUND",
-                              "MOVE",
-                              "BORROW",
-                              "RETURN",
-                            ],
-                          },
-                          number("item_id"),
-                          number("quantity"),
-                          number("from_location_id", true),
-                          number("to_location_id", true),
-                          number("borrow_id", true),
-                          field("note"),
-                        ]}
-                        submit={(d) =>
-                          mutate("inventory-transactions", "POST", {
-                            ...d,
-                            request_key: key(),
-                          })
-                        }
-                      />
-                    </TechnicalDetails>
-                  )}
                 </section>
                 <section>
                   <h2>{uiText("Lịch sử giao dịch")}</h2>
-                  <Table
-                    rows={rows}
-                    columns={[
-                      "id",
-                      "source_type",
-                      "kind",
-                      "item_id",
-                      "quantity",
-                      "from_location_id",
-                      "to_location_id",
-                      "borrow_id",
-                      "actor_id",
-                      "note",
-                      "created_at",
-                    ]}
-                  />
+                  <RecordBrowser rows={rows} kind="transactions" />
                 </section>
               </>
             )}
             {page === "Audit Logs" && (
               <section>
                 <h2>{uiText("Nhật ký kiểm toán")}</h2>
-                <Table
-                  rows={rows}
-                  columns={[
-                    "created_at",
-                    "source_type",
-                    "actor_id",
-                    "action",
-                    "resource",
-                    "object_id",
-                    "before",
-                    "after",
-                    "result",
-                  ]}
-                />
+                <RecordBrowser rows={rows} kind="audit" />
               </section>
             )}
             {page === "Users" && (
               <section>
                 <h2>{uiText("Người dùng")}</h2>
                 <Table
-                  rows={rows}
+                  rows={rows.map((r) => ({
+                    ...r,
+                    permission_count: r.permissions?.length ?? 0,
+                  }))}
                   onSelect={(r) => {
                     setSelection(r);
                     setEdit(true);
+                    setEditorOpen(false);
                   }}
-                  columns={["id", "username", "is_active", "roles"]}
+                  columns={[
+                    "username",
+                    "role_names",
+                    "is_active",
+                    "last_login",
+                  ]}
                 />
                 {canAll("user.manage") && (
-                  <>
-                    <h3>
-                      {edit
-                        ? uiText("Cập nhật người dùng")
-                        : uiText("Tạo người dùng")}
-                    </h3>
-                    <button
-                      className="secondary"
-                      onClick={() => {
-                        setEdit(false);
-                        setSelection(null);
-                      }}
-                    >
-                      {" "}
-                      {uiText("Tạo mới")}{" "}
-                    </button>
-                    <Form
-                      key={edit ? selection?.id : "new"}
-                      disabled={!canAll("user.manage")}
-                      initial={
-                        edit ? selection : { roles: [], is_active: true }
-                      }
-                      fields={[
-                        ...(!edit ? [field("username")] : []),
-                        { name: "password", type: "password", optional: edit },
-                        {
-                          name: "is_active",
-                          type: "boolean",
-                          options: ["true", "false"],
-                        },
-                        {
-                          name: "roles",
-                          label: "Roles",
-                          multiple: true,
-                          optional: true,
-                          options: (lookup.roles || []).map((r) => ({
-                            value: r.id,
-                            label: r.name,
-                          })),
-                        },
-                      ]}
-                      submit={(d) =>
-                        mutate("users", edit ? "PATCH" : "POST", {
-                          ...d,
-                          ...(edit ? { id: selection.id } : {}),
-                        })
-                      }
-                    />
-                  </>
+                  <button
+                    onClick={() => {
+                      setSelection(null);
+                      setEdit(false);
+                      setEditorOpen(true);
+                    }}
+                  >
+                    {text("Thêm người dùng", "Add user")}
+                  </button>
+                )}
+                {(selection || editorOpen) && (
+                  <DetailDrawer
+                    title={
+                      selection?.username || text("Thêm người dùng", "Add user")
+                    }
+                    onClose={() => {
+                      setSelection(null);
+                      setEditorOpen(false);
+                    }}
+                  >
+                    {!editorOpen && (
+                      <>
+                        <dl>
+                          <div>
+                            <dt>{text("Vai trò", "Roles")}</dt>
+                            <dd>
+                              {(selection.role_names || []).join(", ") || "—"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>{text("Trạng thái", "Status")}</dt>
+                            <dd>
+                              {selection.is_active
+                                ? text("Hoạt động", "Active")
+                                : text("Ngừng sử dụng", "Inactive")}
+                            </dd>
+                          </div>
+                        </dl>
+                        {canAll("user.manage") && (
+                          <button onClick={() => setEditorOpen(true)}>
+                            {text("Chỉnh sửa", "Edit")}
+                          </button>
+                        )}
+                      </>
+                    )}
+                    {canAll("user.manage") && editorOpen && (
+                      <>
+                        <h3>
+                          {edit
+                            ? uiText("Cập nhật người dùng")
+                            : uiText("Tạo người dùng")}
+                        </h3>
+                        <button
+                          className="secondary"
+                          onClick={() => {
+                            setEdit(false);
+                            setSelection(null);
+                          }}
+                        >
+                          {" "}
+                          {uiText("Tạo mới")}{" "}
+                        </button>
+                        <Form
+                          key={edit ? selection?.id : "new"}
+                          disabled={!canAll("user.manage")}
+                          initial={
+                            edit ? selection : { roles: [], is_active: true }
+                          }
+                          fields={[
+                            ...(!edit ? [field("username")] : []),
+                            {
+                              name: "password",
+                              type: "password",
+                              optional: edit,
+                            },
+                            {
+                              name: "is_active",
+                              type: "boolean",
+                              options: ["true", "false"],
+                            },
+                            {
+                              name: "roles",
+                              label: "Roles",
+                              multiple: true,
+                              optional: true,
+                              options: (lookup.roles || []).map((r) => ({
+                                value: r.id,
+                                label: r.name,
+                              })),
+                            },
+                          ]}
+                          submit={(d) =>
+                            mutate("users", edit ? "PATCH" : "POST", {
+                              ...d,
+                              ...(edit ? { id: selection.id } : {}),
+                            })
+                          }
+                        />
+                      </>
+                    )}
+                  </DetailDrawer>
                 )}
               </section>
             )}
@@ -1398,101 +1697,91 @@ function App() {
                   )}{" "}
                 </p>
                 <Table
-                  rows={rows}
+                  rows={rows.map((r) => ({
+                    ...r,
+                    permission_count: r.permissions?.length ?? 0,
+                  }))}
                   onSelect={(r) => {
                     setSelection(r);
                     setEdit(true);
+                    setEditorOpen(false);
                   }}
-                  columns={["id", "name", "permissions"]}
+                  columns={["name", "permission_count"]}
                 />
-                <h3>{edit ? uiText("Cập nhật role") : uiText("Tạo role")}</h3>
                 <button
-                  className="secondary"
                   onClick={() => {
-                    setEdit(false);
                     setSelection(null);
+                    setEdit(false);
+                    setEditorOpen(true);
                   }}
                 >
-                  {" "}
-                  {uiText("Tạo mới")}{" "}
+                  {text("Thêm vai trò", "Add role")}
                 </button>
-                <RoleForm
-                  key={edit ? selection?.id : "new"}
-                  initial={edit ? selection : null}
-                  submit={(d) =>
-                    mutate("roles", edit ? "PATCH" : "POST", {
-                      ...d,
-                      ...(edit ? { id: selection.id } : {}),
-                    })
-                  }
-                />
+                {(selection || editorOpen) && (
+                  <DetailDrawer
+                    title={selection?.name || text("Thêm vai trò", "Add role")}
+                    onClose={() => {
+                      setSelection(null);
+                      setEditorOpen(false);
+                    }}
+                  >
+                    {!editorOpen && (
+                      <>
+                        <dl>
+                          {(selection.permissions || []).map((grant) => (
+                            <div key={grant.permission}>
+                              <dt>
+                                {permissionLabel(grant.permission, language)}
+                              </dt>
+                              <dd>
+                                <StatusBadge value={grant.scope} />
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                        <button onClick={() => setEditorOpen(true)}>
+                          {text("Chỉnh sửa", "Edit")}
+                        </button>
+                      </>
+                    )}
+                    {editorOpen && (
+                      <>
+                        <h3>
+                          {edit ? uiText("Cập nhật role") : uiText("Tạo role")}
+                        </h3>
+                        <button
+                          className="secondary"
+                          onClick={() => {
+                            setEdit(false);
+                            setSelection(null);
+                          }}
+                        >
+                          {" "}
+                          {uiText("Tạo mới")}{" "}
+                        </button>
+                        <RoleForm
+                          key={edit ? selection?.id : "new"}
+                          initial={edit ? selection : null}
+                          submit={(d) =>
+                            mutate("roles", edit ? "PATCH" : "POST", {
+                              ...d,
+                              ...(edit ? { id: selection.id } : {}),
+                            })
+                          }
+                        />
+                      </>
+                    )}
+                  </DetailDrawer>
+                )}
               </section>
             )}
             {page === "Settings" && data && (
               <section>
-                <h2>{uiText("Ngưỡng cảnh báo")}</h2>
-                <dl>
-                  {Object.entries(data).map(([k, v]) => (
-                    <div key={k}>
-                      <dt>{fieldText(k)}</dt>
-                      <dd>{v}</dd>
-                    </div>
-                  ))}
-                </dl>
-                <Form
-                  fields={[
-                    {
-                      name: "key",
-                      options: ["temperature_max", "humidity_max"],
-                    },
-                    number("value"),
-                  ]}
+                <SettingsPanel
+                  data={data}
                   submit={(d) => mutate("settings", "PATCH", d)}
                 />
-                <p className="muted">
-                  {" "}
-                  {uiText(
-                    "Ngưỡng áp dụng khi nhận mẫu telemetry tiếp theo.",
-                  )}{" "}
-                </p>
               </section>
-            )}
-            {["Environment", "Alarms", "Transactions", "Audit Logs"].includes(
-              page,
-            ) && (
-              <div className="toolbar">
-                <button
-                  className="secondary"
-                  disabled={!Number(filters.offset || 0)}
-                  onClick={() =>
-                    setFilters({
-                      ...filters,
-                      offset: Math.max(0, Number(filters.offset || 0) - 200),
-                    })
-                  }
-                >
-                  {" "}
-                  {uiText("Trang trước")}{" "}
-                </button>
-                <span>
-                  {" "}
-                  {uiText("Trang")}{" "}
-                  {Math.floor(Number(filters.offset || 0) / 200) + 1}
-                </span>
-                <button
-                  className="secondary"
-                  disabled={rows.length < 200}
-                  onClick={() =>
-                    setFilters({
-                      ...filters,
-                      offset: Number(filters.offset || 0) + 200,
-                    })
-                  }
-                >
-                  {" "}
-                  {uiText("Trang sau")}{" "}
-                </button>
-              </div>
             )}
           </>
         )}
@@ -1506,16 +1795,48 @@ function App() {
     </Navigation>
   );
 }
+function permissionLabel(permission, language) {
+  const [module, action] = permission.split(".");
+  const modules = {
+    inventory: ["Kho hàng", "Inventory"],
+    ipc: ["IPC", "IPC"],
+    cabinet: ["Tủ & rack", "Cabinets & racks"],
+    environment: ["Môi trường", "Environment"],
+    alarm: ["Cảnh báo", "Alerts"],
+    audit: ["Nhật ký", "Activity"],
+    user: ["Người dùng", "Users"],
+    role: ["Vai trò", "Roles"],
+    system: ["Cấu hình", "Settings"],
+    dashboard: ["Tổng quan", "Dashboard"],
+  };
+  const actions = {
+    view: ["Xem", "View"],
+    manage: ["Quản lý", "Manage"],
+    move: ["Nhập / xuất", "Receive / issue"],
+    operate: ["Điều khiển", "Operate"],
+    acknowledge: ["Tiếp nhận", "Acknowledge"],
+    adjust: ["Điều chỉnh tồn", "Adjust stock"],
+  };
+  Object.assign(actions, {
+    create: ["Tạo", "Create"],
+    update: ["Cập nhật", "Update"],
+    delete: ["Xóa", "Delete"],
+    control: ["Điều khiển", "Control"],
+  });
+  const index = language === "en" ? 1 : 0;
+  return `${modules[module]?.[index] || module} · ${actions[action]?.[index] || action}`;
+}
 function RoleForm({ initial, submit }) {
-  useLanguage();
+  const language = useLanguage();
   const [permissions, setPermissions] = useState([]),
     [grants, setGrants] = useState(initial?.permissions || []),
     [name, setName] = useState(initial?.name || ""),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [loadError, setLoadError] = useState(false);
   useEffect(() => {
     api("permissions")
       .then(setPermissions)
-      .catch(() => {});
+      .catch(() => setLoadError(true));
   }, []);
   return (
     <form
@@ -1539,32 +1860,51 @@ function RoleForm({ initial, submit }) {
           required
         />
       </label>
-      <div className="permission-grid">
-        {permissions.map((p) => (
-          <label key={p}>
-            {p}
-            <select
-              value={grants.find((g) => g.permission === p)?.scope || ""}
-              onChange={(e) =>
-                setGrants([
-                  ...grants.filter((g) => g.permission !== p),
-                  ...(e.target.value
-                    ? [{ permission: p, scope: e.target.value }]
-                    : []),
-                ])
-              }
-            >
-              <option value="">{uiText("Không cấp")}</option>
-              {["REAL", "SIMULATION", "ALL"].map((s) => (
-                <option key={s} value={s}>
-                  {uiText(s)}
-                </option>
+      {loadError && (
+        <p className="error">
+          {language === "en"
+            ? "Could not load permissions. Close and reopen to retry."
+            : "Không tải được quyền. Đóng và mở lại để thử lại."}
+        </p>
+      )}
+      {[...new Set(permissions.map((p) => p.split(".")[0]))].map((module) => (
+        <fieldset key={module}>
+          <legend>
+            {permissionLabel(`${module}.view`, language).split(" · ")[0]}
+          </legend>
+          <div className="permission-grid">
+            {permissions
+              .filter((p) => p.startsWith(module + "."))
+              .map((p) => (
+                <label key={p}>
+                  {permissionLabel(p, language)}
+                  <select
+                    aria-label={permissionLabel(p, language)}
+                    value={grants.find((g) => g.permission === p)?.scope || ""}
+                    onChange={(e) =>
+                      setGrants([
+                        ...grants.filter((g) => g.permission !== p),
+                        ...(e.target.value
+                          ? [{ permission: p, scope: e.target.value }]
+                          : []),
+                      ])
+                    }
+                  >
+                    <option value="">{uiText("Không cấp")}</option>
+                    {["REAL", "SIMULATION", "ALL"].map((s) => (
+                      <option key={s} value={s}>
+                        {uiText(s)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               ))}
-            </select>
-          </label>
-        ))}
-      </div>
-      <button disabled={busy}>{uiText("Lưu role")}</button>
+          </div>
+        </fieldset>
+      ))}
+      <button disabled={busy || loadError || !permissions.length}>
+        {uiText("Lưu role")}
+      </button>
     </form>
   );
 }
@@ -1580,7 +1920,12 @@ function OperationPanel({ source, can, act, version, initialId }) {
         .then((r) => {
           if (live) {
             setRows(r);
-            setSelected(previous => r.find(row => String(row.id) === String(previous?.id || initialId)) || null);
+            setSelected(
+              (previous) =>
+                r.find(
+                  (row) => String(row.id) === String(previous?.id || initialId),
+                ) || null,
+            );
             setError("");
           }
         })

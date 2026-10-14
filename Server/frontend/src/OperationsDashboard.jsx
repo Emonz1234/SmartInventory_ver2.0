@@ -57,13 +57,36 @@ export default function OperationsDashboard({
     );
   const offline = devices.filter((d) => !d.online),
     pending = devices.filter((d) => d.synchronized === false);
-  const blockers = (data.operations || []).filter(op => !["confirmed", "failed", "cancelled"].includes(op.state));
-  const faultCount = data.summary?.active_alarms;
+  const blockers = (data.operations || []).filter(
+    (op) => !["confirmed", "failed", "cancelled"].includes(op.state),
+  );
+  const environmental = (alarm) =>
+    /TEMPERATURE|TEMP_HIGH|TEMP_LOW|HIGH_TEMP|LOW_TEMP|HUMID|SMOKE|GAS|ENVIRONMENT|DHT|MQ2|ENV_SENSOR/.test(
+      String(alarm.code || "").toUpperCase(),
+    );
+  const environmentCount = data.alarms
+    ? alarms.filter(environmental).length
+    : null;
+  const faultCount = data.alarms
+    ? alarms.filter((alarm) => !environmental(alarm)).length
+    : null;
+  const cabinets = [
+    ...racks
+      .reduce((groups, rack) => {
+        const key = `${rack.source_type}:${rack.ipc_id}:${rack.cabinet_id}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(rack);
+        return groups;
+      }, new Map())
+      .values(),
+  ];
   const abnormal =
     Number(faultCount) > 0 ||
+    Number(environmentCount) > 0 ||
     offline.length > 0 ||
     pending.length > 0 ||
-    low.length > 0 || blockers.length > 0;
+    low.length > 0 ||
+    blockers.length > 0;
   const unknown = Object.keys(errors).length > 0;
   const go = (page, filters = {}) => navigate(page, filters);
   return (
@@ -109,34 +132,38 @@ export default function OperationsDashboard({
         />
       </section>
       {Object.entries(errors).map(([key, error]) => (
-        <ErrorState
-          key={key}
-          retry={() => setReload((v) => v + 1)}
-        >{`${text("Không tải được trạng thái", "Could not load status")}: ${key}. ${errorText(error)}`}</ErrorState>
+        <ErrorState key={key} retry={() => setReload((v) => v + 1)}>
+          {text(
+            "Không tải được một phần trạng thái. Vui lòng thử lại.",
+            "Some status could not be loaded. Please try again.",
+          )}
+        </ErrorState>
       ))}
       <div className="metrics operational-metrics">
         {[
           [
-            text("IPC online / offline", "IPC online / offline"),
+            text("IPC online / tổng", "IPC online / total"),
             data.summary
-              ? `${data.summary.online} / ${data.summary.ipcs - data.summary.online}`
+              ? `${data.summary.online} / ${data.summary.ipcs}`
               : "—",
           ],
           [
             text("Cabinet khả dụng", "Available cabinets"),
             data.racks
-              ? [...Map.groupBy(racks, (r) => r.cabinet_id).values()].filter(
-                  (group) => group.every((r) => deviceStatus(r) === "Ready"),
-                ).length
+              ? `${cabinets.filter((group) => group.every((r) => deviceStatus(r) === "Ready")).length} / ${cabinets.length}`
               : "—",
           ],
           [
             text("Rack khả dụng", "Available racks"),
             data.racks
-              ? racks.filter((r) => deviceStatus(r) === "Ready").length
+              ? `${racks.filter((r) => deviceStatus(r) === "Ready").length} / ${racks.length}`
               : "—",
           ],
           [text("Lỗi đang hoạt động", "Active errors"), faultCount ?? "—"],
+          [
+            text("Cảnh báo môi trường", "Environmental alerts"),
+            environmentCount ?? "—",
+          ],
           [
             text("Bản ghi chờ đồng bộ", "Records pending sync"),
             data.inventory?.pending_sync ?? "—",
@@ -190,18 +217,50 @@ export default function OperationsDashboard({
         <section>
           <h2>{text("Cần chú ý", "Needs attention")}</h2>
           <div className="attention-list">
-            {blockers.map(op => <article key={op.id} className="attention-item">
-              <div>
-                <strong>{text('Thao tác đang chờ', 'Pending operation')}: {op.kind} · {op.device_id}</strong>
-                <p>{text('Đang chặn lệnh mới trên IPC này. Kiểm tra kết quả thực tế và xác nhận thao tác trước khi gửi lại.', 'Blocks new commands on this IPC. Inspect the actual outcome and confirm this operation before sending another.')}</p>
-                <small>{op.rack__cabinet__name || ''} / {op.rack__name || `Rack ${op.rack_id}`} {op.item__name ? ` · ${op.item__name} × ${op.quantity}` : ''}</small>
-                <p><StatusBadge value={op.state} /> <StatusBadge value={op.execution_state} /> <StatusBadge value={op.source_type} /></p>
-                {op.error && <p className="error">{errorText(op.error)}</p>}
-                <small>{new Date(op.created_at).toLocaleString()} · {op.requested_by__username || ''}</small>
-                <small style={{ display: 'block', overflowWrap: 'anywhere' }}>{text('Mã lệnh', 'Command ID')}: {op.id}</small>
-              </div>
-              <button className="secondary" onClick={() => go('Racks', { operation_id: op.id, source_type: op.source_type })}>{text('Kiểm tra thao tác', 'Review operation')}</button>
-            </article>)}
+            {blockers.slice(0, 2).map((op) => (
+              <article key={op.id} className="attention-item">
+                <div>
+                  <strong>
+                    {text("Thao tác đang chờ", "Pending operation")}: {op.kind}{" "}
+                    · {op.device_id}
+                  </strong>
+                  <p>
+                    {text(
+                      "Đang chặn lệnh mới trên IPC này. Kiểm tra kết quả thực tế và xác nhận thao tác trước khi gửi lại.",
+                      "Blocks new commands on this IPC. Inspect the actual outcome and confirm this operation before sending another.",
+                    )}
+                  </p>
+                  <small>
+                    {op.rack__cabinet__name || ""} /{" "}
+                    {op.rack__name || `Rack ${op.rack_id}`}{" "}
+                    {op.item__name
+                      ? ` · ${op.item__name} × ${op.quantity}`
+                      : ""}
+                  </small>
+                  <p>
+                    <StatusBadge value={op.state} />{" "}
+                    <StatusBadge value={op.execution_state} />{" "}
+                    <StatusBadge value={op.source_type} />
+                  </p>
+                  {op.error && <p className="error">{errorText(op.error)}</p>}
+                  <small>
+                    {new Date(op.created_at).toLocaleString()} ·{" "}
+                    {op.requested_by__username || ""}
+                  </small>
+                </div>
+                <button
+                  className="secondary"
+                  onClick={() =>
+                    go("Racks", {
+                      operation_id: op.id,
+                      source_type: op.source_type,
+                    })
+                  }
+                >
+                  {text("Kiểm tra thao tác", "Review operation")}
+                </button>
+              </article>
+            ))}
 
             {alarms.slice(0, 4).map((a) => (
               <article key={a.id} className="attention-item danger">
@@ -216,14 +275,19 @@ export default function OperationsDashboard({
                     )}
                   </p>
                   <small>
-                    {a.rack_id ? `Rack ${a.rack_id} · ` : ""}
+                    {a.location ||
+                      (a.rack_index ? `Rack ${a.rack_index} · ` : "")}
                     {new Date(a.created_at).toLocaleString()}
                   </small>
                 </div>
                 <button
                   className="secondary"
                   onClick={() =>
-                    go("Alarms", { alert_id: a.id, source_type: a.source_type })
+                    go("Alarms", {
+                      alert_id: a.id,
+                      source_type: a.source_type,
+                      ...(environmental(a) ? { ui_mode: "environment" } : {}),
+                    })
                   }
                 >
                   {text("Xem cảnh báo", "Review alert")}
@@ -335,7 +399,7 @@ export default function OperationsDashboard({
         <section>
           <h2>{text("Trạng thái thiết bị", "Device status")}</h2>
           <div className="device-cards">
-            {devices.map((d) => (
+            {devices.slice(0, 4).map((d) => (
               <button
                 className="device-card secondary"
                 key={d.id}
@@ -361,6 +425,11 @@ export default function OperationsDashboard({
                 </span>
               </button>
             ))}
+            {devices.length > 4 && can("ipc.view") && (
+              <button className="link" onClick={() => go("IPC Devices")}>
+                {text("Xem tất cả IPC", "View all IPCs")} →
+              </button>
+            )}
             {!devices.length && (
               <p className="empty">
                 {text(

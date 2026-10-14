@@ -30,7 +30,7 @@ const readline = require('node:readline');
   let browser;
   try {
     browser = await chromium.launch({ channel: 'chrome', headless: true });
-    const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
+    const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
     const errors = [], commands = [], recoveries = [];
     page.on('pageerror', error => errors.push(String(error)));
     await page.addInitScript(() => {
@@ -89,7 +89,11 @@ const readline = require('node:readline');
       assert(await homeButton().isDisabled());
       assert.match(await modal.innerText(), /Cabinet 1 · Rack 5/);
       assert.match(await modal.innerText(), /OPEN · Rack 3/);
-      assert.match(await modal.innerText(), /440 mm → 500 mm/);
+      assert.match(await modal.innerText(), /440\.0 \/ 500\.0 mm/);
+      assert.equal(await modal.locator('details').getAttribute('open'), null, 'Technical details start collapsed');
+      await modal.locator('summary').click();
+      assert.match(await modal.locator('details').innerText(), /Command:|Fault ID:/);
+      await modal.locator('summary').click();
       await page.keyboard.press('Escape');
       assert(await modal.isVisible(), 'Escape cannot dismiss fault');
       return snapshot.fault_context.command_id;
@@ -107,6 +111,15 @@ const readline = require('node:readline');
     await clear();
     fs.mkdirSync('test-results/ipcsim-fault-recovery', { recursive: true });
     await page.screenshot({ path: 'test-results/ipcsim-fault-recovery/ready.png' });
+    for(const viewport of [{width:1366,height:768},{width:1920,height:1080}]){
+      await page.setViewportSize(viewport);
+      await page.screenshot({path:`test-results/ipcsim-fault-recovery/ready-${viewport.width}.png`,animations:'disabled'});
+      for(const button of [continueButton(),homeButton()]){
+        const action=await button.boundingBox();
+        assert(action && action.y>=0 && action.y+action.height<=viewport.height,'Recovery actions stay accessible in viewport');
+      }
+    }
+    await page.setViewportSize({width:1366,height:768});
     const beforeResume = recoveries.length;
     await continueButton().evaluate(button => { button.click(); button.click(); button.click(); });
     await waitFor(() => recoveries.length > beforeResume);
@@ -117,6 +130,10 @@ const readline = require('node:readline');
     assert.equal(snapshot.active_command_id, commandId);
     assert.equal(snapshot.racks['5'].position_mm, 440);
     await modal.waitFor({ state: 'hidden' });
+    const resumedPopup = page.getByRole('dialog', { name: 'Opening Rack 3' });
+    await resumedPopup.waitFor();
+    assert.equal(await resumedPopup.getByText('Operation complete', { exact: true }).count(), 0, 'Resume is not completion');
+    await page.screenshot({ path: 'test-results/ipcsim-fault-recovery/resuming.png' });
     const completed = await call({ operation: 'COMPLETE' });
     snapshot = completed.state;
     await page.getByLabel('Rack 3 light on', { exact: true }).waitFor();
@@ -124,6 +141,7 @@ const readline = require('node:readline');
     assert.deepEqual(completed.steps, [[6, 'RIGHT'], [5, 'RIGHT'], [4, 'RIGHT'], [3, 'RIGHT']]);
     assert.equal(commands.length, commandCount, 'Resume must not resend OPEN or completed steps');
     assert.equal(snapshot.active_command_id, null);
+    await page.getByRole('dialog').getByRole('button', { name: 'Done', exact: true }).click();
 
     // 2: Home uses actual interrupted position and clears pending workflows.
     await openAndFault();
@@ -185,7 +203,9 @@ const readline = require('node:readline');
     assert.equal(recoveries.length, globalResume + 1);
     snapshot = (await call({ operation: 'STATE' })).state;
     await modal.waitFor({ state: 'hidden' });
+    await page.getByRole('dialog', { name: 'Resuming saved operation' }).waitFor();
     snapshot = (await call({ operation: 'COMPLETE' })).state;
+    await page.getByRole('dialog', { name: 'Operation complete' }).getByRole('button', { name: 'Done', exact: true }).click();
     await page.goto(base);
     await page.getByLabel('Rack 3 light on', { exact: true }).waitFor();
     assert.equal(await page.getByRole('dialog').count(), 0, 'No stale incident after changing pages');
@@ -225,6 +245,21 @@ const readline = require('node:readline');
     await modal.waitFor({ state: 'hidden' });
     snapshot = (await call({ operation: 'COMPLETE' })).state;
     await page.getByLabel('Rack 3 light on', { exact: true }).waitFor();
+    // Presentation-only fixture: critical fault with no checkpoint measurements.
+    snapshot = (await call({ operation: 'RESET' })).state;
+    snapshot = (await call({ operation: 'REFERENCE_LOST' })).state;
+    snapshot.fault_context.classification = 'FATAL';
+    snapshot.fault_context.severity = 'CRITICAL';
+    snapshot.fault_context.current_position = null;
+    snapshot.fault_context.target_position = null;
+    snapshot.fault_context.progress = null;
+    await page.goto(base.replace('/cabinets/1', '/cabinets'));
+    await modal.getByText('Critical', { exact: true }).waitFor();
+    assert(await continueButton().isDisabled());
+    assert(await homeButton().isDisabled());
+    assert(!/NaN|undefined|null/.test(await modal.innerText()));
+    assert.equal(await modal.locator('details').getAttribute('open'), null);
+    await page.screenshot({ path: 'test-results/ipcsim-fault-recovery/critical-no-position.png' });
     assert.deepEqual(errors, []);
     console.log('PASS: all seven fault recovery cases; real IPC/Simulation checkpoint, no automatic/duplicate resume or replay');
   } finally {

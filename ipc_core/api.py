@@ -113,6 +113,10 @@ def health():
     routes = {str(row['data']['id']): (links.get((int(row['data']['rack_code'])-1)//RACKS_PER_GROUP+1).connected
               if (int(row['data']['rack_code'])-1)//RACKS_PER_GROUP+1 in links else False)
               for row in runtime.store.records() if row['kind'] == 'rack'} if links else {}
+    if settings.DEVICE_TYPE == 'IPC':
+        routes = {str(row['data']['id']): serial_manager.connected and
+                  getattr(serial_manager, 'rack_states', {}).get(int(row['data']['rack_code']), {}).get('hardware_error') != 'INVALID_RACK'
+                  for row in runtime.store.records() if row['kind'] == 'rack'}
     local_state = runtime.sync.repo.state()
     hardware_status = 'ONLINE' if serial_manager.connected else 'OFFLINE'
     fault_reasons = []
@@ -161,6 +165,8 @@ def health():
             "serial_connected": serial_manager.connected, "simulation_online": settings.DEVICE_TYPE == "IPCSIM" and serial_manager.connected,
             "hardware_enabled": settings.DEVICE_TYPE != "IPC" or settings.HARDWARE_ENABLED,
             "hardware_commands_supported": serial_manager.adapter.supports_commands,
+            "hardware_racks": getattr(serial_manager, 'rack_states', {}),
+            "hardware_pending": list(getattr(serial_manager, 'pending', {})),
             "database_healthy": True, "server_synced": runtime.synced,
             "serial_groups": serial_status()['groups'],
             "serial_routes": routes,

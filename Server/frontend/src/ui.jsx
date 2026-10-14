@@ -12,6 +12,7 @@ export function Icon({ name = "grid" }) {
     grid: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
     box: "M3 7l9-4 9 4v10l-9 4-9-4z M3 7l9 4 9-4 M12 11v10",
     device: "M4 3h16v14H4z M8 21h8 M12 17v4",
+    climate: "M10 14V5a2 2 0 0 1 4 0v9a4 4 0 1 1-4 0 M12 8v9",
     activity: "M2 12h5l3-8 4 16 3-8h5",
     users:
       "M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8 M2 21v-3a7 7 0 0 1 14 0v3 M17 4a4 4 0 0 1 0 8 M19 15a6 6 0 0 1 3 6",
@@ -40,7 +41,29 @@ export function StatusBadge({ value }) {
     return <span className="muted">—</span>;
   const text = String(value);
   return (
-    <span className={"inv-chip " + text.toLowerCase().replaceAll(" ", "-")}>
+    <span
+      className={
+        "inv-chip ui-status " + text.toLowerCase().replaceAll(" ", "-")
+      }
+    >
+      <span aria-hidden="true">
+        {{
+          Error: "✕ ",
+          Critical: "✕ ",
+          Fault: "✕ ",
+          Warning: "⚠ ",
+          Offline: "○ ",
+          Unconfirmed: "○ ",
+          Pending: "◷ ",
+          Syncing: "◷ ",
+          Maintenance: "⚒ ",
+          Ready: "● ",
+          Online: "● ",
+          Normal: "● ",
+          Synced: "● ",
+          Cleared: "● ",
+        }[text.charAt(0).toUpperCase() + text.slice(1).toLowerCase()] || ""}
+      </span>
       {["REAL", "SIMULATION"].includes(text) ? text : statusText(text)}
     </span>
   );
@@ -242,13 +265,19 @@ export function DataTable({
   columns,
   onSelect,
   actions,
-  renderValue,
+  renderValue = (value) =>
+    value == null
+      ? "—"
+      : typeof value === "object"
+        ? JSON.stringify(value)
+        : String(value),
+  columnLabels = {},
 }) {
   useLanguage();
   const [query, setQuery] = useState(""),
     [sort, setSort] = useState(null),
     [page, setPage] = useState(0);
-  const size = 20;
+  const [size, setSize] = useState(5);
   const filtered = rows.filter((r) =>
     columns.some((c) =>
       JSON.stringify(r[c] ?? "")
@@ -277,8 +306,12 @@ export function DataTable({
     page,
     Math.max(0, Math.ceil(sorted.length / size) - 1),
   );
-  const label = (c) => fieldText(c);
+  const label = (c) => columnLabels[c] || fieldText(c);
   const value = (r, c) => {
+    if (c === "is_active" && typeof r[c] === "boolean")
+      return <StatusBadge value={r[c] ? "Active" : "Inactive"} />;
+    if (c === "role_names" && Array.isArray(r[c]))
+      return r[c].join(", ") || "—";
     if (["error", "error_message", "sync_error", "message"].includes(c) && r[c])
       return errorText(r[c]);
     if (c === "source_type") return <SourceBadge source={r[c]} />;
@@ -349,6 +382,28 @@ export function DataTable({
             setQuery(v);
             setPage(0);
           }}
+        />
+        <label className="table-page-size">
+          {uiText("Rows per page:")}
+          <select
+            value={size}
+            onChange={(event) => {
+              setSize(Number(event.target.value));
+              setPage(0);
+            }}
+          >
+            {[5, 10, 20, 50].map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Pagination
+          page={current}
+          total={filtered.length}
+          size={size}
+          onChange={setPage}
         />
         <span className="muted">
           {filtered.length} {uiText("kết quả")}
@@ -429,14 +484,6 @@ export function DataTable({
         </div>
       ) : (
         <EmptyState />
-      )}
-      {filtered.length > size && (
-        <Pagination
-          page={current}
-          total={filtered.length}
-          size={size}
-          onChange={setPage}
-        />
       )}
     </div>
   );

@@ -20,9 +20,14 @@ const isVietnamFormattedDate = (value: string): boolean => {
   return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
 }
 
-export const parseVietnamDate = (value?: string | null): Date | null => {
+export const parseVietnamDate = (value?: string | number | null): Date | null => {
   if (!value) return null
 
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return null
+    const date = new Date(Math.abs(value) < 1e12 ? value * 1000 : value)
+    return Number.isNaN(date.getTime()) ? null : date
+  }
   const trimmed = value.trim()
   if (isVietnamFormattedDate(trimmed)) {
     const date = new Date(trimmed.replace(' ', 'T') + '+07:00')
@@ -33,8 +38,12 @@ export const parseVietnamDate = (value?: string | null): Date | null => {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
-export const formatDateTime = (value?: string | null): string => {
+export const formatDateTime = (value?: string | number | null): string => {
   if (!value) return '--'
+  if (typeof value === 'number') {
+    const date = parseVietnamDate(value)
+    return date ? dateTimeFormatter.format(date) : '--'
+  }
   const trimmed = value.trim()
 
   if (isVietnamFormattedDate(trimmed)) {
@@ -45,7 +54,7 @@ export const formatDateTime = (value?: string | null): string => {
   return date ? dateTimeFormatter.format(date) : trimmed
 }
 
-export const formatTimeShort = (value?: string | null): string => {
+export const formatTimeShort = (value?: string | number | null): string => {
   if (!value) return '--'
 
   const date = parseVietnamDate(value)

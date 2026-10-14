@@ -4,8 +4,8 @@ export { t, errorText, statusText, getLanguage, fieldText, recordError } from '.
 export const useLanguage = () => useSyncExternalStore(subscribe, getLanguage, () => 'vi');
 const updateTitle = () => {
   if (!globalThis.document) return;
-  document.title = t('IPCSIM Simulation');
-  document.querySelector('meta[name="application-name"]')?.setAttribute('content', t('IPCSIM Simulation'));
+  document.title = 'Smart Inventory Edge';
+  document.querySelector('meta[name="application-name"]')?.setAttribute('content', 'Smart Inventory Edge');
 };
 updateTitle();
 subscribe(updateTitle);

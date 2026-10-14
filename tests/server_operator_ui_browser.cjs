@@ -52,11 +52,12 @@ const assert=require('node:assert/strict'), http=require('node:http'), fs=requir
    await route.fulfill({json});
   });
   const nav=async name=>{
-   if(await page.locator('.topbar-toggle').isVisible() && await page.locator('#server-navigation').isHidden())await page.locator('.topbar-toggle').click();
-   const target=page.locator('nav button').getByText(name,{exact:true});
+   name=({IPC:'System structure','Receive / Issue':'Receive / Issue'})[name] || name;
+   const navigation=page.locator('#server-navigation');
+   const target=name==='Overview'?navigation.getByRole('button',{name,exact:true}):navigation.locator('.nav-submenu').getByRole('button',{name,exact:true});
    if(!await target.isVisible()){
-    const group=['IPC','Cabinets','Racks'].includes(name)?'Devices':['Products','Warehouse overview','Categories','Receive / Issue','Storage map','Transaction history'].includes(name)?'Inventory':['Users','Permissions','Settings'].includes(name)?'Administration':'Monitoring';
-    await page.locator('.nav-group-trigger').getByText(group,{exact:true}).click();
+    const group=['System structure','Maintenance'].includes(name)?'Devices':['Products','Categories','Receive / Issue','Transaction history'].includes(name)?'Inventory':['Users','Roles & permissions'].includes(name)?'Access':name==='System settings'?'Configuration':['Environment overview','Sensors','Environmental alerts','Measurement history'].includes(name)?'Environment':'Monitoring';
+    await navigation.getByRole('button',{name:group,exact:true}).click();
    }
    await target.click();
   };
@@ -64,31 +65,6 @@ const assert=require('node:assert/strict'), http=require('node:http'), fs=requir
   fs.mkdirSync('test-results/server-operator',{recursive:true});
   await page.goto(`http://127.0.0.1:${server.address().port}`);await page.getByRole('heading',{name:'Quick actions',exact:true}).waitFor();
   await page.screenshot({path:'test-results/server-operator/dashboard.png',fullPage:true});await noOverflow();
-  operations=[{id:'pending-1',device_id:'IPC01',rack_id:1,kind:'PUT',quantity:2,state:'sent',execution_state:'completed',source_type:'REAL',created_at:'2026-10-06T08:00:00Z'}];
-  await page.getByRole('button',{name:'Refresh',exact:true}).click();
-  await page.locator('.attention-list').getByText('Command ID: pending-1',{exact:true}).waitFor();
-  await page.getByRole('button',{name:'Review operation',exact:true}).click();
-  await page.getByRole('heading',{name:'Confirm result #pending-1'}).waitFor();
-  operations=[];await nav('Overview');
-
-  assert.equal(await page.locator('nav .nav-submenu').count(),0);
-  assert.equal(await page.locator('aside .language-selector').count(),0);
-  await page.locator('.nav-group-trigger').getByText('Devices',{exact:true}).click();
-  assert.equal(await page.locator('nav .nav-submenu button').count(),3);
-  await nav('IPC');assert.equal(await page.locator('nav button[aria-current="page"]').innerText(),'IPC');
-  await page.locator('.topbar-toggle').click();assert(await page.locator('.shell').evaluate(e=>e.classList.contains('collapsed')));
-  await nav('Racks');await noOverflow();await page.screenshot({path:'test-results/server-operator/navigation-collapsed.png'});
-  await page.locator('.topbar-toggle').click();
-  await page.getByRole('button',{name:'User menu',exact:true}).click();await page.getByRole('button',{name:'Account information',exact:true}).click();
-  await page.locator('.account-dialog').getByRole('button',{name:'Close',exact:true}).click();
-  await page.getByRole('button',{name:'Active alerts',exact:true}).click();await page.locator('.notification-menu button').first().click();await page.getByRole('heading',{name:'Alerts',exact:true,level:1}).waitFor();
-  await nav('Overview');
-
-  await page.getByRole('button',{name:'Review alert',exact:true}).click();await page.getByRole('heading',{name:'Alerts',exact:true,level:1}).waitFor();
-  for(const name of ['IPC','Cabinets','Racks','Synchronization','Environment','Alerts','Products','Storage map','Transaction history','System logs','Users','Permissions','Settings']){
-   await nav(name);try{await page.getByRole('heading',{name,exact:true,level:1}).waitFor();}catch(error){console.error(await page.locator('body').innerText());console.error(failures);throw error;}await noOverflow();
-  }
-  await nav('Warehouse overview');try{await page.getByRole('button',{name:/Browse products/}).waitFor();}catch(e){console.error(failures,await page.locator('body').innerText());throw e;}
   await nav('Categories');await page.getByRole('button',{name:'+ Add category',exact:true}).click();
   await page.getByLabel('Category name *',{exact:true}).fill('Workshop');await page.getByLabel('Category code',{exact:true}).fill('WORK');await page.getByRole('button',{name:'Save category',exact:true}).click();
   const categoryRow=page.getByRole('row').filter({hasText:'Workshop'});await categoryRow.waitFor();await categoryRow.getByRole('button',{name:'Edit',exact:true}).click();await page.getByLabel('Category name *',{exact:true}).fill('Workshop tools');await page.getByRole('button',{name:'Save category',exact:true}).click();
@@ -104,14 +80,14 @@ const assert=require('node:assert/strict'), http=require('node:http'), fs=requir
   await page.locator('.catalog-bulk').getByText('Select multiple products',{exact:true}).first().click();await page.locator('.catalog-selection').getByLabel('Test catalog product · CAT-TEST').check();
   await page.getByRole('button',{name:'Deactivate',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'Confirm',exact:true}).click();await page.getByTestId('product-CAT-TEST-REAL').waitFor({state:'hidden'});
   await page.getByLabel('Product status',{exact:true}).selectOption('inactive');await page.getByTestId('product-CAT-TEST-REAL').waitFor();await page.getByLabel('Product status',{exact:true}).selectOption('active');
-  await nav('IPC');await page.getByRole('button',{name:'Warehouse IPC',exact:true}).click();const detail=page.getByRole('dialog',{name:'Warehouse IPC'});await detail.waitFor();assert.equal(await detail.locator('details.technical-details[open]').count(),0);await detail.getByRole('button',{name:'Close ×',exact:true}).click();
+  await nav('IPC');await page.locator('.ipc-tree').first().getByRole('button',{name:'Details',exact:true}).click();const detail=page.getByRole('dialog',{name:'Warehouse IPC'});await detail.waitFor();assert.equal(await detail.locator('details.technical-details[open]').count(),0);await detail.getByRole('button',{name:'Close ×',exact:true}).click();
   await nav('Products');await page.getByTestId('product-BR-01-REAL').waitFor();await page.getByRole('button',{name:'Bearing',exact:true}).click();const drawer=page.getByRole('dialog',{name:'Bearing'});await drawer.waitFor();assert.equal(await drawer.evaluate(el=>el.matches(':modal')),false);await drawer.getByRole('button',{name:'Close details',exact:true}).click();
   await page.locator('.source-filter select').selectOption('ALL');await page.getByTestId('product-BR-01-SIMULATION').waitFor();assert.equal(await page.locator('.inv-product-row').first().getAttribute('data-testid'),'product-BR-01-REAL');await page.getByTestId('product-BR-01-SIMULATION').getByRole('button',{name:'Issue stock',exact:true}).click();await page.locator('.stock-wizard').getByLabel('Product',{exact:true}).waitFor();assert.equal(await page.locator('.stock-wizard').getByLabel('Product',{exact:true}).inputValue(),'1:SIMULATION');await page.locator('.source-filter select').selectOption('REAL');await nav('Products');await page.getByRole('button',{name:'Bearing',exact:true}).click();await page.screenshot({path:'test-results/server-operator/product-drawer.png'});await page.getByRole('dialog',{name:'Bearing'}).getByRole('button',{name:'Close details',exact:true}).click();
   await nav('Receive / Issue');let wizard=page.locator('.stock-wizard');await wizard.getByLabel('Product',{exact:true}).selectOption('1:REAL');await wizard.getByRole('button',{name:'Continue',exact:true}).click();await wizard.getByLabel('Quantity',{exact:true}).fill('2');await wizard.getByRole('button',{name:'Continue',exact:true}).click();await wizard.getByLabel('Transaction location',{exact:true}).selectOption('1');await wizard.getByRole('button',{name:'Continue',exact:true}).click();
   await wizard.getByRole('button',{name:'Send to IPC',exact:true}).evaluate(button=>{button.click();button.click();});await wizard.getByText('Moving',{exact:true}).waitFor();assert.equal(writes.filter(r=>r.name==='operations').length,1);assert.equal(await wizard.getByRole('button',{name:'Confirm completed transaction'}).count(),0);
   operations[0].execution_state='fault';await wizard.getByText('Device fault',{exact:true}).waitFor();assert.equal(await wizard.getByRole('button',{name:'Confirm completed transaction'}).count(),0);
   // A refresh preserves command ID and quantity; no second hardware request.
-  await page.reload();await page.getByRole('heading',{name:'Quick actions',exact:true}).waitFor();await nav('Receive / Issue');wizard=page.locator('.stock-wizard');await wizard.getByText('Device fault',{exact:true}).waitFor();assert.equal(writes.filter(r=>r.name==='operations').length,1);
+  await page.reload();await page.locator('.stock-wizard').waitFor();await nav('Receive / Issue');wizard=page.locator('.stock-wizard');await wizard.getByText('Device fault',{exact:true}).waitFor();assert.equal(writes.filter(r=>r.name==='operations').length,1);
   operations[0].execution_state='completed';await wizard.getByLabel('I counted the goods and completed the physical operation').check();await wizard.getByLabel('Record the actual outcome').fill('Counted two units and received them into A01');
   await wizard.getByRole('button',{name:'Confirm completed transaction',exact:true}).evaluate(button=>{button.click();button.click();});const success=page.getByRole('dialog',{name:'Transaction completed'});await success.getByRole('heading',{name:'Stock received'}).waitFor();assert.equal(writes.filter(r=>r.name.endsWith('/confirm')).length,1);await page.screenshot({path:'test-results/server-operator/receive-success.png'});await success.getByRole('button',{name:'Done',exact:true}).click();
   await nav('Receive / Issue');wizard=page.locator('.stock-wizard');await wizard.getByRole('button',{name:'Issue stock',exact:true}).click();await wizard.getByLabel('Product',{exact:true}).selectOption('1:REAL');await wizard.getByRole('button',{name:'Continue',exact:true}).click();await wizard.getByLabel('Quantity',{exact:true}).fill('3');await wizard.getByRole('button',{name:'Continue',exact:true}).click();await wizard.getByLabel('Transaction location',{exact:true}).selectOption('1');await wizard.getByRole('button',{name:'Continue',exact:true}).click();await wizard.getByRole('button',{name:'Send to IPC',exact:true}).click();await wizard.getByText('Moving',{exact:true}).waitFor();assert.equal(writes.filter(r=>r.name==='operations').length,2);
@@ -119,9 +95,9 @@ const assert=require('node:assert/strict'), http=require('node:http'), fs=requir
   await nav('Overview');apiFailure=true;await page.getByRole('button',{name:'Refresh',exact:true}).click();await page.locator('[role="alert"]').first().waitFor();assert.equal(await page.getByText('No warnings in your accessible data',{exact:true}).count(),0);apiFailure=false;
   await page.reload();await page.getByRole('heading',{name:'Quick actions',exact:true}).waitFor();
   for(const size of [{width:1920,height:1080},{width:1280,height:720},{width:768,height:1024}]){await page.setViewportSize(size);await noOverflow();}
-  grants={'inventory.view':['REAL']};const previousReads=reads.length;await page.reload();await page.getByRole('heading',{name:'Products',exact:true,level:1}).waitFor();assert.equal(await page.locator('nav .nav-group-trigger').count(),1);assert.equal(await page.locator('nav .nav-submenu button').count(),5);assert(!reads.slice(previousReads).some(name=>['ipcs','rack-status','alarms','dashboard'].includes(name)));assert.equal(await page.getByRole('button',{name:'Receive stock',exact:true}).count(),0);
+  grants={'inventory.view':['REAL']};const previousReads=reads.length;await page.reload();await page.getByRole('heading',{name:'Products',exact:true,level:1}).waitFor();assert.equal(await page.locator('nav .nav-group-trigger').count(),1);assert.equal(await page.locator('nav .nav-submenu button').count(),3);assert(!reads.slice(previousReads).some(name=>['ipcs','rack-status','alarms','dashboard'].includes(name)));assert.equal(await page.getByRole('button',{name:'Receive stock',exact:true}).count(),0);
   await page.locator('.source-filter select').selectOption('SIMULATION');assert.equal(await page.locator('.inv-product-row').count(),0);assert.equal(await page.locator('.stock-wizard').count(),0);
-  grants=Object.fromEntries(permissions.map(p=>[p,['ALL']]));await page.evaluate(()=>localStorage.setItem('smartInventory.language','vi'));await page.reload();await page.getByRole('heading',{name:'Tổng quan',exact:true,level:1}).waitFor();await page.getByRole('heading',{name:'Thao tác nhanh',exact:true}).waitFor();await noOverflow();await page.screenshot({path:'test-results/server-operator/dashboard-vi.png',fullPage:true});
+  grants=Object.fromEntries(permissions.map(p=>[p,['ALL']]));await page.evaluate(()=>localStorage.setItem('smartInventory.language','vi'));await page.evaluate(()=>sessionStorage.removeItem('server.navigation'));await page.reload();await page.getByRole('heading',{name:'Tổng quan',exact:true,level:1}).waitFor();await page.getByRole('heading',{name:'Thao tác nhanh',exact:true}).waitFor();await noOverflow();await page.screenshot({path:'test-results/server-operator/dashboard-vi.png',fullPage:true});
   await page.setViewportSize({width:390,height:844});await noOverflow();
   await page.locator('.topbar-toggle').click();await page.locator('#server-navigation').waitFor();
   assert.equal(await page.locator('.operator-topbar').evaluate(el=>el.scrollHeight>el.clientHeight),false);

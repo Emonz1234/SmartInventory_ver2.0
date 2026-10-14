@@ -25,7 +25,7 @@ const readline = require('node:readline');
     let data=await call({operation:'STATE'}),lastTid;
     const writes=[],errors=[];
     browser=await chromium.launch({channel:'chrome',headless:true});
-    const page=await browser.newPage({viewport:{width:1440,height:1000}});
+    const page=await browser.newPage({viewport:{width:1366,height:768}});
     page.on('pageerror',error=>errors.push(String(error)));
     await page.addInitScript(()=>{localStorage.setItem('smartInventory.language','en');localStorage.setItem('token','test');localStorage.setItem('edgeOperatorSession','test');});
     let connectionDown=false, partialDisconnect=true;
@@ -50,6 +50,7 @@ const readline = require('node:readline');
       await route.fulfill({json});
     });
     const url=`http://127.0.0.1:${server.address().port}/ui/inventory`;
+    let popupChecked=false;
     const modal=page.locator('.inventory-operation-dialog [role="dialog"]');
     const fault=page.getByRole('dialog',{name:/Operation interrupted|Fault resolved/});
     const stock=address=>data.records.find(r=>r.kind==='stock'&&r.data.bin_id===address).data.quantity;
@@ -65,6 +66,16 @@ const readline = require('node:readline');
         await page.getByRole('option').filter({hasText:new RegExp(` / B${address} ·`)}).click();
       }
       await modal.getByRole('button',{name:'View plan',exact:true}).click();
+      if(!popupChecked){
+        fs.mkdirSync('test-results/ipcsim-tables',{recursive:true});
+        for(const viewport of [{width:1366,height:768},{width:1920,height:1080}]){
+          await page.setViewportSize(viewport);
+          await page.screenshot({path:`test-results/ipcsim-tables/inventory-confirm-${viewport.width}.png`,animations:'disabled'});
+          const action=await modal.getByRole('button',{name:/^Start/}).boundingBox();
+          assert(action && action.y>=0 && action.y+action.height<=viewport.height,'Inventory confirmation action stays in viewport');
+        }
+        await page.setViewportSize({width:1366,height:768});popupChecked=true;
+      }
       const before=writes.length;
       await modal.getByRole('button',{name:/^Start/}).evaluate(button=>{button.click();button.click();});
       await wait(()=>writes.length>before);

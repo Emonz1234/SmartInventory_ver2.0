@@ -37,6 +37,41 @@ def values(qs, request):
     return list(qs.values()[offset : offset + limit])
 
 
+def display_records(records, kind):
+    """Add human-readable labels to authorized read results; preserve raw fields."""
+    actor_ids = {row.get('actor_id') for row in records if row.get('actor_id')}
+    actors = dict(User.objects.filter(pk__in=actor_ids).values_list('pk', 'username'))
+    for row in records:
+        if row.get('actor_id'):
+            row['actor'] = actors.get(row['actor_id'], '')
+        elif kind == 'audit':
+            row['actor'] = 'System'
+        if kind == 'audit':
+            row['object'] = (row.get('after') or {}).get('name') or (row.get('before') or {}).get('name') or f"{row.get('resource', '')} {row.get('object_id', '')}"
+    if kind in ['environment', 'alarms']:
+        thresholds = {'temperature': 50, 'humidity': 85, 'smoke': 0}
+        settings = dict(SystemSetting.objects.filter(key__in=['temperature_max', 'humidity_max']).values_list('key', 'value'))
+        thresholds.update({key: settings[key + '_max'] for key in ['temperature', 'humidity'] if key + '_max' in settings})
+        racks = {rack.pk: rack for rack in Rack.objects.filter(pk__in={row.get('rack_id') for row in records}).select_related('cabinet')}
+        for row in records:
+            # Current monitoring configuration; not a historical threshold.
+            row['current_thresholds'] = thresholds
+            rack = racks.get(row.get('rack_id'))
+            if rack:
+                row.update(location_fields(rack))
+                row['cabinet_id'] = rack.cabinet_id
+                row['location'] = f"{rack.cabinet.device_id or '—'} / {rack.cabinet.name} / {rack.name}"
+    if kind == 'transactions':
+        items = dict(Item.objects.filter(pk__in={row.get('item_id') for row in records}).values_list('pk', 'name'))
+        ids = {row.get(key) for row in records for key in ['from_location_id', 'to_location_id'] if row.get(key)}
+        locations = {b.pk: f"{b.shelf.rack.cabinet.device_id or '—'} / {b.shelf.rack.cabinet.name} / {b.shelf.rack.name} / {b.code}" for b in Bin.objects.filter(pk__in=ids).select_related('shelf__rack__cabinet')}
+        for row in records:
+            row['product'] = items.get(row.get('item_id'), '')
+            row['location'] = ' → '.join(locations.get(row.get(key), '—') for key in ['from_location_id', 'to_location_id'] if row.get(key))
+            # Persisted journal status, not an inference about device execution.
+            row['result'] = 'Recorded'
+    return records
+
 def audit(user, action, resource, pk, scope="ALL", before=None, after=None):
     AuditLog.objects.create(
         actor=user,
@@ -257,7 +292,7 @@ def console(request, resource, pk=None):
                 if not date or timezone.is_naive(date):
                     raise ValueError("Use ISO timestamp with timezone")
                 rows = rows.filter(**{lookup: date})
-        return JsonResponse(values(rows, request), safe=False)
+        return JsonResponse(display_records(values(rows, request), "environment"), safe=False)
     if resource == "alarms":
         if method == "GET":
             rows = Alarm.objects.filter(source_type__in=scopes).order_by(
@@ -265,7 +300,7 @@ def console(request, resource, pk=None):
             )
             if request.GET.get("active") in ["true", "false"]:
                 rows = rows.filter(active=request.GET["active"] == "true")
-            return JsonResponse(values(rows, request), safe=False)
+            return JsonResponse(display_records(values(rows, request), "alarms"), safe=False)
         if method == "POST" and pk:
             with transaction.atomic():
                 alarm = Alarm.objects.select_for_update().get(pk=pk)
@@ -359,12 +394,12 @@ def console(request, resource, pk=None):
     if resource == "inventory-transactions":
         if method == "GET":
             return JsonResponse(
-                values(
+                display_records(values(
                     InventoryTransaction.objects.filter(
                         source_type__in=scopes
                     ).order_by("-pk"),
                     request,
-                ),
+                ), "transactions"),
                 safe=False,
             )
         if method == "POST":
@@ -376,7 +411,7 @@ def console(request, resource, pk=None):
             rows = rows.filter(resource=request.GET['resource'])
         if request.GET.get('object_id'):
             rows = rows.filter(object_id=request.GET['object_id'])
-        return JsonResponse(values(rows.order_by('-pk'), request), safe=False)
+        return JsonResponse(display_records(values(rows.order_by('-pk'), request), 'audit'), safe=False)
     if resource in ["users", "roles", "permissions", "settings"]:
         if not (
             resource == "roles"
@@ -402,9 +437,11 @@ def console(request, resource, pk=None):
                             id=u.pk,
                             username=u.username,
                             is_active=u.is_active,
-                            roles=list(u.groups.values_list("pk", flat=True)),
+                            last_login=u.last_login,
+                            role_names=[group.name for group in u.groups.all()],
+                            roles=[group.pk for group in u.groups.all()],
                         )
-                        for u in User.objects.order_by("pk")
+                        for u in User.objects.prefetch_related("groups").order_by("pk")
                     ],
                     safe=False,
                 )

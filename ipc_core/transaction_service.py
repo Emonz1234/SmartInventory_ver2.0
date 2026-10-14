@@ -263,10 +263,12 @@ class TransactionService:
                 return
             if row['operation_status'] != 'EXECUTING' or payload.get('rack_id') != row['address']:
                 return
+            if payload.get('hardware_frame') == 'STATUS':
+                return
             if payload.get('transaction_id') and payload['transaction_id'] != row['transaction_id']:
                 return
             tid = row['transaction_id']
-            if any(payload.get(k) for k in ('is_obstructed','is_skewed','is_overload_motor')):
+            if payload.get('hardware_state') == 'STOPPED' or any(payload.get(k) for k in ('is_obstructed','is_skewed','is_overload_motor')):
                 db.execute("UPDATE local_transactions SET operation_status='FAILED',completed_at=?,evidence=? WHERE transaction_id=?", (now(), json.dumps(payload), tid))
                 return
             expected = 1 if row['phase']=='OPEN' else 2
@@ -276,7 +278,8 @@ class TransactionService:
             pos = payload.get('displacement')
             endpoint = payload.get('state') == -1 and payload.get('is_endpoint') == 1
             endpoint = endpoint and isinstance(pos, (int,float)) and (pos>0 if expected==1 else pos==0)
-            if not row['moving'] or not endpoint:
+            correlated_endpoint = payload.get('hardware_command') == ('OPEN' if expected == 1 else 'CLOSE')
+            if (not row['moving'] and not correlated_endpoint) or not endpoint:
                 return
             if row['phase']=='OPEN':
                 db.execute('INSERT OR REPLACE INTO local_rack_state(rack_id,address,evidence,updated_at) VALUES(?,?,?,?)',
@@ -289,6 +292,9 @@ class TransactionService:
 
     def _observe_idle_rack(self, db, payload):
         address = payload.get('rack_id')
+        if payload.get('hardware_state') in {'UNKNOWN','STOPPED','ERROR','OPENING','CLOSING'} or payload.get('hardware_error'):
+            db.execute('DELETE FROM local_rack_state WHERE address=?', (address,))
+            return
         displacement = payload.get('displacement')
         if payload.get('state') != -1 or payload.get('is_endpoint') != 1 or not isinstance(displacement, (int, float)):
             return
