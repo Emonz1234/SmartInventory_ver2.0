@@ -86,3 +86,18 @@ def test_unknown_position_clears_reusable_open_evidence(physical):
     receive(w, 'STATE 3 UNKNOWN')
     with w.runtime.store.transaction() as db:
         assert not db.execute('SELECT 1 FROM local_rack_state WHERE address=3').fetchone()
+
+def test_position_cache_survives_ipc_restart(tmp_path, hardware):
+    from types import SimpleNamespace
+    from ipc_core.runtime import Runtime
+    from ipc_core.app.serial.serial_manager import SerialManager
+    cfg = SimpleNamespace(DB_PATH=str(tmp_path/'physical.db'), DEVICE_ID='physical', DEVICE_TYPE='IPC')
+    runtime = Runtime(cfg, hardware)
+    hardware.observer = runtime.record_serial
+    message = hardware.adapter.parse('STATE 1 OPENED')
+    hardware.observe(message)
+    runtime.record_serial(message)
+    restored = SerialManager('COM9')
+    Runtime(cfg, restored)
+    assert restored.rack_states[1]['last_confirmed_state'] == 'OPENED'
+    assert restored.rack_states[1]['position_stale']

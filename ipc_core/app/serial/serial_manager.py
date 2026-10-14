@@ -92,6 +92,8 @@ class SerialManager:
                 logging.getLogger(__name__).exception('Serial close failed')
         if settings.DEVICE_TYPE == 'IPC':
             with self.lock:
+                for cached in self.rack_states.values():
+                    cached['position_stale'] = True
                 for address in list(self.pending):
                     self.notify_error(address, 'COMMUNICATION_ERROR')
                 self.pending.clear()
@@ -133,7 +135,7 @@ class SerialManager:
         if pending:
             payload['hardware_command'] = pending[0]
             payload['command_id'] = pending[2]
-        self.rack_states[address] = payload
+        self.rack_states[address] = {**self.rack_states.get(address, {}), 'hardware_error': code, 'position_stale': True}
         if self.observer:
             self.observer(SerialMessage(msg_type='event', payload=payload))
 
@@ -144,6 +146,12 @@ class SerialManager:
             address = payload.get('rack_id')
             if address and ('hardware_state' in payload or 'hardware_error' in payload):
                 self.rack_states[address] = {**self.rack_states.get(address, {}), **payload}
+                cached = self.rack_states[address]
+                if payload.get('hardware_state') in {'OPENED', 'CLOSED'}:
+                    cached['last_confirmed_state'] = payload['hardware_state']
+                    cached['position_stale'] = False
+                elif 'hardware_state' in payload:
+                    cached['position_stale'] = True
                 if payload.get('hardware_state') not in {None, 'ERROR'}:
                     self.rack_states[address].pop('hardware_error', None)
             pending = self.pending.get(address)

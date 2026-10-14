@@ -26,6 +26,7 @@ class Store:
                 CREATE TABLE IF NOT EXISTS edge_operations(id TEXT PRIMARY KEY, body TEXT, state TEXT, result TEXT);
                 CREATE TABLE IF NOT EXISTS edge_operation_times(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,completed_at TEXT);
                 CREATE TABLE IF NOT EXISTS edge_runtime(id INTEGER PRIMARY KEY, body TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS hardware_rack_state(address INTEGER PRIMARY KEY, body TEXT NOT NULL);
                 INSERT OR IGNORE INTO edge_migrations VALUES(1);
             ''')
             identity = db.execute("SELECT device_id,device_type FROM edge_identity WHERE id=1").fetchone()

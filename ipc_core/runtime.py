@@ -21,6 +21,10 @@ class Runtime:
         self.settings, self.serial = settings, serial
         self.operation_lock = threading.RLock()
         self.store = Store(settings.DB_PATH, settings.DEVICE_ID, settings.DEVICE_TYPE)
+        if settings.DEVICE_TYPE == 'IPC':
+            with self.store.transaction() as db:
+                serial.rack_states = {row['address']: {**json.loads(row['body']), 'position_stale': True}
+                                      for row in db.execute('SELECT * FROM hardware_rack_state')}
         from ipc_core.recovery_service import RecoveryService
         self.recovery = RecoveryService(self.store, serial) if settings.DEVICE_TYPE == 'IPCSIM' else None
         from ipc_core.fault_service import FaultService
@@ -182,6 +186,11 @@ class Runtime:
 
     def record_serial(self, message):
         if self.settings.DEVICE_TYPE == 'IPC':
+            address = message.payload.get('rack_id')
+            cached = self.serial.rack_states.get(address)
+            if cached:
+                with self.store.transaction() as db:
+                    db.execute('INSERT OR REPLACE INTO hardware_rack_state VALUES(?,?)', (address, canonical(cached)))
             self.report_hardware_command(message.payload)
         if message.msg_type == 'simulation_state':
             if self.recovery:

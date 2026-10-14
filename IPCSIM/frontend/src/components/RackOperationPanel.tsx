@@ -314,7 +314,8 @@ export const RackOperationPanel = ({ utilities, cabinetActive = true, cabinetId,
   useEffect(() => {
     if (device?.device_type === 'IPC') {
       const rack = racks.find(r => Number(r.rack_code) === 1)
-      const state = device.hardware_racks?.[1]?.hardware_state
+      const cached = device.hardware_racks?.[1]
+      const state = ['OPENED', 'CLOSED'].includes(cached?.hardware_state) ? cached.hardware_state : cached?.last_confirmed_state
       if (state === 'OPENED' || state === 'CLOSED') {
         const opened = state === 'OPENED'
         gapRef.current = opened ? gapForRack(racks.findIndex(r => r.id === rack?.id) + 1) : 6
@@ -322,11 +323,6 @@ export const RackOperationPanel = ({ utilities, cabinetActive = true, cabinetId,
         setCurrentGap(gapRef.current)
         setActiveRackId(activeRackRef.current)
         initialStateResolved.current = true
-      } else if (['UNKNOWN', 'STOPPED', 'ERROR'].includes(state)) {
-        gapRef.current = null
-        activeRackRef.current = null
-        setCurrentGap(null)
-        setActiveRackId(null)
       }
       return
     }
@@ -670,6 +666,8 @@ export const RackOperationPanel = ({ utilities, cabinetActive = true, cabinetId,
       {recoveryError && !faultVisible && <Alert severity="error" sx={{ mb: 1.5 }}>{errorText(recoveryError)}</Alert>}
       {!connected && <Alert severity="warning" sx={{ mb: 1.5 }}>{uiText("Serial offline. Không thể gửi lệnh tới rack.")}</Alert>}
       {device?.device_type === 'IPC' && device?.hardware_commands_supported === false && <Alert severity="info" sx={{ mb: 1.5 }}>{uiText("IPC firmware currently supports telemetry only. Device commands are unavailable.")}</Alert>}
+      {device?.device_type === 'IPC' && device?.hardware_racks?.[1]?.last_confirmed_state && (!connected || device.hardware_racks[1].position_stale) &&
+        <Alert severity="info" sx={{ mb: 1.5 }}>{getLanguage() === 'vi' ? 'Đang giữ trạng thái đóng/mở đã xác nhận gần nhất; chờ ESP32 xác nhận vị trí hiện tại.' : 'Showing the last confirmed rack position; waiting for ESP32 to confirm the current position.'}</Alert>}
       {isSimulation && !simulationAvailable && <Alert severity="error" sx={{ mb: 1.5 }}>{uiText("Simulation unavailable. GAP commands are disabled.")}</Alert>}
       {racks.length !== 6 && <Alert severity="warning" sx={{ mb: 1.5 }}>{uiText("Cần đúng 6 rack theo thứ tự địa chỉ để dùng sơ đồ GAP. Cabinet hiện có")} {racks.length} rack.</Alert>}
       {blocked && <Alert severity="info" sx={{ mb: 1.5 }}>{uiText("Điều khiển GAP tạm khóa trong khi thao tác cabinet khác đang chạy.")}</Alert>}

@@ -83,3 +83,25 @@ def test_partial_write_disconnects_and_never_completes(hardware):
     hardware.serial.close.assert_called_once()
     assert not hardware.pending
     assert hardware.observer.call_args.args[0].payload['hardware_error'] == 'COMMUNICATION_ERROR'
+
+@pytest.mark.parametrize('state', ['OPENED', 'CLOSED'])
+def test_last_confirmed_position_survives_disconnect_and_unknown_status(hardware, state):
+    hardware.observe(hardware.adapter.parse(f'STATE 1 {state}'))
+    hardware.disconnect()
+    assert hardware.rack_states[1]['last_confirmed_state'] == state
+    assert hardware.rack_states[1]['position_stale']
+    hardware.observe(hardware.adapter.parse('STATUS 1 UNKNOWN 0 0 100'))
+    assert hardware.rack_states[1]['last_confirmed_state'] == state
+    assert hardware.rack_states[1]['hardware_state'] == 'UNKNOWN'
+    opposite = 'CLOSED' if state == 'OPENED' else 'OPENED'
+    hardware.observe(hardware.adapter.parse(f'STATE 1 {opposite}'))
+    assert hardware.rack_states[1]['last_confirmed_state'] == opposite
+    assert not hardware.rack_states[1]['position_stale']
+
+def test_communication_error_preserves_confirmed_position(hardware):
+    hardware.observe(hardware.adapter.parse('STATE 1 CLOSED'))
+    hardware.send_domain({'action':'OPEN','address':1})
+    hardware.disconnect()
+    assert hardware.rack_states[1]['last_confirmed_state'] == 'CLOSED'
+    assert hardware.rack_states[1]['hardware_state'] == 'CLOSED'
+    assert hardware.rack_states[1]['hardware_error'] == 'COMMUNICATION_ERROR'

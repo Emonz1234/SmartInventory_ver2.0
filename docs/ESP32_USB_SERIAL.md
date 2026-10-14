@@ -128,6 +128,12 @@ For low-level checks, stop IPC first and use Serial Monitor at 115200 with newli
       firmware motion still stops at endpoint or 5s timeout.
 - [ ] Reconnect USB: PING/PONG and STATUS synchronize actual rack state;
       interrupted commands remain failed/unconfirmed, never silently replayed.
+- Last confirmed OPENED/CLOSED is saved per rack in the IPC SQLite table
+  `hardware_rack_state`. Disconnect, communication errors and UNKNOWN after
+  reconnect preserve this display position, including across IPC restarts.
+  The UI labels it as the last confirmed position while awaiting fresh endpoint
+  evidence. This display cache does not authorize inventory confirmation or
+  complete interrupted commands; business evidence is reconciled independently.
 - [ ] Invalid command, missing/extra tokens and oversized lines: INVALID_COMMAND.
 - [ ] OPEN 2 / negative or malformed rack id: error; local servo never moves.
 - [ ] PUT/PICK: open endpoint permits quantity confirmation; close endpoint completes
