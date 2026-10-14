@@ -62,7 +62,27 @@ export const Dashboard = () => {
   const maintenanceCabinets = [...new Set<number>((faults.data?.maintenance_warnings || []).map((row: any) => Number(row.cabinet_index)))].sort((a,b)=>a-b).map(index => ({index, racks: (faults.data?.maintenance_warnings || []).filter((row: any)=>Number(row.cabinet_index)===index)}))
   const orderedFaults = [...activeFaults].sort((a,b) => ({CRITICAL:0,ERROR:1,WARNING:2,INFO:3}[a.severity as 'CRITICAL'] ?? 4)-({CRITICAL:0,ERROR:1,WARNING:2,INFO:3}[b.severity as 'CRITICAL'] ?? 4) || time(b.detected_at)-time(a.detected_at))
   const faultKnown = !!faults.data?.summary && !faults.isError
-  const statusOf = (cabinet: any, rack?: any) => {
+  const hardwareRack = (rack: any) => state.hardware_racks?.[String(rack.rack_code)]
+  const rackOnline = (rack: any) => healthKnown && !!state.serial_connected && !!hardwareRack(rack) && hardwareRack(rack).hardware_error !== 'INVALID_RACK'
+  const cabinetOnline = (cabinet: any) => isIPC
+    ? rackList.some(rack => Number(rack.cabinet_id) === Number(cabinet.id) && rackOnline(rack))
+    : healthKnown && mechanical(cabinet)?.online === true
+  const statusOf = (cabinet: any, rack?: any): string => {
+    if (isIPC) {
+      if (!healthKnown) return 'Unknown'
+      if (!rack) {
+        const supported = rackList.filter(r => Number(r.cabinet_id) === Number(cabinet.id) && hardwareRack(r) && hardwareRack(r).hardware_error !== 'INVALID_RACK')
+        return supported.length ? supported.map(r => statusOf(cabinet, r)).sort((a,b) => priority[a]-priority[b])[0] : state.serial_connected ? 'Unknown' : 'Offline'
+      }
+      const hardware = hardwareRack(rack)
+      if (!hardware || hardware.hardware_error === 'INVALID_RACK') return 'Offline'
+      if (!state.serial_connected) return 'Offline'
+      if (hardware.hardware_state === 'ERROR' || hardware.hardware_error) return 'Fault'
+      if (['OPENING','CLOSING'].includes(hardware.hardware_state)) return 'Moving'
+      if (hardware.hardware_state === 'OPENED') return 'Open'
+      if (hardware.hardware_state === 'CLOSED') return 'Normal'
+      return 'Unknown'
+    }
     const m = mechanical(cabinet)
     const rackIndex = Number(rack?.rack_index || (Number(rack?.rack_code)-1)%6+1)
     const fault = orderedFaults.find(row => Number(row.cabinet_index) === cabinetIndex(cabinet) && (!rack || Number(row.rack_index) === rackIndex))
@@ -81,10 +101,10 @@ export const Dashboard = () => {
     return rack && !r ? 'Unknown' : 'Normal'
   }
   const priority: Record<string, number> = {Fault:0,Warning:1,Moving:2,Open:3,Unknown:4,Offline:5,Normal:6}
-  const cabinetStatus = (cabinet: any) => [statusOf(cabinet), ...rackList.filter(rack=>Number(rack.cabinet_id)===Number(cabinet.id)).map(rack=>statusOf(cabinet,rack))]
+  const cabinetStatus = (cabinet: any) => isIPC ? statusOf(cabinet) : [statusOf(cabinet), ...rackList.filter(rack=>Number(rack.cabinet_id)===Number(cabinet.id)).map(rack=>statusOf(cabinet,rack))]
     .sort((a,b)=>priority[a]-priority[b])[0]
   const statusIcon = (status: string) => ({Fault:ErrorOutline,Warning:WarningAmberOutlined,Moving:Sync,Open:LockOpenOutlined,Normal:CheckCircleOutline,Offline:WifiOffOutlined,Unknown:HelpOutline}[status] || HelpOutline)
-  const onlineCount = cabinetList.filter(cabinet=>healthKnown && mechanical(cabinet)?.online === true).length
+  const onlineCount = cabinetList.filter(cabinetOnline).length
   const cabinetCounts = [
     {label:'Online',count:onlineCount,color:tones.Normal},
     {label:'Offline / Unknown',count:cabinetList.length-onlineCount,color:tones.Offline},
@@ -98,7 +118,7 @@ export const Dashboard = () => {
   const fresh = rackList.flatMap(rack => {
     const cabinet = cabinetList.find(row => Number(row.id) === Number(rack.cabinet_id)), row = latest.get(Number(rack.id))
     const age = now-time(row?.created_at)
-    return healthKnown && cabinet && mechanical(cabinet)?.online === true && row && age >= 0 && age <= 15000 ? [{...row,rack,cabinet}] : []
+    return healthKnown && cabinet && (isIPC ? rackOnline(rack) : cabinetOnline(cabinet)) && row && age >= 0 && age <= 15000 ? [{...row,rack,cabinet}] : []
   })
   const climate = (key: string) => {
     const values = fresh.map(row => numeric(row[key])).filter((value): value is number => value != null && (key !== 'humidity' || value >= 0 && value <= 100))
@@ -120,7 +140,7 @@ export const Dashboard = () => {
   const stock = summaryKnown ? (summary.data as any)?.inventory_summary || {} : {}
   const count = (value: any, known: boolean) => known ? value ?? 'N/A' : 'N/A'
   const refresh = () => {void Promise.all([summary.refetch(),health.refetch(),cabinetsQuery.refetch(),topology.refetch(),readings.refetch(),faults.refetch(),snapshot.refetch(), ...(session ? [transactions.refetch()] : [])])}
-  const readyCount = cabinetList.filter(row=>isIPC ? healthKnown && state.serial_connected && String(row.status).toUpperCase() === 'ACTIVE' : mechanical(row)?.online).length
+  const readyCount = cabinetList.filter(row=>isIPC ? cabinetOnline(row) && String(row.status).toUpperCase() === 'ACTIVE' : mechanical(row)?.online).length
   const simulationStatus = !healthKnown || !liveStates.length ? 'Unknown' : !state.serial_connected || !liveStates.some(row=>row.online) ? 'Disconnected' : liveStates.some(row=>!row.online) ? 'Degraded' : 'Connected'
   const shortTime = (value: any) => time(value) ? formatTimeShort(value) : 'N/A'
   return <Stack spacing={1.25} data-testid="operations-overview">
@@ -135,14 +155,34 @@ export const Dashboard = () => {
       {label:'Active incidents',value:count(faults.data?.summary?.active_faults ?? activeFaults.length,faultKnown),detail:!faultKnown ? t('Unknown') : `${activeFaults.filter(row=>row.severity==='CRITICAL').length} ${t('Critical')}`,icon:WarningAmberOutlined,link:'/breakdown',color:activeFaults.length ? '#c35454' : '#087c78'}
     ].map(metric=><Grid item xs={6} md={3} key={metric.label}><Card><ListItemButton component={RouterLink} to={metric.link} sx={{p:1,justifyContent:'space-between',gap:1}}><Box sx={{minWidth:0,flex:1}}><Typography variant="body2" color="text.secondary">{t(metric.label)}</Typography><Stack direction="row" spacing={1} alignItems="baseline"><Typography fontSize={26} lineHeight={1.2} fontWeight={750}>{metric.value}</Typography><Tooltip title={metric.detail}><Typography variant="caption" noWrap color="text.secondary" sx={{minWidth:0}}>{metric.detail}</Typography></Tooltip></Stack></Box><metric.icon sx={{color:metric.color}} /></ListItemButton></Card></Grid>)}</Grid>
     <Grid container spacing={1.25} sx={{width:'calc(100% + 10px) !important',ml:'-10px !important',mt:'0 !important'}}>
-      <Grid item xs={12} lg={8}><Card sx={{...panelSx,p:1.5}}><Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1} sx={{mb:1.25}}><Typography sx={headingSx}>{t('Cabinet & rack overview')}</Typography><Button size="small" component={RouterLink} to="/cabinets" endIcon={<ArrowForward />}>{t('Details')}</Button></Stack>
+      <Grid item xs={12} lg={8}><Card sx={{...panelSx,p:1.5}}><Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1} sx={{mb:1.25}}><Typography sx={headingSx}>{t('Cabinet overview')}</Typography><Button size="small" component={RouterLink} to="/cabinets" endIcon={<ArrowForward />}>{t('Details')}</Button></Stack>
         <Box data-testid="overview-cabinet-summary" sx={{display:'grid',gridTemplateColumns:{xs:'repeat(2,minmax(0,1fr))',sm:'repeat(4,minmax(0,1fr))'},gap:1,mb:1.25,pb:1.25,borderBottom:'1px solid',borderColor:'divider'}}>{cabinetCounts.map(row=><Stack key={row.label} direction="row" spacing={0.5} alignItems="center"><Box sx={{width:6,height:6,borderRadius:'50%',bgcolor:row.color}} /><Typography variant="caption" color="text.secondary">{t(row.label)}</Typography><Typography variant="body2" fontWeight={700}>{cabinetKnown && healthKnown ? row.count : 'N/A'}</Typography></Stack>)}</Box>
-        {cabinetsQuery.isLoading ? <Skeleton height={120} /> : !cabinetList.length ? <Typography variant="body2" color="text.secondary">{t(cabinetKnown ? 'No cabinets available' : 'Unknown')}</Typography> : <Box data-testid="overview-cabinet-grid" sx={{display:'grid',gridTemplateColumns:{xs:'repeat(4,minmax(0,1fr))',sm:'repeat(8,minmax(0,1fr))'},gap:1}}>
-          {cabinetList.map(cabinet=>{const status=cabinetStatus(cabinet), Icon=statusIcon(status), emphasized=['Fault','Warning','Moving'].includes(status), online=healthKnown && mechanical(cabinet)?.online === true;return <Tooltip key={cabinet.id} title={`${cabinetLabel(cabinet)} / ${cabinet.cabinet_name || cabinet.cabinet_code} / ${t(status)}`}><ListItemButton data-testid="overview-cabinet" data-status={status} aria-label={`${cabinetLabel(cabinet)} / ${t(status)}`} onClick={()=>setSelectedId(Number(cabinet.id))} sx={{justifyContent:'space-between',gap:0.5,px:1,py:0.75,minHeight:40,border:'1px solid',borderColor:emphasized ? tones[status] : online ? 'success.main' : 'divider',borderRadius:2,bgcolor:emphasized ? `${tones[status]}14` : status==='Normal' ? '#f4f9f8' : '#f8fafb',color:emphasized ? tones[status] : status==='Normal' ? 'text.primary' : 'text.secondary',minWidth:0,'&:hover':{bgcolor:`${tones[status]}22`}}}>
+        {!isIPC && (cabinetsQuery.isLoading ? <Skeleton height={120} /> : !cabinetList.length ? <Typography variant="body2" color="text.secondary">{t(cabinetKnown ? 'No cabinets available' : 'Unknown')}</Typography> : <Box data-testid="overview-cabinet-grid" sx={{display:'grid',gridTemplateColumns:{xs:'repeat(4,minmax(0,1fr))',sm:'repeat(8,minmax(0,1fr))'},gap:1}}>
+          {cabinetList.map(cabinet=>{const status=cabinetStatus(cabinet), Icon=statusIcon(status), emphasized=['Fault','Warning','Moving'].includes(status), online=cabinetOnline(cabinet);return <Tooltip key={cabinet.id} title={`${cabinetLabel(cabinet)} / ${cabinet.cabinet_name || cabinet.cabinet_code} / ${t(status)}`}><ListItemButton data-testid="overview-cabinet" data-status={status} aria-label={`${cabinetLabel(cabinet)} / ${t(status)}`} onClick={()=>setSelectedId(Number(cabinet.id))} sx={{justifyContent:'space-between',gap:0.5,px:1,py:0.75,minHeight:40,border:'1px solid',borderColor:emphasized ? tones[status] : online ? 'success.main' : 'divider',borderRadius:2,bgcolor:emphasized ? `${tones[status]}14` : status==='Normal' ? '#f4f9f8' : '#f8fafb',color:emphasized ? tones[status] : status==='Normal' ? 'text.primary' : 'text.secondary',minWidth:0,'&:hover':{bgcolor:`${tones[status]}22`}}}>
             <Typography fontSize={15} fontWeight={emphasized ? 750 : 650}>{String(cabinetIndex(cabinet)).padStart(2,'0')}</Typography><Icon sx={{fontSize:18,color:tones[status],flexShrink:0}} />
           </ListItemButton></Tooltip>})}
+        </Box>)}
+        {isIPC && <Box data-testid="ipc-rack-overview" sx={{display:'grid',gridTemplateColumns:{xs:'repeat(2,minmax(0,1fr))',sm:'repeat(3,minmax(0,1fr))'},gap:1.25}}>
+          {[...rackList].sort((a,b)=>Number(a.rack_index)-Number(b.rack_index)).map(rack => {
+            const cabinet = cabinetList.find(row=>Number(row.id)===Number(rack.cabinet_id))
+            const status = cabinet ? statusOf(cabinet,rack) : 'Unknown'
+            const hardware = hardwareRack(rack)
+            const online = rackOnline(rack)
+            const saved = !!hardware?.last_confirmed_state && (hardware.position_stale || !online)
+            const position = saved ? hardware.last_confirmed_state : hardware?.hardware_state || status
+            return <Button data-testid={`ipc-rack-${rack.rack_code}`} data-status={status} key={rack.id} component={RouterLink} to="/cabinets" variant="outlined" sx={{display:'block',textAlign:'left',minWidth:0,p:1.5,borderRadius:2.5,borderColor:online ? '#b9dcd8' : 'divider',bgcolor:online ? '#f7fbfa' : '#fafbfc',color:'text.primary',textTransform:'none','&:hover':{borderColor:'primary.main',bgcolor:'#f0f7f6'}}}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={0.5} sx={{mb:1.5}}>
+                <Typography fontSize={16} fontWeight={750}>Rack {String(rack.rack_index || rack.rack_code).padStart(2,'0')}</Typography>
+                <Tooltip title={t(online ? 'Connected' : 'Disconnected')}><Box sx={{width:8,height:8,borderRadius:'50%',bgcolor:online ? 'success.main' : '#b6c1c8',flexShrink:0}} /></Tooltip>
+              </Stack>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={0.5} sx={{minHeight:26}}>
+                <Typography variant="caption" color={online ? 'success.main' : 'text.secondary'}>{t(online ? 'Connected' : 'Disconnected')}</Typography>
+                <Chip size="small" label={t(position)} color={chipTone(status)} variant="outlined" sx={{height:24,fontSize:12,fontWeight:600,borderColor:online ? undefined : 'divider'}} />
+              </Stack>
+              <Typography variant="caption" color="text.secondary" sx={{display:'block',mt:0.75,minHeight:18,fontSize:11,lineHeight:'18px'}}>{saved ? copy('Trạng thái gần nhất', 'Last confirmed position') : '\u00a0'}</Typography>
+            </Button>
+          })}
         </Box>}
-        {isIPC && <Box data-testid="ipc-rack-overview" sx={{display:'grid',gridTemplateColumns:{xs:'repeat(2,minmax(0,1fr))',sm:'repeat(3,minmax(0,1fr))'},gap:1,mt:1.25}}>{[...rackList].sort((a,b)=>Number(a.rack_index)-Number(b.rack_index)).map(rack => {const cabinet=cabinetList.find(row=>Number(row.id)===Number(rack.cabinet_id)); const status=cabinet ? statusOf(cabinet,rack) : 'Unknown'; return <Button key={rack.id} component={RouterLink} to="/cabinets" variant="outlined" sx={{justifyContent:'space-between',minHeight:56}}><Typography fontWeight={700}>Rack {String(rack.rack_index || rack.rack_code).padStart(2,'0')}</Typography><Chip size="small" label={t(status)} color={chipTone(status)} /></Button>})}</Box>}
       </Card></Grid>
       <Grid item xs={12} lg={4}><Card sx={panelSx}><Typography sx={{...headingSx,mb:1}}>{t('System connectivity')}</Typography><Stack spacing={0.75}>{[
         {label:'Server / MQTT',status:!healthKnown ? 'Unknown' : state.server_online ? 'Connected' : 'Disconnected',good:state.server_online,tip:t('Server connection reported by IPC; MQTT detail is not provided.')},
@@ -170,7 +210,7 @@ export const Dashboard = () => {
     <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>{[{label:'Kho hàng',link:'/inventory',icon:Inventory2Outlined},{label:'Hoạt động thiết bị',link:'/operation',icon:MemoryOutlined},{label:'Sự cố & phục hồi',link:'/breakdown',icon:WarningAmberOutlined}].map(row=><Button key={row.link} component={RouterLink} to={row.link} size="small" startIcon={<row.icon />}>{t(row.label)}</Button>)}<Tooltip title={t('Tổng quan cập nhật mỗi 5 giây · kết nối thiết bị mỗi 2 giây.')}><CloudSyncOutlined sx={{ml:'auto !important',color:'text.secondary',alignSelf:'center',fontSize:18}} /></Tooltip></Stack>
     <Drawer anchor="right" sx={{zIndex:theme=>theme.zIndex.drawer+2}} open={!!selected} onClose={()=>setSelectedId(null)} PaperProps={{sx:{width:{xs:'100%',sm:480},p:2}}}>
       {selected && <Stack spacing={1.5}><Stack direction="row" justifyContent="space-between" alignItems="center"><Box><Typography variant="h6" fontWeight={750}>{cabinetLabel(selected)}</Typography><Typography variant="body2" color="text.secondary">{selected.cabinet_name || selected.cabinet_code}</Typography></Box><IconButton aria-label={t('Close')} onClick={()=>setSelectedId(null)}><Close /></IconButton></Stack><Chip sx={{alignSelf:'flex-start'}} size="small" color={chipTone(cabinetStatus(selected))} label={t(cabinetStatus(selected))} /><Typography variant="body2">GAP: {healthKnown && mechanical(selected)?.online ? mechanical(selected)?.current_gap ?? 'N/A' : 'N/A'}</Typography>
-        {topology.isLoading ? <Skeleton height={200} /> : <Table size="small"><TableHead><TableRow>{['Rack','Status','Position'].map(label=><TableCell key={label}>{t(label)}</TableCell>)}</TableRow></TableHead><TableBody>{selectedRacks.map(rack=>{const r=mechanical(selected)?.racks?.[String(rack.rack_code)];return <TableRow key={rack.id}><TableCell>{rack.rack_name || `Rack ${rack.rack_index || rack.id}`}</TableCell><TableCell><Chip size="small" variant="outlined" color={chipTone(statusOf(selected,rack))} label={t(statusOf(selected,rack))} /></TableCell><TableCell>{healthKnown && mechanical(selected)?.online && numeric(r?.position_mm)!=null ? `${r.position_mm} mm` : 'N/A'}</TableCell></TableRow>})}</TableBody></Table>}
+        {topology.isLoading ? <Skeleton height={200} /> : <Table size="small"><TableHead><TableRow>{['Rack','Status','Position'].map(label=><TableCell key={label}>{t(label)}</TableCell>)}</TableRow></TableHead><TableBody>{selectedRacks.map(rack=>{const r=mechanical(selected)?.racks?.[String(rack.rack_code)];return <TableRow key={rack.id}><TableCell>{rack.rack_name || `Rack ${rack.rack_index || rack.id}`}</TableCell><TableCell><Chip size="small" variant="outlined" color={chipTone(statusOf(selected,rack))} label={t(statusOf(selected,rack))} /></TableCell><TableCell>{isIPC ? t(hardwareRack(rack)?.last_confirmed_state || hardwareRack(rack)?.hardware_state || 'Unknown') : healthKnown && mechanical(selected)?.online && numeric(r?.position_mm)!=null ? `${r.position_mm} mm` : 'N/A'}</TableCell></TableRow>})}</TableBody></Table>}
         {mechanical(selected)?.fault_context && <Alert severity="warning">{t(mechanical(selected).fault_context.error_code || mechanical(selected).system_state)}</Alert>}
         <Box component="details"><Box component="summary" sx={{cursor:'pointer',fontSize:15}}>{t('Latest readings')}</Box><Stack spacing={1} sx={{mt:1}}>{selectedRacks.map(rack=>{const reading=fresh.find(row=>Number(row.rack.id)===Number(rack.id));return <Box key={rack.id}><Typography variant="body2" fontWeight={650}>{rack.rack_name || `Rack ${rack.rack_index || rack.id}`}</Typography><Typography variant="body2" color="text.secondary">{reading ? `${reading.temperature ?? 'N/A'} °C · ${reading.humidity ?? 'N/A'} % · ${reading.weight ?? 'N/A'} kg · Gas: ${reading.gas ?? 'N/A'}` : t('No fresh online sensor data')}</Typography></Box>})}</Stack></Box>
         <Button variant="outlined" component={RouterLink} to={`/cabinets/${selected.id}`} endIcon={<ArrowForward />}>{t('Mở chi tiết tủ')}</Button>
