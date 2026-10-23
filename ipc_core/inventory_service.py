@@ -24,5 +24,5 @@ def apply(db, item_id, bin_id, delta):
 
 def overlay(db, revision):
     # Server snapshots are a baseline. Preserve physical changes not included in that revision.
-    for tx in db.execute("SELECT * FROM local_transactions WHERE operation_status='COMPLETED' AND (server_revision IS NULL OR server_revision>?) ORDER BY sequence", (revision,)).fetchall():
+    for tx in db.execute("SELECT * FROM local_transactions WHERE inventory_applied=1 AND (server_revision IS NULL OR server_revision>?) ORDER BY sequence", (revision,)).fetchall():
         apply(db, tx['product_id'], tx['location_id'], tx['quantity'] if tx['operation_type']=='PUT' else -tx['quantity'])

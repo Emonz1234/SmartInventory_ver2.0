@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { recordError } from '../i18n'
 
 // Use Vite proxy in development to avoid CORS and use absolute backend in production
 const API_BASE_URL = (import.meta as any).env.VITE_EDGE_API_URL || '/api'
@@ -27,6 +28,7 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
+    recordError(error)
     if (error.response?.status === 401 && error.response?.data?.detail === 'Edge API token required') {
       localStorage.removeItem('token')
       window.location.href = import.meta.env.BASE_URL

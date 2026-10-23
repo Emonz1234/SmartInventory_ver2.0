@@ -1,8 +1,7 @@
 import asyncio
+from ipc_core.app.core.config import settings
 
 from ipc_core.app.serial import serial_manager
-
-from ipc_core.app.serial.protocol.parser import ProtocolParser
 
 from ipc_core.app.serial.handlers.telemetry_handler import TelemetryHandler
 from ipc_core.app.serial.handlers.event_handler import EventHandler
@@ -38,13 +37,14 @@ class SerialListener:
                 runtime = getattr(serial_manager.observer, '__self__', None)
                 if runtime and runtime.recovery:
                     await asyncio.to_thread(runtime.recovery.poll, group)
+                await asyncio.to_thread(link.poll)
                 raw = await asyncio.to_thread(link.read)
             except Exception:
                 link.disconnect()
                 runtime = getattr(serial_manager.observer, '__self__', None)
                 if runtime and runtime.recovery:
                     runtime.recovery.lost(group)
-                await asyncio.sleep(2)
+                await asyncio.sleep(settings.SERIAL_RECONNECT_INTERVAL)
                 try:
                     await asyncio.to_thread(link.connect)
                 except Exception:
@@ -52,8 +52,8 @@ class SerialListener:
                 continue
 
             if raw:
-
-                print("RX:", raw)
+                if raw != 'PONG':
+                    print("RX <-", raw)
 
                 await self.process(raw, group)
 
@@ -62,6 +62,10 @@ class SerialListener:
     async def process(self, raw: str, group=None):
         try:
             message = serial_manager.adapter.parse(raw)
+            if settings.DEVICE_TYPE == 'IPC':
+                serial_manager.observe(message)
+                if message.payload.get('command') == 'PING':
+                    return
             if message.msg_type == 'simulation_state' and group is not None and message.payload.get('cabinet_index') != group:
                 raise ValueError('State snapshot outside configured Serial group')
             if group is not None and 'rack_id' in message.payload:

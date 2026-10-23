@@ -87,6 +87,7 @@ class Bin(models.Model):
 
 
 class Category(models.Model):
+    is_active = models.BooleanField(default=True)
     code = models.CharField(max_length=64, unique=True)
     name = models.CharField(max_length=120)
     description = models.TextField(blank=True)

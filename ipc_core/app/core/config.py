@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 
 
 class Settings(BaseSettings):
@@ -12,6 +13,9 @@ class Settings(BaseSettings):
     SERIAL_PORT: str = ""
     SERIAL_GROUP_PORTS: dict[int, str] = {}
     SERIAL_BAUDRATE: int = 9600
+    SERIAL_ENABLED: bool = True
+    SERIAL_COMMAND_TIMEOUT: float = Field(default=8, gt=0)
+    SERIAL_RECONNECT_INTERVAL: float = Field(default=3, gt=0)
 
     MQTT_HOST: str = ""
     MQTT_PORT: int = 8883
@@ -23,6 +27,8 @@ class Settings(BaseSettings):
     EDGE_API_PORT: int = 8000
     SERVER_URL: str = ""
     HARDWARE_ENABLED: bool = False
+    REPEATED_FAULT_THRESHOLD: int = Field(default=3, ge=1)
+    REPEATED_FAULT_WINDOW_MINUTES: int = Field(default=30, ge=1)
 
     def require_identity(self):
         from ipc_core.protocol import valid_id

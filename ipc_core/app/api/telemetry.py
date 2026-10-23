@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -7,7 +7,7 @@ from ipc_core.app.database.database import get_db
 from ipc_core.app.database.models.environment import EnvironmentSnapshot
 from ipc_core.app.database.models.runtime import OperationSnapshot, BreakdownSnapshot
 from ipc_core.app.serial.protocol.parser import normalize_smoke_value
-from ipc_core.app.utils.timezone import get_current_time, format_datetime, to_vietnam_timezone
+from ipc_core.app.utils.timezone import get_current_time, format_datetime
 
 router = APIRouter(prefix="/api", tags=["telemetry"])
 

@@ -16,6 +16,20 @@ def sync_status(device):
     return 'Synced' if device and device.revision > 0 and device.revision == device.acknowledged_revision else 'Pending'
 
 
+def pending_sync_for_device(device):
+    """Read-only per-IPC counterpart of the inventory overview pending count."""
+    count = PhysicalTransaction.objects.filter(device=device, status='PENDING').count()
+    if sync_status(device) == 'Pending':
+        count += InventoryTransaction.objects.filter(
+            Q(from_location__shelf__rack__cabinet__device=device)
+            | Q(to_location__shelf__rack__cabinet__device=device)
+        ).count()
+        count += Operation.objects.filter(
+            device=device, item__isnull=False, inventorytransaction__isnull=True
+        ).count()
+    return count
+
+
 def projection(scopes):
     domains = [SOURCE_DOMAIN[s] for s in scopes]
     devices = list(Device.objects.filter(device_type__in=domains).order_by('device_type', 'pk'))

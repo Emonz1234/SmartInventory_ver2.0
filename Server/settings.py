@@ -40,6 +40,13 @@ SESSION_COOKIE_SAMESITE = "Strict"
 CSRF_COOKIE_SAMESITE = "Strict"
 DATA_UPLOAD_MAX_MEMORY_SIZE = 2_000_000
 
+LOGGING = {
+    'version': 1, 'disable_existing_loggers': False,
+    'formatters': {'command': {'format': '%(asctime)s %(levelname)s %(name)s %(message)s'}},
+    'handlers': {'command': {'class': 'logging.StreamHandler', 'formatter': 'command'}},
+    'loggers': {'Server.inventory': {'handlers': ['command'], 'level': 'INFO', 'propagate': False}},
+}
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},

@@ -1,3 +1,4 @@
+import { t as uiText, useLanguage } from '../../i18n';
 import { useState } from 'react'
 import {
   Dialog,
@@ -24,6 +25,7 @@ interface PutWorkflowProps {
 }
 
 export const PutWorkflow = ({ open, itemCode, itemName, rackCode, onClose, onConfirm }: PutWorkflowProps) => {
+  useLanguage();
   const [step, setStep] = useState<'select' | 'bin' | 'open' | 'confirm'>('select')
   const [quantity, setQuantity] = useState(1)
   const [binCode, setBinCode] = useState('')
@@ -50,26 +52,22 @@ export const PutWorkflow = ({ open, itemCode, itemName, rackCode, onClose, onCon
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Put Item</DialogTitle>
+      <DialogTitle>{uiText("Put Item")}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 2 }}>
           {/* Item Info */}
           <Box>
-            <Typography variant="caption" color="textSecondary">
-              Item Code
-            </Typography>
+            <Typography variant="caption" color="textSecondary"> {uiText("Item Code")} </Typography>
             <Typography>{itemCode}</Typography>
           </Box>
           <Box>
-            <Typography variant="caption" color="textSecondary">
-              Item Name
-            </Typography>
+            <Typography variant="caption" color="textSecondary"> {uiText("Item Name")} </Typography>
             <Typography>{itemName}</Typography>
           </Box>
 
           {step === 'select' && (
             <TextField
-              label="Put Quantity"
+              label={uiText("Put Quantity")}
               type="number"
               value={quantity}
               onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value)))}
@@ -79,7 +77,7 @@ export const PutWorkflow = ({ open, itemCode, itemName, rackCode, onClose, onCon
 
           {(step === 'bin' || step === 'open' || step === 'confirm') && (
             <TextField
-              label="Target Bin Code"
+              label={uiText("Target Bin Code")}
               value={binCode}
               onChange={(e) => setBinCode(e.target.value)}
               placeholder="e.g., A-R01-S01-B01"
@@ -88,24 +86,24 @@ export const PutWorkflow = ({ open, itemCode, itemName, rackCode, onClose, onCon
           )}
 
           {step === 'open' && (
-            <Alert severity="info">Opening Rack {rackCode}... Please wait.</Alert>
+            <Alert severity="info">{uiText("Opening Rack")} {rackCode}{uiText("... Please wait.")}</Alert>
           )}
 
           {step === 'confirm' && (
-            <Alert severity="success">Ready to put {quantity}x {itemName} into {binCode}</Alert>
+            <Alert severity="success">{uiText("Ready to put")} {quantity}x {itemName} {uiText("into")} {binCode}</Alert>
           )}
 
           {isProcessing && <LinearProgress />}
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={onClose}>{uiText("Cancel")}</Button>
         <Button onClick={handleNext} variant="contained" disabled={isProcessing}>
           {step === 'confirm' && <Check sx={{ mr: 1 }} />}
-          {step === 'select' && 'Next'}
-          {step === 'bin' && 'Next'}
-          {step === 'open' && 'Opening...'}
-          {step === 'confirm' && 'Confirm'}
+          {step === 'select' && uiText('Next')}
+          {step === 'bin' && uiText('Next')}
+          {step === 'open' && uiText('Opening...')}
+          {step === 'confirm' && uiText('Confirm')}
         </Button>
       </DialogActions>
     </Dialog>

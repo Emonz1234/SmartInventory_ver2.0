@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+const saved=new Map();
+globalThis.localStorage={getItem:key=>saved.get(key),setItem:(key,value)=>saved.set(key,value)};
+const { t, setLanguage, getLanguage, LANGUAGE_KEY, errorText, recordError, getErrorDiagnostics, statusText, fieldText } = await import('../Server/frontend/src/locales/core.js');
+assert.equal(getLanguage(),'vi');
+let tests=0;
+for(const language of ['vi','en']) {
+ setLanguage(language);
+ assert.equal(saved.get(LANGUAGE_KEY),language);
+ const unknown={code:'FW_UNKNOWN_42',message:'Unregistered firmware wording',payload:{rack_id:7}};
+ const before=JSON.stringify(unknown);
+ assert.equal(errorText(unknown),t('Unknown system error')+' (FW_UNKNOWN_42)');
+ assert.equal(JSON.stringify(unknown),before);
+ assert(getErrorDiagnostics().includes(unknown));
+ assert.equal(errorText({code:'ERROR'}),t('ERROR')+' (ERROR)');
+ const failure={response:{status:409,data:{code:'STOCK_CONFLICT',detail:'Insufficient local stock'}}};
+ recordError(failure);
+ assert.equal(errorText(failure),t('Insufficient local stock')+' (STOCK_CONFLICT)');
+ assert.equal(errorText('Insufficient local stock'),t('Insufficient local stock'));
+ recordError({response:{status:400,data:{code:'OTHER_CODE',detail:'Insufficient local stock'}}});
+ assert.equal(errorText(failure),t('Insufficient local stock')+' (STOCK_CONFLICT)');
+ assert.equal(errorText({response:{data:{detail:[{loc:['body','quantity'],msg:'Input should be a valid integer'}]}}}),`quantity: ${t('Input should be a valid integer')}`);
+ assert.equal(errorText({response:{status:400,data:{error:"['This password is too short. It must contain at least 8 characters.', 'This password is entirely numeric.']"}}}),t('This password is too short. It must contain at least {0} characters.',8)+'; '+t('This password is entirely numeric.')+' (400)');
+ assert.equal(t('Open Rack {0}',3),language==='vi'?'Mở rack 3':'Open Rack 3');
+ assert.equal(t('Simulation reported ERROR for Rack 3. Inspect the cabinet before retrying.'),t('Simulation reported ERROR for Rack {0}. Inspect the cabinet before retrying.',3));
+ assert.equal(t('Original user note'), 'Original user note');
+ assert.equal(fieldText('quantity'),language==='vi'?'Số lượng':'Quantity');
+ assert.equal(statusText('FW_NEW_STATUS'),`${t('Unknown status')} (FW_NEW_STATUS)`);
+ tests+=14;
+}
+setLanguage('invalid');assert.equal(getLanguage(),'en');
+console.log(`PASS: ${tests+2} checks for default, persistence, bilingual code/string/error mapping, structured validation, fallback and unmodified raw payloads.`);

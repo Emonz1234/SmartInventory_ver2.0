@@ -1,4 +1,3 @@
-from sqlalchemy.orm import Session
 from ipc_core.app.database.database import SessionLocal
 from ipc_core.app.database.models.environment import EnvironmentSnapshot
 from ipc_core.app.serial.protocol.parser import normalize_smoke_value

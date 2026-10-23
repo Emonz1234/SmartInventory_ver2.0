@@ -1,5 +1,5 @@
 import apiClient from './client'
-import { Item, InventoryTransaction } from '../types'
+import { Item } from '../types'
 
 // Items API
 export const inventoryAPI = {

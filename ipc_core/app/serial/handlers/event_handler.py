@@ -1,4 +1,3 @@
-from sqlalchemy.orm import Session
 from ipc_core.app.database.database import SessionLocal
 from ipc_core.app.database.models.runtime import OperationSnapshot, BreakdownSnapshot
 from ipc_core.app.serial.location import describe_location
@@ -25,7 +24,10 @@ class EventHandler:
                 db.commit()
                 print(f"[DB] Saved operation snapshot: {describe_location(payload)}")
             
-            elif "is_obstructed" in payload:
+            # ESP32 STATE/STATUS carry both position and safety information.
+            # Save the explicit clear as well as the position; otherwise an old
+            # timeout snapshot permanently blocks OPEN/CLOSE after safe RESET.
+            if "is_obstructed" in payload:
                 snapshot = BreakdownSnapshot(
                     rack_id=payload.get("rack_id"),
                     is_obstructed=payload.get("is_obstructed"),

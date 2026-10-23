@@ -433,6 +433,13 @@ class GapMovementController:
     def _fail_movement(self, rack_id, reason, classification='REQUIRES_CONFIRMATION', position_trusted=True):
         if self.system_state in {'ERROR', 'RECOVERING', 'STOPPED'} and self.fault_context:
             rank = {'RECOVERABLE': 0, 'REQUIRES_CONFIRMATION': 1, 'REQUIRES_HOME': 2, 'FATAL': 3}
+            if self.fault_context.get('cleared'):
+                self.fault_context['cleared'] = False
+                self.fault_context['rack_id'] = rack_id
+                if rank[classification] >= rank[self.fault_context['classification']]:
+                    self.fault_context['error_code'] = reason
+                self.system_state = 'ERROR'
+                self._log('error_detected')
             if rank[classification] > rank[self.fault_context['classification']] or not position_trusted:
                 if rank[classification] >= rank[self.fault_context['classification']]:
                     self.fault_context.update(classification=classification, error_code=reason)

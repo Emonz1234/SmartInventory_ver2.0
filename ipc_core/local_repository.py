@@ -32,6 +32,18 @@ def migrate(db):
         CREATE TABLE IF NOT EXISTS local_auth_attempts(username TEXT PRIMARY KEY, failures INTEGER NOT NULL, retry_after REAL NOT NULL);
         INSERT OR IGNORE INTO edge_migrations VALUES(2);
     ''')
+    columns = {row[1] for row in db.execute('PRAGMA table_info(local_transactions)')}
+    for name, definition in {
+        'operation_confirmed': 'INTEGER NOT NULL DEFAULT 0',
+        'inventory_applied': 'INTEGER NOT NULL DEFAULT 0',
+        'motion_command_id': "TEXT NOT NULL DEFAULT ''",
+        'motion_address': 'INTEGER',
+        'motion_cabinet_id': 'INTEGER',
+        'motion_sent': 'INTEGER NOT NULL DEFAULT 0',
+    }.items():
+        if name not in columns:
+            db.execute(f'ALTER TABLE local_transactions ADD COLUMN {name} {definition}')
+    db.execute("UPDATE local_transactions SET operation_confirmed=1,inventory_applied=1 WHERE operation_status='COMPLETED'")
 
 
 class LocalRepository:

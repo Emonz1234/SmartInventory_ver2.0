@@ -59,6 +59,17 @@ def current_session(request: Request):
     return session(request)['identity']
 
 
+@router.post('/maintenance/acknowledge')
+def acknowledge_maintenance(request: Request, data: dict):
+    identity = session(request)['identity']
+    if type(data.get('address')) is not int or type(data.get('occurrence_id')) is not int:
+        raise HTTPException(400, 'Maintenance warning address and occurrence ID are required')
+    try:
+        return request.app.state.runtime.faults.acknowledge(data['address'], data['occurrence_id'], identity['id'], identity['username'])
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from None
+
+
 @router.get('/operations')
 def operations(request: Request):
     session(request)
@@ -102,7 +113,7 @@ def device_command(request: Request, data: dict):
         raise HTTPException(403, str(exc)) from None
     action = str(data.get('kind', '')).upper()
     rack_id, key = data.get('rack_id'), data.get('request_key')
-    if action not in {'OPEN', 'CLOSE', 'VENTILATE', 'LIGHT', 'HOME', 'LIGHT_OFF'} or type(rack_id) is not int or rack_id < 1:
+    if action not in {'OPEN', 'CLOSE', 'VENTILATE', 'LIGHT', 'HOME', 'LIGHT_OFF', 'STOP', 'RESET', 'STATUS'} or type(rack_id) is not int or rack_id < 1:
         raise HTTPException(400, 'Invalid device command')
     if not isinstance(key, str) or not 1 <= len(key) <= 128:
         raise HTTPException(400, 'A stable request_key is required')
@@ -110,7 +121,7 @@ def device_command(request: Request, data: dict):
     try:
         with runtime.operation_lock:
             with runtime.store.transaction() as db:
-                if runtime.transactions.repo.active(db):
+                if runtime.transactions.repo.active(db) and action != 'STOP':
                     raise ValueError('Finish the active PUT/PICK before issuing another hardware command')
             state = runtime.store.execute_local(key, rack_id, action, runtime.send_checked)
     except ValueError as exc:
@@ -127,12 +138,27 @@ def confirm(request: Request, operation_id: str, data: dict):
         raise HTTPException(400, 'success must be boolean')
     if type(data.get('keep_open', False)) is not bool:
         raise HTTPException(400, 'keep_open must be boolean')
+    if type(data.get('decision_pending', False)) is not bool:
+        raise HTTPException(400, 'decision_pending must be boolean')
     runtime = request.app.state.runtime
     if data.get('success', True):
         local_ready(runtime)
     try:
-        return public_operation(runtime.transactions.confirm(identity['id'], operation_id,
-                                data.get('success', True), data.get('note', ''), data.get('keep_open', False)))
+        with runtime.operation_lock:
+            return public_operation(runtime.transactions.confirm(identity['id'], operation_id,
+                                    data.get('success', True), data.get('note', ''), data.get('keep_open', False), data.get('decision_pending', False)))
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from None
+
+
+@router.post('/operations/{operation_id}/finish')
+def finish_operation(request: Request, operation_id: str, data: dict):
+    identity = session(request)['identity']
+    runtime = request.app.state.runtime
+    local_ready(runtime)
+    try:
+        with runtime.operation_lock:
+            return public_operation(runtime.transactions.finish(identity['id'], operation_id, data.get('action')))
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from None
 

@@ -387,4 +387,6 @@ def test_ventilation_light_and_close_controls_follow_group_state(window):
     until(app, lambda: group.localButtons[2].isEnabled())
     assert [r.position_mm for r in controller.gap_controller.racks.values()] == [0, 100, 200, 300, 400, 500]
     assert not group.localButtons[1].isEnabled()
-    assert controller.lights[0]
+    assert not controller.lights[0]
+    until(app, lambda: group.light.value() == 0)
+    assert not group.rackGroupImage.gap_state['lights'][1]

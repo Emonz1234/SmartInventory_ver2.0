@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { t as uiText, errorText, statusText, useLanguage } from '../i18n';
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { cabinetAPI } from '@api/cabinet'
@@ -16,26 +17,36 @@ type CabinetOperation = {
 }
 
 interface CabinetDetailProps {
+  cabinetId?: string
   session: string
   permissions: string[]
   onSessionExpired: () => void
 }
 
-export const CabinetDetail = ({ session, permissions, onSessionExpired }: CabinetDetailProps) => {
-  const { id } = useParams(), navigate = useNavigate()
+export const CabinetDetail = ({ session, permissions, onSessionExpired, cabinetId }: CabinetDetailProps) => {
+  useLanguage();
+  const params = useParams(), navigate = useNavigate()
+  const id = cabinetId || params.id
   const queryClient = useQueryClient()
+  const cabinetStatus = useQuery({ queryKey: ['cabinets', 'list'], queryFn: async () => (await cabinetAPI.list()).data, refetchInterval: 2000 })
+  const cabinet = cabinetStatus.data?.find((entry: any) => String(entry.id) === id)
+  const cabinetActive = !cabinetStatus.isError && String(cabinet?.status || '').toLowerCase() === 'active'
+  const cabinetActiveRef = useRef(cabinetActive)
+  cabinetActiveRef.current = cabinetActive
   const [operation, setOperation] = useState<CabinetOperation | null>(null)
   const [operationBusy, setOperationBusy] = useState(false)
+  const dispatchingRef = useRef(false)
   const [operationPhase, setOperationPhase] = useState<'confirm' | 'sending' | 'waiting' | 'success' | 'sent' | 'uncertain'>('confirm')
   const [baselineOperationId, setBaselineOperationId] = useState(0)
-  const [operationError, setOperationError] = useState('')
+  const [operationError, setOperationError] = useState<any>('')
   const [sentRackIds, setSentRackIds] = useState<number[]>([])
   const [completedRackIds, setCompletedRackIds] = useState<number[]>([])
-  const [failedRacks, setFailedRacks] = useState<Array<{ rack: any; message: string }>>([])
+  const [failedRacks, setFailedRacks] = useState<Array<{ rack: any; message: any }>>([])
   const [rackPanelBusy, setRackPanelBusy] = useState(false)
+  const [faultModalOpen, setFaultModalOpen] = useState(false)
   const [cabinetVentilated, setCabinetVentilated] = useState(false)
   const [lightCommandBusy, setLightCommandBusy] = useState(false)
-  const [lightFeedback, setLightFeedback] = useState<{ severity: 'success' | 'warning' | 'error'; message: string } | null>(null)
+  const [lightFeedback, setLightFeedback] = useState<{ severity: 'success' | 'info' | 'warning' | 'error'; message: any } | null>(null)
   const resetSimulationOperation = useCallback(() => {
     setOperation(null)
     setOperationBusy(false)
@@ -47,8 +58,50 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
     setCabinetVentilated(false)
   }, [])
   const canOperate = permissions.includes('inventory.add_operation')
+  const recoveryStarted = useCallback((action: 'RESUME' | 'HOME', baselineId: number) => {
+    if (action === 'HOME') resetSimulationOperation()
+    else {
+      setBaselineOperationId(baselineId)
+      setFailedRacks([])
+      setOperationError('')
+      setOperationPhase('waiting')
+    }
+    setLightFeedback(null)
+  }, [resetSimulationOperation])
   const query = useQuery({ queryKey: ['cabinet', id, 'racks'], queryFn: async () => (await cabinetAPI.getRacks(Number(id))).data, refetchInterval: 2000 })
   const racks: any[] = query.data || []
+  const health = useQuery({
+    queryKey: ['cabinet-operation-health'],
+    queryFn: async () => (await api.get('/system/health')).data,
+    refetchInterval: 1000,
+  })
+  const simulationState = (health.data?.simulation_states || []).find((state: any) =>
+    state.cabinet_index === Number(cabinet?.cabinet_index || Math.floor((Number(racks[0]?.rack_code) - 1) / 6) + 1))
+
+  useEffect(() => {
+    if (operation?.kind !== 'VENTILATE' || !['sending', 'waiting', 'uncertain'].includes(operationPhase) ||
+        !sentRackIds.length || health.isError || !simulationState?.online) return
+    // The authoritative snapshot survives lost/evicted OPRSTT start frames.
+    // Match our command and every physical endpoint before confirming success.
+    const commandId = `${operation.requestKey}-${operation.racks[0]?.id}`
+    if (simulationState.last_command_id !== commandId || simulationState.system_state !== 'VENTILATED' ||
+        simulationState.active_command_id || simulationState.pending_commands?.length || simulationState.fault_context ||
+        simulationState.sensors?.position_trusted !== true || Object.values(simulationState.sensors?.faults || {}).some((faults: any) => faults?.length)) return
+    const endpoints = operation.racks.every((rack, index) => {
+      const physical = simulationState.racks?.[String(rack.rack_code)]
+      const target = (Number(rack.rack_code) - (simulationState.cabinet_index - 1) * 6 - 1) * 120
+      return physical && !physical.is_moving && Number.isFinite(target) && index < 6 &&
+        Math.abs(physical.position_mm - target) < 1e-6 && Math.abs(physical.target_position_mm - target) < 1e-6
+    })
+    if (!endpoints || operation.racks.length !== 6) return
+    setCompletedRackIds(operation.racks.map(rack => Number(rack.id)))
+    setFailedRacks([])
+    setOperationError('')
+    setCabinetVentilated(true)
+    setOperationPhase('success')
+    void queryClient.invalidateQueries({ queryKey: ['cabinet', id, 'racks'] })
+  }, [operation, operationPhase, sentRackIds, health.isError, simulationState, queryClient, id])
+
   const operationTelemetry = useQuery({
     queryKey: ['cabinet-operation-telemetry', operation?.requestKey],
     queryFn: async () => (await systemAPI.getOperationData(100)).data.data,
@@ -59,6 +112,7 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
 
   useEffect(() => {
     if (!operation || !['sending', 'waiting'].includes(operationPhase) || !operationTelemetry.data) return
+    if (operation.kind === 'VENTILATE' && health.data?.device_type === 'IPCSIM') return
     const trackedRacks = operation.racks.filter((rack) => sentRackIds.includes(Number(rack.id)))
     if (!trackedRacks.length) return
 
@@ -99,13 +153,13 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
 
     setOperationPhase(failedRacks.length ? 'uncertain' : 'success')
     void queryClient.invalidateQueries({ queryKey: ['cabinet', id, 'racks'] })
-  }, [baselineOperationId, completedRackIds, failedRacks, id, operation, operationPhase, operationTelemetry.data, queryClient, sentRackIds])
+  }, [baselineOperationId, completedRackIds, failedRacks, id, operation, operationPhase, operationTelemetry.data, queryClient, sentRackIds, health.data?.device_type])
 
   useEffect(() => {
-    if (operationPhase !== 'waiting') return
+    if (operationPhase !== 'waiting' || faultModalOpen) return
     const timeout = window.setTimeout(() => setOperationPhase('uncertain'), 60000)
     return () => window.clearTimeout(timeout)
-  }, [operationPhase])
+  }, [operationPhase, faultModalOpen])
 
   const closeOperationDialog = () => {
     if (operationBusy || operationPhase === 'sending' || operationPhase === 'waiting') return
@@ -119,7 +173,8 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
   }
 
   const confirmOperation = async () => {
-    if (!operation || !id) return
+    if (!operation || !id || !cabinetActiveRef.current || !canOperate || dispatchingRef.current) return
+    dispatchingRef.current = true
     setOperationBusy(true)
     setOperationPhase('sending')
     setOperationError('')
@@ -131,19 +186,27 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
       setBaselineOperationId(Math.max(0, ...(telemetry.data.data || []).map((entry: any) => Number(entry.id) || 0)))
 
       const sentIds: number[] = []
-      const failures: Array<{ rack: any; message: string }> = []
-      for (const rack of operation.racks) {
+      const failures: Array<{ rack: any; message: any }> = []
+      // VENTILATE moves the entire six-rack group. One request owns the motion;
+      // sending another per-rack request would conflict with that active command.
+      const dispatchRacks = operation.kind === 'VENTILATE' ? operation.racks.slice(0, 1) : operation.racks
+      for (const rack of dispatchRacks) {
+        if (!cabinetActiveRef.current) {
+          failures.push({ rack, message: 'Cabinet inactive. Controls are unavailable.' })
+          setFailedRacks([...failures])
+          break
+        }
         try {
           const response = await api.post('/operator/device-commands', {
             rack_id: Number(rack.id),
             kind: operation.kind,
             request_key: `${operation.requestKey}-${rack.id}`
           }, { headers: { 'X-Operator-Session': session } })
-          if (response.data.state === 'local_sent') sentIds.push(Number(rack.id))
+          if (response.data.state === 'local_sent') sentIds.push(...(operation.kind === 'VENTILATE' ? operation.racks : [rack]).map(item => Number(item.id)))
           else failures.push({ rack, message: 'Command delivery is uncertain.' })
         } catch (error: any) {
           if (error?.response?.status === 403) onSessionExpired()
-          failures.push({ rack, message: error?.response?.data?.detail || error?.message || 'Command failed.' })
+          failures.push({ rack, message: error || 'Command failed.' })
         }
         setSentRackIds([...sentIds])
         setFailedRacks([...failures])
@@ -158,17 +221,19 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
       }
     } catch (error: any) {
       if (error?.response?.status === 403) onSessionExpired()
-      setOperationError(error?.response?.data?.detail || error?.message || 'The operation could not be completed.')
+      setOperationError(error || 'The operation could not be completed.')
       setOperationPhase('confirm')
     } finally {
+      dispatchingRef.current = false
       setOperationBusy(false)
     }
   }
 
   const operationLabel = operation?.kind === 'VENTILATE'
-    ? `ventilate all ${operation.racks.length} racks in this cabinet`
-    : `${operation?.kind} ${operation?.racks[0]?.rack_name || operation?.racks[0]?.rack_code || 'this rack'}`
+    ? uiText('ventilate all {0} racks in this cabinet', operation.racks.length)
+    : `${statusText(operation?.kind)} ${operation?.racks[0]?.rack_name || operation?.racks[0]?.rack_code || uiText('this rack')}`
   const requestOperation = (kind: CabinetOperation['kind'], targetRacks: any[]) => {
+    if (!cabinetActiveRef.current || !canOperate) return
     const requestKey = Array.from(crypto.getRandomValues(new Uint8Array(24)), value => value.toString(16).padStart(2, '0')).join('')
     setOperation({ kind, racks: targetRacks, requestKey })
     setOperationPhase('confirm')
@@ -180,7 +245,7 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
   }
 
   const sendLightCommand = async (rack: any, kind: 'LIGHT' | 'LIGHT_OFF') => {
-    if (!canOperate || operation || rackPanelBusy || lightCommandBusy) return
+    if (!cabinetActiveRef.current || !canOperate || operation || rackPanelBusy || lightCommandBusy) return
     setLightCommandBusy(true)
     try {
       const requestKey = Array.from(crypto.getRandomValues(new Uint8Array(24)), value => value.toString(16).padStart(2, '0')).join('')
@@ -190,11 +255,11 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
         request_key: requestKey
       }, { headers: { 'X-Operator-Session': session } })
       setLightFeedback(response.data.state === 'local_sent'
-        ? { severity: 'success', message: `Rack ${rack.rack_code} light turned ${kind === 'LIGHT' ? 'on' : 'off'}.` }
+        ? { severity: 'info', message: 'Light command sent. Waiting for Simulation snapshot' }
         : { severity: 'warning', message: 'Light command delivery is uncertain. Check the rack before retrying.' })
     } catch (error: any) {
       if (error?.response?.status === 403) onSessionExpired()
-      setLightFeedback({ severity: 'error', message: error?.response?.data?.detail || error?.message || 'Light command failed.' })
+      setLightFeedback({ severity: 'error', message: error || 'Light command failed.' })
     } finally {
       setLightCommandBusy(false)
     }
@@ -222,52 +287,51 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
     : undefined
   const ventilationMovingRack = ventilationMovingEvent && racks.find(rack => Number(rack.id) === Number(ventilationMovingEvent.rack_id))
 
-  return <Stack className="cabinet-detail" spacing={2}>
+  return <Stack className="cabinet-detail" spacing={1.25}>
     <Box className="cabinet-detail-heading" sx={{ pb: 0.5 }}>
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ sm: 'center' }} spacing={1.25}>
         <Stack direction="row" alignItems="center" spacing={1} minWidth={0}>
-          <Button size="small" startIcon={<ArrowBack />} onClick={() => navigate('/cabinets')} sx={{ minHeight: 36, px: 1.5, flexShrink: 0, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', borderRadius: 2.5 }}>Tủ & rack</Button>
+          {!cabinetId && <Button size="small" startIcon={<ArrowBack />} onClick={() => navigate('/cabinets')} sx={{ minHeight: 36, px: 1.5, flexShrink: 0, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', borderRadius: 2.5 }}>{uiText("Tủ & rack")}</Button>}
           <Box sx={{ minWidth: 0 }}>
             <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
-              <Typography variant="h4" sx={{ fontWeight: 750, lineHeight: 1.2, letterSpacing: '-0.035em', fontSize: { xs: 26, md: 32 } }}>Tủ {racks[0]?.cabinet_index ?? racks[0]?.cabinet_code ?? id}</Typography>
-              <Chip size="small" icon={<Storage />} label={`${racks.length} racks`} variant="outlined" />
-              {!canOperate && <Chip size="small" label="Operator access required" color="warning" variant="outlined" />}
+              <Typography variant="h4" sx={{ fontWeight: 750, lineHeight: 1.2, letterSpacing: '-0.035em', fontSize: { xs: 24, md: 26 } }}>{uiText("Tủ")} {((racks[0]?.cabinet_index ?? racks[0]?.cabinet_code) ?? id)}</Typography>
+              <Chip size="small" icon={<Storage />} label={uiText("{0} racks", racks.length)} variant="outlined" />
+              <Chip size="small" label={statusText(health.isError ? 'Unknown' : simulationState?.online === false ? 'Offline' : simulationState?.system_state || (health.data?.device_type === 'IPC' ? health.data?.hardware_status === 'FAULT' ? 'Fault' : health.data?.serial_connected ? 'Connected' : 'Offline' : 'Unknown'))} variant="outlined" />
+              {!canOperate && <Chip size="small" label={uiText("Operator access required")} color="warning" variant="outlined" />}
             </Stack>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>Mở lối đi, điều khiển đèn và thông gió trong nhóm tủ.</Typography>
+
           </Box>
         </Stack>
-        <Button
+      </Stack>
+    </Box>
+    {query.isError && <Alert severity="error">{uiText("Could not load cabinet racks. Check the local IPC connection and retry.")}</Alert>}
+    {!query.isLoading && !query.data?.length && <Alert severity="warning">{uiText("No racks are configured for this cabinet.")}</Alert>}
+    {!cabinetStatus.isLoading && !cabinetActive && <Alert severity="warning">{uiText('Cabinet inactive. Controls are unavailable.')}</Alert>}
+    <Box component="fieldset" disabled={!cabinetActive} sx={{ border: 0, p: 0, m: 0, minWidth: 0, opacity: cabinetActive ? 1 : 0.45 }}>
+    <RackOperationPanel utilities={utilitiesDisabled => <Button
           variant="contained"
           color="info"
           size="small"
           startIcon={<Air />}
-          disabled={!canOperate || operationBusy || !!operation || rackPanelBusy || cabinetVentilated || !racks.length}
+          disabled={utilitiesDisabled || !cabinetActive || !canOperate || operationBusy || !!operation || rackPanelBusy || cabinetVentilated || !racks.length}
           onClick={() => requestOperation('VENTILATE', racks)}
-          title="Thông gió toàn bộ tủ"
+          title={uiText("Thông gió toàn bộ tủ")}
           sx={{ minHeight: 36, px: 2, borderRadius: 2.5, boxShadow: 'none', alignSelf: { xs: 'stretch', sm: 'center' }, flexShrink: 0 }}
-        >
-          Ventilate cabinet
-        </Button>
-      </Stack>
+        > {uiText("Ventilate cabinet")} </Button>} cabinetActive={cabinetActive} cabinetId={id} racks={racks} session={session} permissions={permissions} onSessionExpired={onSessionExpired} onLightRequest={sendLightCommand} lightBusy={lightCommandBusy} ventilation={operation?.kind === 'VENTILATE' ? { phase: operationPhase, baselineId: baselineOperationId, sentRackIds, completedRackIds } : null} externalVentilated={operation?.kind === 'VENTILATE' && operationPhase === 'success'} onBusyChange={setRackPanelBusy} onSimulationRestart={resetSimulationOperation} onFaultVisibilityChange={setFaultModalOpen} onRecoveryStarted={recoveryStarted} externalError={operationPhase === 'uncertain' ? operationError || failedRacks[0]?.message || 'Operation could not be confirmed.' : lightFeedback?.severity === 'error' ? lightFeedback.message : undefined} onVentilatedChange={setCabinetVentilated} externalGapInvalidation={operation?.kind === 'VENTILATE' && ['success', 'uncertain'].includes(operationPhase) ? operation.requestKey : ''} blocked={!!operation} />
     </Box>
-    {query.isError && <Alert severity="error">Could not load cabinet racks. Check the local IPC connection and retry.</Alert>}
-    {!query.isLoading && !query.data?.length && <Alert severity="warning">No racks are configured for this cabinet.</Alert>}
-    <RackOperationPanel cabinetId={id} racks={racks} session={session} permissions={permissions} onSessionExpired={onSessionExpired} onLightRequest={sendLightCommand} lightBusy={lightCommandBusy} ventilation={operation?.kind === 'VENTILATE' ? { phase: operationPhase, baselineId: baselineOperationId, sentRackIds, completedRackIds } : null} externalVentilated={operation?.kind === 'VENTILATE' && operationPhase === 'success'} onBusyChange={setRackPanelBusy} onSimulationRestart={resetSimulationOperation} onVentilatedChange={setCabinetVentilated} externalGapInvalidation={operation?.kind === 'VENTILATE' && ['success', 'uncertain'].includes(operationPhase) ? operation.requestKey : ''} blocked={!!operation} />
     <Snackbar open={!!lightFeedback} autoHideDuration={3500} onClose={() => setLightFeedback(null)} anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
-      {lightFeedback ? <Alert severity={lightFeedback.severity} variant="filled" onClose={() => setLightFeedback(null)}>{lightFeedback.message}</Alert> : <span />}
+      {lightFeedback ? <Alert severity={lightFeedback.severity} variant="filled" onClose={() => setLightFeedback(null)}>{lightFeedback.severity === 'success' ? uiText(lightFeedback.message) : errorText(lightFeedback.message)}</Alert> : <span />}
     </Snackbar>
-    <Dialog className="cabinet-operation-dialog" open={!!operation} onClose={closeOperationDialog} maxWidth="sm" fullWidth disableEscapeKeyDown={operationPhase === 'sending' || operationPhase === 'waiting'} PaperProps={{ sx: { borderRadius: 4, overflow: 'hidden' } }}>
+    <Dialog className="cabinet-operation-dialog" open={!!operation && !faultModalOpen} onClose={closeOperationDialog} maxWidth="sm" fullWidth disableEscapeKeyDown={operationPhase === 'sending' || operationPhase === 'waiting'} PaperProps={{ sx: { borderRadius: 4, overflow: 'hidden' } }}>
       <Box sx={{ height: 5, bgcolor: operationPhase === 'success' ? 'success.main' : operationPhase === 'uncertain' ? 'warning.main' : 'info.main' }} />
-      <DialogTitle sx={{ pb: 1, fontWeight: 750 }}>{dialogTitle}</DialogTitle>
+      <DialogTitle sx={{ pb: 1, fontWeight: 750 }}>{uiText(dialogTitle)}</DialogTitle>
       <DialogContent sx={{ pt: 1.5 }}>
         {operationPhase === 'success' ? (
           <Stack alignItems="center" spacing={1.25} sx={{ py: 2, textAlign: 'center' }}>
             <Avatar sx={{ width: 64, height: 64, bgcolor: theme => alpha(theme.palette.success.main, 0.08), color: 'success.main' }}><CheckCircle sx={{ fontSize: 42 }} /></Avatar>
-            <Typography variant="h6" fontWeight={750}>{operation?.kind === 'VENTILATE' ? 'Cabinet ventilation complete' : `${operation?.kind === 'OPEN' ? 'Rack opened' : 'Rack closed'} successfully`}</Typography>
+            <Typography variant="h6" fontWeight={750}>{operation?.kind === 'VENTILATE' ? uiText('Cabinet ventilation complete') : uiText("{0} successfully", operation?.kind === 'OPEN' ? uiText('Rack opened') : uiText('Rack closed'))}</Typography>
             <Typography color="text.secondary">
-              {operation?.kind === 'VENTILATE'
-                ? `All ${sentRackIds.length} racks returned to the ventilation endpoint.`
-                : 'Simulation telemetry confirmed the rack reached its target endpoint.'}
+              {operation?.kind === 'VENTILATE' ? uiText("All {0} racks returned to the ventilation endpoint.", sentRackIds.length) : uiText('Simulation telemetry confirmed the rack reached its target endpoint.')}
             </Typography>
           </Stack>
         ) : operationPhase === 'waiting' || operationPhase === 'sending' ? (
@@ -275,18 +339,14 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
             <Stack direction="row" spacing={1.25} alignItems="center">
               <CircularProgress size={26} />
               <Box>
-                <Typography fontWeight={700}>{operationPhase === 'sending' ? 'Sending local commands' : 'Waiting for simulation'}</Typography>
+                <Typography fontWeight={700}>{operationPhase === 'sending' ? uiText('Sending local commands') : uiText('Waiting for simulation')}</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {operation?.kind === 'VENTILATE'
-                    ? ventilationMovingRack
-                      ? `Moving Rack ${racks.findIndex(rack => rack.id === ventilationMovingRack.id) + 1} ${Number(ventilationMovingEvent?.state) === 1 ? 'LEFT' : 'RIGHT'} · ${Math.min(100, Math.round(Number(ventilationMovingEvent?.displacement || 0) / 64 * 100))}%`
-                      : operationPhase === 'sending' ? 'Dispatching ventilation commands…' : 'Waiting for the six rack endpoints.'
-                    : operationPhase === 'sending' ? 'Contacting each rack through the local Serial link.' : 'Completion is confirmed by fresh endpoint telemetry.'}
+                  {operation?.kind === 'VENTILATE' ? ventilationMovingRack ? uiText("Moving Rack {0} {1} · {2}%", racks.findIndex(rack => rack.id === ventilationMovingRack.id) + 1, Number(ventilationMovingEvent?.state) === 1 ? uiText('LEFT') : uiText('RIGHT'), Math.min(100, Math.round(Number(ventilationMovingEvent?.displacement || 0) / 64 * 100))) : operationPhase === 'sending' ? uiText('Dispatching ventilation commands…') : uiText('Waiting for the six rack endpoints.') : operationPhase === 'sending' ? uiText('Contacting each rack through the local Serial link.') : uiText('Completion is confirmed by fresh endpoint telemetry.')}
                 </Typography>
               </Box>
             </Stack>
             {operationPhase === 'waiting' && <LinearProgress variant="determinate" value={operation?.kind === 'VENTILATE' ? completedRackIds.length / Math.max(1, operation.racks.length) * 100 : sentRackIds.length ? completedRackIds.length / sentRackIds.length * 100 : 0} sx={{ height: 7, borderRadius: 4 }} />}
-            {operation?.kind === 'VENTILATE' && <Alert severity="info" icon={<Air />}>Ventilation target: six racks evenly spaced with five 20 mm gaps. The access aisle is unavailable during this cycle. {completedRackIds.length}/6 complete.</Alert>}
+            {operation?.kind === 'VENTILATE' && <Alert severity="info" icon={<Air />}>{uiText("Ventilation target: six racks evenly spaced with five 20 mm gaps. The access aisle is unavailable during this cycle.")} {completedRackIds.length}{uiText("/6 complete.")}</Alert>}
             <Stack spacing={0.75}>
               {operation?.racks.map((rack: any) => {
                 const rackId = Number(rack.id)
@@ -296,20 +356,20 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
                 const isMoving = operation.kind === 'VENTILATE' && Number(ventilationMovingEvent?.rack_id) === rackId
                 return <Stack key={rackId} direction="row" alignItems="center" spacing={1} sx={{ py: 0.75, px: 1, borderRadius: 1, bgcolor: 'background.default' }}>
                   {complete ? <CheckCircle color="success" fontSize="small" /> : failed ? <ErrorOutline color="error" fontSize="small" /> : <CircularProgress size={16} />}
-                  <Typography variant="body2" sx={{ flex: 1 }}>{rack.rack_name || `Rack ${rack.rack_code}`}</Typography>
-                  <Chip size="small" label={complete ? 'Complete' : failed ? 'Not confirmed' : isMoving ? `Moving ${Number(ventilationMovingEvent?.state) === 1 ? 'LEFT' : 'RIGHT'}` : sent ? operation.kind === 'VENTILATE' ? 'Ventilating' : 'Running' : 'Queued'} color={complete ? 'success' : failed ? 'error' : isMoving ? 'warning' : 'default'} variant={complete || failed ? 'filled' : 'outlined'} />
+                  <Typography variant="body2" sx={{ flex: 1 }}>{(rack.rack_name || `Rack ${rack.rack_code}`)}</Typography>
+                  <Chip size="small" label={complete ? uiText('Complete') : failed ? uiText('Not confirmed') : isMoving ? uiText("Moving {0}", Number(ventilationMovingEvent?.state) === 1 ? uiText('LEFT') : uiText('RIGHT')) : sent ? operation.kind === 'VENTILATE' ? uiText('Ventilating') : uiText('Running') : uiText('Queued')} color={complete ? 'success' : failed ? 'error' : isMoving ? 'warning' : 'default'} variant={complete || failed ? 'filled' : 'outlined'} />
                 </Stack>
               })}
             </Stack>
-            {operationTelemetry.isError && <Alert severity="warning">Local telemetry is temporarily unavailable; the popup will keep waiting.</Alert>}
+            {operationTelemetry.isError && <Alert severity="warning">{uiText("Local telemetry is temporarily unavailable; the popup will keep waiting.")}</Alert>}
           </Stack>
         ) : operationPhase === 'uncertain' ? (
           <Stack spacing={1.25}>
-            <Alert severity="warning" icon={<ErrorOutline />}>Some commands could not be confirmed, or a rack did not reach its endpoint within 60 seconds. Check the cabinet before retrying.</Alert>
-            {failedRacks.map(({ rack, message }) => <Typography key={rack.id} variant="body2" color="error">{rack.rack_name || `Rack ${rack.rack_code}`}: {message}</Typography>)}
+            <Alert severity="warning" icon={<ErrorOutline />}>{uiText("Some commands could not be confirmed, or a rack did not reach its endpoint within 60 seconds. Check the cabinet before retrying.")}</Alert>
+            {failedRacks.map(({ rack, message }) => <Typography key={rack.id} variant="body2" color="error">{(rack.rack_name || `Rack ${rack.rack_code}`)}: {errorText(message)}</Typography>)}
           </Stack>
         ) : operationPhase === 'sent' ? (
-          <Alert severity="info">The {operation?.kind} command was sent through the local Serial link.</Alert>
+          <Alert severity="info">{uiText("The")} {uiText(operation?.kind)} {uiText("command was sent through the local Serial link.")}</Alert>
         ) : (
           <Stack spacing={1.5}>
             <Stack direction="row" spacing={1.25} alignItems="center">
@@ -317,24 +377,24 @@ export const CabinetDetail = ({ session, permissions, onSessionExpired }: Cabine
                 {operation?.kind === 'VENTILATE' ? <Air /> : operation?.kind === 'OPEN' ? <LockOpen /> : operation?.kind === 'CLOSE' ? <Lock /> : <Lightbulb />}
               </Avatar>
               <Box>
-                <Typography fontWeight={700}>{operationLabel}</Typography>
-                <Typography variant="body2" color="text.secondary">Commands run locally; no Server confirmation is required.</Typography>
+                <Typography fontWeight={700}>{uiText(operationLabel)}</Typography>
+                <Typography variant="body2" color="text.secondary">{uiText("Commands run locally; no Server confirmation is required.")}</Typography>
               </Box>
             </Stack>
             <Divider />
-            {operation?.kind === 'VENTILATE' && <Typography variant="body2" color="text.secondary">The command will be sent to every rack in this cabinet ({operation.racks.length}).</Typography>}
-            {operationError && <Alert severity="error">{operationError}</Alert>}
+            {operation?.kind === 'VENTILATE' && <Typography variant="body2" color="text.secondary">{uiText("The command will be sent to every rack in this cabinet (")}{operation.racks.length}).</Typography>}
+            {operationError && <Alert severity="error">{errorText(operationError)}</Alert>}
           </Stack>
         )}
       </DialogContent>
       <DialogActions>
         {operationPhase === 'success' || operationPhase === 'sent' || operationPhase === 'uncertain' ? (
-          <Button onClick={closeOperationDialog} variant="contained" sx={{ minHeight: 36, px: 2 }}>Done</Button>
+          <Button onClick={closeOperationDialog} variant="contained" sx={{ minHeight: 36, px: 2 }}>{uiText("Done")}</Button>
         ) : (
           <>
-            {operationPhase === 'confirm' && <Button onClick={closeOperationDialog} disabled={operationBusy} sx={{ minHeight: 36 }}>Cancel</Button>}
-            <Button onClick={() => void confirmOperation()} variant="contained" disabled={operationBusy || operationPhase !== 'confirm'} sx={{ minHeight: 36, px: 2 }}>
-              {operationBusy ? <CircularProgress size={20} color="inherit" /> : operation?.kind === 'VENTILATE' ? 'Ventilate cabinet' : 'Confirm command'}
+            {operationPhase === 'confirm' && <Button onClick={closeOperationDialog} disabled={operationBusy} sx={{ minHeight: 36 }}>{uiText("Cancel")}</Button>}
+            <Button onClick={() => void confirmOperation()} variant="contained" disabled={!cabinetActive || operationBusy || operationPhase !== 'confirm'} sx={{ minHeight: 36, px: 2 }}>
+              {operationBusy ? <CircularProgress size={20} color="inherit" /> : operation?.kind === 'VENTILATE' ? uiText('Ventilate cabinet') : uiText('Confirm command')}
             </Button>
           </>
         )}

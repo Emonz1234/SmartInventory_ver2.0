@@ -1,6 +1,5 @@
 """Create fresh deployment configuration without overwriting existing secrets."""
 import argparse
-import ipaddress
 from pathlib import Path
 import secrets
 import subprocess

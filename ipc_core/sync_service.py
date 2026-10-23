@@ -1,5 +1,4 @@
 """Reconnect barrier: handshake -> ordered journal replay -> ACK -> master reconcile."""
-import json
 import time
 from uuid import uuid4
 from ipc_core.local_repository import LocalRepository, now

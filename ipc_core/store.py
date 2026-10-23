@@ -24,7 +24,9 @@ class Store:
                 CREATE TABLE IF NOT EXISTS edge_staging(sync_id TEXT, batch INTEGER, metadata TEXT, body TEXT, PRIMARY KEY(sync_id,batch));
                 CREATE TABLE IF NOT EXISTS edge_outbox(id TEXT PRIMARY KEY, channel TEXT, body TEXT, attempts INTEGER DEFAULT 0);
                 CREATE TABLE IF NOT EXISTS edge_operations(id TEXT PRIMARY KEY, body TEXT, state TEXT, result TEXT);
+                CREATE TABLE IF NOT EXISTS edge_operation_times(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,completed_at TEXT);
                 CREATE TABLE IF NOT EXISTS edge_runtime(id INTEGER PRIMARY KEY, body TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS hardware_rack_state(address INTEGER PRIMARY KEY, body TEXT NOT NULL);
                 INSERT OR IGNORE INTO edge_migrations VALUES(1);
             ''')
             identity = db.execute("SELECT device_id,device_type FROM edge_identity WHERE id=1").fetchone()
@@ -185,7 +187,7 @@ class Store:
             return "applied"
 
     def execute_local(self, operation_id, rack_id, action, send):
-        if action not in {"OPEN", "CLOSE", "VENTILATE", "LIGHT", "HOME", "LIGHT_OFF"}:
+        if action not in {"OPEN", "CLOSE", "VENTILATE", "LIGHT", "HOME", "LIGHT_OFF", "STOP", "RESET", "STATUS"}:
             raise ValueError("Unsupported device command")
         if type(rack_id) is not int or rack_id < 1:
             raise ValueError("Invalid rack ID")
@@ -229,13 +231,22 @@ class Store:
                 body.update(cabinet_id=cabinet["id"], cabinet_code=cabinet.get("cabinet_code"), cabinet_index=cabinet.get("cabinet_index"))
             db.execute("INSERT INTO edge_operations(id,body,state,result) VALUES(?,?,?,NULL)",
                        (operation_id, canonical(body), "local_uncertain"))
+            from ipc_core.local_repository import now
+            timestamp=now()
+            db.execute('INSERT INTO edge_operation_times(id,created_at,updated_at) VALUES(?,?,?)', (operation_id,timestamp,timestamp))
 
         command = {"rack_id": resolved_rack_id, "address": address, "action": action, "command_id": operation_id}
         try:
             send(command)
-        except ValueError:
+        except ValueError as exc:
             with self.transaction() as db:
-                db.execute("UPDATE edge_operations SET state='rejected' WHERE id=?", (operation_id,))
+                db.execute("UPDATE edge_operations SET state='rejected',result=? WHERE id=?", (canonical({'execution_state':'rejected','error':str(exc)}),operation_id))
+                db.execute('UPDATE edge_operation_times SET updated_at=? WHERE id=?',(now(),operation_id))
+            raise
+        except Exception:
+            with self.transaction() as db:
+                db.execute('UPDATE edge_operations SET result=? WHERE id=?',(canonical({'execution_state':'unconfirmed','error':'Serial delivery could not be confirmed'}),operation_id))
+                db.execute('UPDATE edge_operation_times SET updated_at=? WHERE id=?',(now(),operation_id))
             raise
 
         with self.transaction() as db:
@@ -261,8 +272,18 @@ class Store:
             if address is not None and str(address) != str(body.get("address")):
                 raise ValueError("Command Serial address differs from assigned rack")
             db.execute("INSERT INTO edge_operations VALUES(?,?,?,NULL)", (command_id, canonical(body), "uncertain"))
+            from ipc_core.local_repository import now
+            timestamp=now()
+            db.execute('INSERT INTO edge_operation_times(id,created_at,updated_at) VALUES(?,?,?)', (command_id,timestamp,timestamp))
         # Intent is durable BEFORE the side effect. A failed/partial write stays uncertain.
-        send({**body, 'command_id': command_id})
+        try:
+            send({**body, 'command_id': command_id})
+        except Exception as exc:
+            # Preserve uncertainty after a durable intent; never infer no physical effect.
+            reason = str(exc) if isinstance(exc, ValueError) else 'Serial delivery could not be confirmed'
+            with self.transaction() as db:
+                db.execute('UPDATE edge_operations SET result=? WHERE id=?', (canonical({'state': 'uncertain', 'error': reason}), command_id))
+            raise
         with self.transaction() as db:
             db.execute("UPDATE edge_operations SET state='sent' WHERE id=?", (command_id,))
         return "sent"

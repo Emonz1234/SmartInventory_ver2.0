@@ -20,6 +20,7 @@ export default defineConfig(({ mode }) => {
     }
   },
   server: {
+    fs: { allow: [path.resolve(__dirname), path.resolve(__dirname, '../../Server/frontend/src/locales')] },
     host: env.VITE_BIND_HOST || '127.0.0.1',
     port: 3000,
     proxy: {

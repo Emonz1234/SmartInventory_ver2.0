@@ -24,6 +24,38 @@ def frames(controller):
     return results
 
 
+@pytest.mark.parametrize('close_action', [2, 4])
+def test_access_lights_follow_successful_endpoints_and_preserve_state_on_fault(close_action):
+    controller = MasterCom(1, port='')
+    controller.determine_operationInformation('0|9|1')
+    controller.step_operations(0)
+    assert not any(controller.lights)
+    run_to_idle(controller, blocked={12})
+    assert controller.system_state == 'ERROR'
+    assert not any(controller.lights)
+
+    controller = MasterCom(1, port='')
+    controller.determine_operationInformation('0|9|1')
+    run_to_idle(controller)
+    assert controller.gap_snapshot()['lights'] == {7: False, 8: False, 9: True, 10: False, 11: False, 12: False}
+    controller.determine_operationInformation('0|10|1')
+    run_to_idle(controller)
+    assert controller.lights == [False, False, False, True, False, False]
+    controller.determine_operationInformation(f'0|10|{close_action}')
+    controller.step_operations(0)
+    assert controller.lights[3]
+    run_to_idle(controller, blocked={10})
+    assert controller.system_state == 'ERROR'
+    assert controller.lights[3]
+
+    controller = MasterCom(1, port='')
+    controller.determine_operationInformation('0|9|1')
+    run_to_idle(controller)
+    controller.determine_operationInformation(f'0|9|{close_action}')
+    run_to_idle(controller)
+    assert not any(controller.lights)
+
+
 def test_serial_open_uses_gap_path_and_reports_success_after_final_step():
     controller = MasterCom(0, port='')
     controller.start()

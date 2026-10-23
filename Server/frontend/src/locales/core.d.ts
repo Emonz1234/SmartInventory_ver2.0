@@ -1,0 +1,11 @@
+export const LANGUAGE_KEY: string;
+export function getLanguage(): 'vi' | 'en';
+export function subscribe(listener: () => void): () => void;
+export function setLanguage(language: string): void;
+export function t(value: string, ...args: unknown[]): string;
+export function t<T>(value: T, ...args: unknown[]): T;
+export function errorText(error: unknown): string;
+export function statusText(value: any): any;
+export function fieldText(value: string): string;
+export function recordError<T>(error: T): T;
+export function getErrorDiagnostics(): unknown[];

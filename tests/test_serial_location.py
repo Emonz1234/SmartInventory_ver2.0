@@ -82,3 +82,17 @@ def test_esp32_telemetry_uses_same_location_mapping(serial_location_db, monkeypa
         sample = db.query(EnvironmentSnapshot).one()
         assert (sample.rack_id, sample.temperature, sample.humidity, sample.gas, sample.smoke_detected) == (7, 28.5, 65, 2100, 1)
         assert sample.weight is None
+
+@pytest.mark.parametrize('state,limits,expected', [('UNKNOWN','0 0',0),('CLOSED','0 1',0),('OPENED','1 0',0),('ERROR','0 0',1)])
+def test_esp32_status_updates_position_and_breakdown_clear(serial_location_db, monkeypatch, state, limits, expected):
+    from ipc_core.adapters import HardwareAdapter
+    sessions, observed = serial_location_db
+    monkeypatch.setattr(listener.serial_manager, 'adapter', HardwareAdapter())
+    asyncio.run(SerialListener().process('ERROR 1 OPEN_TIMEOUT'))
+    asyncio.run(SerialListener().process(f'STATUS 1 {state} {limits} 100'))
+    with sessions() as db:
+        breakdown = db.query(BreakdownSnapshot).order_by(BreakdownSnapshot.id.desc()).first()
+        assert breakdown.rack_id == 7
+        assert breakdown.is_obstructed == expected
+        assert db.query(OperationSnapshot).count() == 1
+        assert db.query(BreakdownSnapshot).count() == 2

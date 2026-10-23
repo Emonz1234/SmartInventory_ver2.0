@@ -93,3 +93,38 @@ def test_ventilation_rejects_fault_in_any_rack_before_moving():
     master.set_errors(6, [1])
     assert not master.determine_operationInformation('0|1|3')
     assert not master.gap_controller.pending_commands
+
+
+@pytest.mark.parametrize('source', range(7))
+def test_ipcsim_single_group_command_tracks_all_racks_and_can_return_home(tmp_path, source):
+    from test_inventory_workflow import Workflow
+    from ipc_core.operation_history import history
+    w = Workflow(tmp_path)
+    if source:
+        w.runtime.store.execute_local('open', 100+source, 'OPEN', w.runtime.send_checked)
+        w.finish_motion()
+    assert w.runtime.store.execute_local('ventilate', 101, 'VENTILATE', w.runtime.send_checked) == 'local_sent'
+    # The backend deliberately prevents competing per-rack commands while busy.
+    with pytest.raises(ValueError, match='unfinished command'):
+        w.runtime.store.execute_local('competing', 102, 'VENTILATE', w.runtime.send_checked)
+    w.finish_motion()
+    assert len([c for c in w.commands if c.get('action') == 'VENTILATE']) == 1
+    assert [r.position_mm for r in w.sim[1].gap_controller.racks.values()] == [0,120,240,360,480,600]
+    assert next(r for r in history(w.runtime) if r['id']=='ventilate')['execution_state'] == 'completed'
+    w.runtime.store.execute_local('home', 101, 'HOME', w.runtime.send_checked)
+    w.finish_motion()
+    assert [r.position_mm for r in w.sim[1].gap_controller.racks.values()] == [0,100,200,300,400,500]
+
+
+def test_single_ventilation_request_reports_start_and_endpoint_for_every_rack():
+    master = MasterCom(0, port='')
+    assert master.determine_operationInformation('0|1|3')
+    for _ in range(150):
+        master.step_operations(.2)
+    payloads = [SimulationAdapter().parse(master.messages.get_nowait()).payload
+                for _ in range(master.messages.qsize())]
+    for rack_id in range(1,7):
+        rows = [row for row in payloads if row.get('rack_id') == rack_id]
+        started = next(i for i,row in enumerate(rows) if row['state']==3 and not row['is_endpoint'])
+        assert any(row['state']==-1 and row['is_endpoint'] and row['displacement']==0
+                   for row in rows[started+1:])
